@@ -118,7 +118,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         assert all(micro_batch[key].size(0) == batch_size for key in ['responses', 'input_ids', 'attention_mask', 'pixel_values'])
         assert all(micro_batch[key].size(1) == traj_len for key in ['responses', 'input_ids', 'attention_mask', 'pixel_values'])
         assert all(micro_batch[key].size(2) == tot_pad_len for key in [ 'input_ids', 'attention_mask'])
-        
+        # breakpoint()
             
         response_length = micro_batch['responses'].size(-1) # 7*8
         
@@ -380,7 +380,7 @@ class RobDataParallelPPOActor(BasePPOActor):
 
     def update_policy(self, data: DataProto):
         self.actor_module.train()
-
+        
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
         temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
@@ -451,7 +451,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 assert traj_len % self.config.traj_mini_batch_size ==0
                 traj_split_num = int(traj_len/self.config.traj_mini_batch_size)
                 
-                
+                # breakpoint()
     
 
                 for i in range(0, traj_len, int(traj_len/traj_split_num)):

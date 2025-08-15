@@ -68,6 +68,8 @@ actor_rollout_ref:
       grad_offload: False
       optimizer_offload: False
       fsdp_size: -1
+      model_dtype: None
+      
   ref:
     fsdp_config:
       param_offload: False
@@ -249,3 +251,11 @@ trainer:
   runtime_env: none
   val_before_train: False
   val_only: True
+
+ray_init:
+
+  # Number of CPUs for Ray. Use a fixed number instead of null when using SLURM.
+  num_cpus: null
+
+  # Path to save Ray timeline JSON for performance profiling
+  timeline_json_file: null

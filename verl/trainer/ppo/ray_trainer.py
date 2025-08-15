@@ -28,6 +28,7 @@ import uuid
 from omegaconf import OmegaConf, open_dict
 import numpy as np
 from codetiming import Timer
+from tqdm import tqdm
 
 from verl.single_controller.base import Worker
 from verl.single_controller.ray import RayResourcePool, RayWorkerGroup, RayClassWithInitArgs
@@ -318,6 +319,7 @@ class RayTrainer(object):
         print(f'Size of val dataloader: {len(self.val_dataloader)}')
 
         total_training_steps = len(self.train_dataloader) * self.config.trainer.total_epochs
+        self.total_training_steps = total_training_steps
 
         OmegaConf.set_struct(self.config, True)
         with open_dict(self.config):
@@ -484,6 +486,8 @@ class RayTrainer(object):
             logger.log(data=val_metrics, step=global_steps)
             if self.config.trainer.get('val_only', False):
                 return
+        # breakpoint()
+        progress_bar = tqdm(total=self.total_training_steps, initial=global_steps, desc="Training Progress")
 
         for epoch in range(self.config.trainer.total_epochs):
             self.train_dataloader.start_new_epoch()
@@ -500,6 +504,7 @@ class RayTrainer(object):
                 metrics['timing/filter_format_error'] = 0
                 metrics['timing/compute_all_entropy'] = 0
 
+                # breakpoint()
                 while len(valid_batch) < batch_size * n_samples:
                     try:
                         batch_dict = self.train_dataloader.get_next_batch()
@@ -538,7 +543,6 @@ class RayTrainer(object):
                         roll_batch = roll_batch.union(gen_batch_output)
 
                     metrics['timing/gen'] += timer.last
-                    
                     
                     # do accuracy filtering and score logging
                     with Timer(name='verify', text="{name}: {seconds:.1f} seconds") as timer:
@@ -692,6 +696,7 @@ class RayTrainer(object):
                             # self.config.trainer.default_hdfs_dir, 'critic')
                         self.rm_wg.save_checkpoint(prm_local_path, prm_remote_path)
 
+                progress_bar.update(1)
                 global_steps += 1
 
         # perform validation after training

@@ -19,7 +19,7 @@ from typing import List, Union
 
 
 class Tracking(object):
-    supported_backend = ['wandb', 'console']
+    supported_backend = ['wandb', 'console', 'tensorboard', 'swanlab']
 
     def __init__(self, project_name, experiment_name, default_backend: Union[str, List[str]] = 'console', config=None, local_dir=None, wandb_mode='online'):
         if isinstance(default_backend, str):
@@ -38,6 +38,11 @@ class Tracking(object):
             # wandb.mode = 'offline'
             wandb.init(project=project_name, name=experiment_name, mode=wandb_mode, config=config)
             self.logger['wandb'] = wandb
+        
+        if 'swanlab' in default_backend:
+            import swanlab
+            swanlab.init(project=project_name, name=experiment_name, mode=wandb_mode, config=config)
+            self.logger['wandb'] = swanlab
 
         if 'console' in default_backend:
             from verl.utils.logger.aggregate_logger import LocalLogger

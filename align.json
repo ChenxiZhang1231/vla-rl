@@ -5,6 +5,7 @@
     "VLLM_ATTENTION_BACKEND": "XFORMERS",
     "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
     "TOKENIZERS_PARALLELISM": "true",
+    "RAY_DEBUG": "1",
     "WANDB_API_KEY": ""
   },
   "excludes": [

@@ -108,10 +108,10 @@ def main(config):
         if os.path.isfile(str(config.trainer.runtime_env)):
             with open(str(config.trainer.runtime_env), 'r') as f:
                 runtime_env = json.load(f)
-            ray.init(runtime_env=runtime_env)
+            ray.init(runtime_env=runtime_env,
+                     num_cpus=config.ray_init.num_cpus)
         else:
             ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
-
     ray.get(main_task.remote(config))
 
 
@@ -188,11 +188,11 @@ def main_task(config):
         else:
             raise NotImplementedError
         mapping[Role.RewardModel] = global_pool_id
-
-    reward_fn = RobRewardManager( num_examine=0, config=config) # note: verifier is called both inside reward_fn and outside.
+    
+    reward_fn = RobRewardManager(num_examine=0, config=config) # note: verifier is called both inside reward_fn and outside.
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RobRewardManager( num_examine=1,config=config)
+    val_reward_fn = RobRewardManager(num_examine=1, config=config)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 

@@ -260,6 +260,7 @@ class RobHFRollout(BaseRollout):
 
 
     def generate_sequences(self, prompts):
+        # breakpoint()
         batch_size = prompts.batch.batch_size[0]
         
         if prompts.meta_info.get('n_samples') is None:
@@ -342,6 +343,7 @@ class RobHFRollout(BaseRollout):
     
         
     def _generate_minibatch(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
         self.module.eval()
         meta_info = prompts.meta_info
         n_samples = meta_info.get('n_samples', 1)
@@ -413,7 +415,7 @@ class RobHFRollout(BaseRollout):
                 }
             vla_history.append(step_data)
             
-            for  idx in active_indices:
+            for idx in active_indices:
                 input_queues[idx].put(actions[idx])
             
             new_inputs = inputs.copy()
@@ -478,6 +480,7 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
+        # breakpoint()
         return DataProto(batch=output_batch)
     
     @torch.no_grad()
@@ -513,7 +516,8 @@ class RobHFRollout(BaseRollout):
                         unnorm_key=self.config.unnorm_key,
                         temperature=temperature, )
             
-            
+            # print('Waiting for debugger 5679'); import os,debugpy; debugpy.listen(('localhost', 5679 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+
             assert self.processor.tokenizer.pad_token_id is not None
 
             assert idx.ndim == 2

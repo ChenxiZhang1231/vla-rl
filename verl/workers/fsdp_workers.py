@@ -121,11 +121,9 @@ class RobActorRolloutRefWorker(Worker):
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, MixedPrecision, \
             CPUOffload
         from torch import optim
-
         log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
         local_path = copy_local_path_from_hdfs(model_path)
         #add oft
-         
         if self.config.model.vla == "openvla-oft":
             from verl.utils.vla_utils.openvla_oft.configuration_prismatic import OpenVLAConfig
             from verl.utils.vla_utils.openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
@@ -161,7 +159,8 @@ class RobActorRolloutRefWorker(Worker):
 
         torch_dtype = fsdp_config.get('model_dtype', None)
         if torch_dtype is None:
-            torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
+            # torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
+            torch_dtype = torch_dtype
         else:
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
@@ -189,7 +188,7 @@ class RobActorRolloutRefWorker(Worker):
                 actor_module = AutoModelForVision2Seq.from_pretrained(
                                                         pretrained_model_name_or_path=local_path,
                                                         torch_dtype=torch_dtype,
-                                                        #attn_implementation="flash_attention_2",
+                                                        attn_implementation="flash_attention_2",
                                                         config=actor_model_config,              
                                                         trust_remote_code=True,
                                                     )
@@ -473,6 +472,7 @@ class RobActorRolloutRefWorker(Worker):
     def generate_sequences(self, prompts):
         prompts = prompts.to('cuda')
         # set to False if it is validation
+        
         recompute_log_prob = prompts.meta_info.get('recompute_log_prob', True)
 
         assert self._is_rollout
