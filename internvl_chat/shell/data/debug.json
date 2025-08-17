@@ -1,0 +1,9 @@
+{
+  "debug": {
+    "root": "/inspire/ssd/project/robotsimulation/public/data/Debug-dataset/libero_spatial_no_noops_lerobot",
+    "annotation": "",
+    "data_augment": false,
+    "repeat_time": 1,
+    "length": 1
+  }
+}
