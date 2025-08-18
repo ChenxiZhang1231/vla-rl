@@ -71,12 +71,10 @@ def create_stats_buffers(
             # )
             mean = torch.full(shape, torch.inf, dtype=torch.float32, device=device)
             std = torch.full(shape, torch.inf, dtype=torch.float32, device=device)
-            buffer = nn.ParameterDict(
-                {
-                    "mean": nn.Parameter(mean, requires_grad=False),
-                    "std": nn.Parameter(std, requires_grad=False),
-                }
-            )
+            buffer = {
+                "mean": nn.Parameter(mean, requires_grad=False),
+                "std": nn.Parameter(std, requires_grad=False),
+            }
         elif norm_mode is NormalizationMode.MIN_MAX:
             min = torch.ones(shape, dtype=torch.float32) * torch.inf
             max = torch.ones(shape, dtype=torch.float32) * torch.inf
@@ -94,11 +92,11 @@ def create_stats_buffers(
                     # buffer["mean"].data = torch.from_numpy(stats[key]["mean"]).to(dtype=torch.float32)
                     # buffer["std"].data = torch.from_numpy(stats[key]["std"]).to(dtype=torch.float32)
                     buffer["mean"].data = torch.from_numpy(stats[key]["mean"]).to(
-                        dtype=torch.float32, 
+                        dtype=torch.bfloat16, 
                         device=buffer["mean"].device
                     )
                     buffer["std"].data = torch.from_numpy(stats[key]["std"]).to(
-                        dtype=torch.float32, 
+                        dtype=torch.bfloat16, 
                         device=buffer["std"].device
                     )
 

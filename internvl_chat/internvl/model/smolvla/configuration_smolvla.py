@@ -127,6 +127,9 @@ class SmolVLAConfig(PretrainedConfig):
     use_amp: bool = False
     architectures: str = None
 
+    @property
+    def image_features(self) -> dict[str, PolicyFeature]:
+        return {key: ft for key, ft in self.input_features.items() if ft.type is FeatureType.VISUAL}
     
     def __post_init__(self):
         # super().__post_init__()

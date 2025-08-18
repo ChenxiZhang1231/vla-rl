@@ -549,9 +549,20 @@ class LeRobotDataset(Dataset):
         # Add task as a string
         task_idx = item["task_index"].item()
         item["task"] = self.meta.tasks[task_idx]
+        
+        for key, values in item.items():
+            if key != "task":
+                item[key] = item[key].to(torch.bfloat16)
 
-        return item
+        # return item
+        return {
+            'batch': item
+        }
 
+IMAGENET_STATS = {
+    "mean": [[[0.485]], [[0.456]], [[0.406]]],  # (c,1,1)
+    "std": [[[0.229]], [[0.224]], [[0.225]]],  # (c,1,1)
+}
 
 def build_datasets(
     data_args,
@@ -570,6 +581,9 @@ def build_datasets(
             delta_timestamps=delta_timestamps,
             video_backend=get_safe_default_codec(),
         )
+        for key in dataset.meta.camera_keys:
+            for stats_type, stats in IMAGENET_STATS.items():
+                dataset.meta.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
         logger.info(f'Add dataset: {ds_name} with length: {len(dataset)}')
             
     return dataset
