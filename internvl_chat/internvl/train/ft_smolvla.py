@@ -32,7 +32,7 @@ import torch.distributed as dist
 import transformers
 from internvl.dist_utils import init_dist
 from internvl.model.smolvla import SmolVLAPolicy, SmolVLAConfig
-from internvl.patch.pad_data_collator import concat_pad_data_collator
+from internvl.patch.pad_data_collator import concat_pad_data_collator_smovla
 from internvl.train.dataset_packed import PackedDataset, packed_collate_fn
 from PIL import Image, ImageFile, PngImagePlugin, UnidentifiedImageError
 from torch.utils.data import Dataset
@@ -278,6 +278,14 @@ class LeRobotDatasetMetadata:
             self.episodes_stats = load_episodes_stats(self.root)
             self.stats = aggregate_stats(list(self.episodes_stats.values()))
     
+    def get_video_file_path(self, ep_index: int, vid_key: str) -> Path:
+        ep_chunk = self.get_episode_chunk(ep_index)
+        fpath = self.video_path.format(episode_chunk=ep_chunk, video_key=vid_key, episode_index=ep_index)
+        return Path(fpath)
+
+    def get_episode_chunk(self, ep_index: int) -> int:
+        return ep_index // self.chunks_size
+    
     @property
     def _version(self) -> packaging.version.Version:
         """Codebase version used to create this dataset."""
@@ -287,6 +295,11 @@ class LeRobotDatasetMetadata:
     def robot_type(self) -> str | None:
         """Robot type used in recording this dataset."""
         return self.info["robot_type"]
+    
+    @property
+    def video_path(self) -> str | None:
+        """Formattable string for the video files."""
+        return self.info["video_path"]
 
     @property
     def fps(self) -> int:
@@ -348,7 +361,7 @@ class LeRobotDatasetMetadata:
         """Max number of episodes per chunk."""
         return self.info["chunks_size"]
 
-class LeRobotDataset(torch.utils.data.Dataset):
+class LeRobotDataset(Dataset):
     def __init__(
         self,
         meta,
@@ -555,7 +568,7 @@ def build_datasets(
         dataset = LeRobotDataset(
             ds_collections[ds_name],
             delta_timestamps=delta_timestamps,
-            video_backend=get_safe_default_codec,
+            video_backend=get_safe_default_codec(),
         )
         logger.info(f'Add dataset: {ds_name} with length: {len(dataset)}')
             
@@ -647,7 +660,8 @@ def main():
     policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
     policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
     kwargs["config"] = policy_cfg
-    kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
+    # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
+    kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path
     model = SmolVLAPolicy.from_pretrained(**kwargs)
 
     logger.info('Finished')
@@ -661,7 +675,7 @@ def main():
     # set seed for torch dataloaders
     set_seed(training_args.seed)
     
-    collator = concat_pad_data_collator
+    collator = concat_pad_data_collator_smovla
 
     trainer = Trainer(
         model=model,

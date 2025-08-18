@@ -13,17 +13,39 @@
 # limitations under the License.
 
 from dataclasses import dataclass, field
+from typing import Any, Optional, Union
 
 from lerobot.configs.policies import PreTrainedConfig
+from transformers.configuration_utils import PretrainedConfig
 from lerobot.configs.types import FeatureType, NormalizationMode, PolicyFeature
 from lerobot.optim.optimizers import AdamWConfig
 from lerobot.optim.schedulers import (
     CosineDecayWithWarmupSchedulerConfig,
 )
+from lerobot.utils.utils import auto_select_torch_device, is_amp_available, is_torch_device_available
+
+
+def recursive_diff_dict(dict_a, dict_b, config_obj=None):
+    """
+    Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
+    values from `dict_a` that are different from values in `dict_b`.
+
+    dict_b : the default config dictionary. We want to remove values that are in this one
+    """
+    diff = {}
+    default = config_obj.__class__().to_dict() if config_obj is not None else {}
+    for key, value in dict_a.items():
+        obj_value = getattr(config_obj, str(key), None)
+        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
+            diff[key] = diff_value
+        elif key not in dict_b or (value != default[key]):
+            diff[key] = value
+    return diff
 
 
 @dataclass
-class SmolVLAConfig(PreTrainedConfig):
+class SmolVLAConfig(PretrainedConfig):
     # Input / output structure.
     n_obs_steps: int = 1
     chunk_size: int = 50
@@ -101,9 +123,23 @@ class SmolVLAConfig(PreTrainedConfig):
     min_period: float = 4e-3  # sensitivity range for the timestep used in sine-cosine positional encoding
     max_period: float = 4.0
 
-    def __post_init__(self):
-        super().__post_init__()
+    device: str | None = None  # cuda | cpu | mp
+    use_amp: bool = False
+    architectures: str = None
 
+    
+    def __post_init__(self):
+        # super().__post_init__()
+        
+        self.pretrained_path = None
+        if not self.device or not is_torch_device_available(self.device):
+            auto_device = auto_select_torch_device()
+            self.device = auto_device.type
+
+        # Automatically deactivate AMP if necessary
+        if self.use_amp and not is_amp_available(self.device):
+            self.use_amp = False
+            
         """Input validation (not exhaustive)."""
         if self.n_action_steps > self.chunk_size:
             raise ValueError(
@@ -152,3 +188,74 @@ class SmolVLAConfig(PreTrainedConfig):
     @property
     def reward_delta_indices(self) -> None:
         return None
+    
+    def to_diff_dict(self) -> dict[str, Any]:
+        """
+        Removes all attributes from the configuration that correspond to the default config attributes for
+        better readability, while always retaining the `config` attribute from the class. Serializes to a
+        Python dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
+        """
+        config_dict = self.to_dict()
+
+        # Get the default config dict (from a fresh PreTrainedConfig instance)
+        default_config_dict = PretrainedConfig().to_dict()
+
+        # Get class-specific config dict if not part of a composition
+        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+
+        serializable_config_dict = {}
+
+        # Only serialize values that differ from the default config,
+        # except always keep the 'config' attribute.
+        for key, value in config_dict.items():
+            if (
+                isinstance(getattr(self, key, None), PretrainedConfig)
+                and key in class_config_dict
+                and isinstance(class_config_dict[key], dict)
+                or key in self.sub_configs
+            ):
+                # For nested configs we need to clean the diff recursively
+                diff = recursive_diff_dict(value, default_config_dict, config_obj=getattr(self, key, None))
+                if "model_type" in value:
+                    # Needs to be set even if it's not in the diff
+                    diff["model_type"] = value["model_type"]
+                serializable_config_dict[key] = diff
+            elif (
+                key not in default_config_dict
+                or key == "transformers_version"
+                or key == "vocab_file"
+                or value != default_config_dict[key]
+                or (key in default_config_dict and value != class_config_dict.get(key, value))
+            ):
+                serializable_config_dict[key] = value
+
+        if hasattr(self, "quantization_config"):
+            serializable_config_dict["quantization_config"] = (
+                self.quantization_config.to_dict()
+                if not isinstance(self.quantization_config, dict)
+                else self.quantization_config
+            )
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
+
+        self.dict_torch_dtype_to_str(serializable_config_dict)
+
+        if "_attn_implementation_internal" in serializable_config_dict:
+            del serializable_config_dict["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_pp_plan"]
+
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
+        
+        del serializable_config_dict['output_features']
+        del serializable_config_dict['input_features']
+
+        return serializable_config_dict

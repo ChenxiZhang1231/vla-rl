@@ -76,7 +76,7 @@
               "--logging_steps", "1",
               "--do_train", "True",
               "--grad_checkpoint", "True",
-              "--group_by_length", "True",
+              "--group_by_length", "False",
               "--deepspeed", "zero_stage1_config.json",
               "--report_to", "tensorboard"
             ],

@@ -62,6 +62,7 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
 from transformers import AutoProcessor
+from transformers.modeling_utils import PreTrainedModel
 
 from lerobot.constants import ACTION, OBS_STATE
 from lerobot.policies.normalize import (
@@ -317,7 +318,8 @@ def aloha_gripper_from_angular_inv(value):
     return normalize(value, min_val=0.4, max_val=1.5)
 
 
-class SmolVLAPolicy(PreTrainedPolicy):
+# class SmolVLAPolicy(PreTrainedPolicy):
+class SmolVLAPolicy(PreTrainedModel):
     """Wrapper class around VLAFlowMatching model to train and run inference within LeRobot."""
 
     config_class = SmolVLAConfig

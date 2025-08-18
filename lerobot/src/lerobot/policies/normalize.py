@@ -58,10 +58,19 @@ def create_stats_buffers(
         # downstream by `stats` or `policy.load_state_dict`, as expected. During forward,
         # we assert they are not infinity anymore.
 
+        device = torch.device('cuda')
         buffer = {}
         if norm_mode is NormalizationMode.MEAN_STD:
-            mean = torch.ones(shape, dtype=torch.float32) * torch.inf
-            std = torch.ones(shape, dtype=torch.float32) * torch.inf
+            # mean = torch.ones(shape, dtype=torch.float32) * torch.inf
+            # std = torch.ones(shape, dtype=torch.float32) * torch.inf
+            # buffer = nn.ParameterDict(
+            #     {
+            #         "mean": nn.Parameter(mean, requires_grad=False),
+            #         "std": nn.Parameter(std, requires_grad=False),
+            #     }
+            # )
+            mean = torch.full(shape, torch.inf, dtype=torch.float32, device=device)
+            std = torch.full(shape, torch.inf, dtype=torch.float32, device=device)
             buffer = nn.ParameterDict(
                 {
                     "mean": nn.Parameter(mean, requires_grad=False),
@@ -82,8 +91,19 @@ def create_stats_buffers(
         if stats:
             if isinstance(stats[key]["mean"], np.ndarray):
                 if norm_mode is NormalizationMode.MEAN_STD:
-                    buffer["mean"].data = torch.from_numpy(stats[key]["mean"]).to(dtype=torch.float32)
-                    buffer["std"].data = torch.from_numpy(stats[key]["std"]).to(dtype=torch.float32)
+                    # buffer["mean"].data = torch.from_numpy(stats[key]["mean"]).to(dtype=torch.float32)
+                    # buffer["std"].data = torch.from_numpy(stats[key]["std"]).to(dtype=torch.float32)
+                    buffer["mean"].data = torch.from_numpy(stats[key]["mean"]).to(
+                        dtype=torch.float32, 
+                        device=buffer["mean"].device
+                    )
+                    buffer["std"].data = torch.from_numpy(stats[key]["std"]).to(
+                        dtype=torch.float32, 
+                        device=buffer["std"].device
+                    )
+
+
+
                 elif norm_mode is NormalizationMode.MIN_MAX:
                     buffer["min"].data = torch.from_numpy(stats[key]["min"]).to(dtype=torch.float32)
                     buffer["max"].data = torch.from_numpy(stats[key]["max"]).to(dtype=torch.float32)
