@@ -194,6 +194,7 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
             
             if is_valid:
                 img = obs["agentview_image"][::-1, ::-1]
+                # img = obs["agentview_image"][::-1, :]. # flip up down,
                 step_images.append(img)
             
             
@@ -403,6 +404,7 @@ class RobHFRollout(BaseRollout):
             current_inputs = inputs
             current_task_descriptions = task_descriptions
            
+            breakpoint()
             vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
             vla_output = self._generate_one_step(vla_input)
