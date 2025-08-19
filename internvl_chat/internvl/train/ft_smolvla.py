@@ -529,30 +529,40 @@ class LeRobotDataset(Dataset):
         return self.num_frames
 
     def __getitem__(self, idx) -> dict:
-        item = self.hf_dataset[idx]
-        ep_idx = item["episode_index"].item()
+        try_cnt, max_try = 0, 10
+        while True:
+            if try_cnt > max_try:
+                raise StopIteration
+            try:
+                item = self.hf_dataset[idx]
+                ep_idx = item["episode_index"].item()
 
-        query_indices = None
-        if self.delta_indices is not None:
-            query_indices, padding = self._get_query_indices(idx, ep_idx)
-            query_result = self._query_hf_dataset(query_indices)
-            item = {**item, **padding}
-            for key, val in query_result.items():
-                item[key] = val
+                query_indices = None
+                if self.delta_indices is not None:
+                    query_indices, padding = self._get_query_indices(idx, ep_idx)
+                    query_result = self._query_hf_dataset(query_indices)
+                    item = {**item, **padding}
+                    for key, val in query_result.items():
+                        item[key] = val
 
-        if len(self.meta.video_keys) > 0:
-            current_ts = item["timestamp"].item()
-            query_timestamps = self._get_query_timestamps(current_ts, query_indices)
-            video_frames = self._query_videos(query_timestamps, ep_idx)
-            item = {**video_frames, **item}
+                if len(self.meta.video_keys) > 0:
+                    current_ts = item["timestamp"].item()
+                    query_timestamps = self._get_query_timestamps(current_ts, query_indices)
+                    video_frames = self._query_videos(query_timestamps, ep_idx)
+                    item = {**video_frames, **item}
 
-        # Add task as a string
-        task_idx = item["task_index"].item()
-        item["task"] = self.meta.tasks[task_idx]
-        
-        for key, values in item.items():
-            if key != "task":
-                item[key] = item[key].to(torch.bfloat16)
+                # Add task as a string
+                task_idx = item["task_index"].item()
+                item["task"] = self.meta.tasks[task_idx]
+                
+                for key, values in item.items():
+                    if key != "task":
+                        item[key] = item[key].to(torch.bfloat16)
+                break
+            except Exception as e:
+                 try_cnt += 1
+                 print(e, flush=True)
+                 idx = random.randint(0, self.num_frames - 1)
 
         # return item
         return {

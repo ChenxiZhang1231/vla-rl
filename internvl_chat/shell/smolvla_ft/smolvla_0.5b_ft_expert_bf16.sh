@@ -37,15 +37,15 @@ torchrun \
   --meta_path "./shell/data/libero_full.json" \
   --overwrite_output_dir True \
   --drop_path_rate 0.0 \
-  --dataloader_num_workers 64 \
+  --dataloader_num_workers 32 \
   --bf16 True \
-  --num_train_epochs 1 \
+  --num_train_epochs 20 \
   --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
   --gradient_accumulation_steps ${GRADIENT_ACC} \
   --save_strategy "steps" \
-  --save_steps 200 \
-  --save_total_limit 1 \
-  --learning_rate 2e-5 \
+  --save_steps 13304 \
+  --save_total_limit 10 \
+  --learning_rate 5e-4 \
   --weight_decay 0.05 \
   --warmup_ratio 0.03 \
   --lr_scheduler_type "cosine" \
