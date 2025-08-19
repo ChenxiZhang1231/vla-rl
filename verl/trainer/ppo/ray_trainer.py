@@ -332,19 +332,29 @@ class RayTrainer(object):
         metric_dict = {}
         for test_data in self.val_dataloader:
             test_batch = DataProto.from_single_dict(test_data)
-           
-            test_batch.meta_info = {
-                'eos_token_id': self.tokenizer.eos_token_id,
-                'pad_token_id': self.tokenizer.pad_token_id,
+
+            if self.tokenizer is None:
+                test_batch.meta_info = {
+                'eos_token_id': -1,
+                'pad_token_id': -1,
                 'recompute_log_prob': False,
                 'do_sample': False,
                 'validate': True,
                 "global_steps":global_steps
             }
+            else:
+                test_batch.meta_info = {
+                    'eos_token_id': self.tokenizer.eos_token_id,
+                    'pad_token_id': self.tokenizer.pad_token_id,
+                    'recompute_log_prob': False,
+                    'do_sample': False,
+                    'validate': True,
+                    "global_steps":global_steps
+                }
 
             test_output_gen_batch = self.actor_rollout_wg.generate_sequences(test_batch)
             print('validation generation end')
-
+            breakpoint()
             test_batch = test_batch.union(test_output_gen_batch)
 
             # evaluate using reward_function

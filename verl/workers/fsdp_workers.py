@@ -151,6 +151,15 @@ class RobActorRolloutRefWorker(Worker):
                 check_model_logic_mismatch(local_path)
             torch.distributed.barrier()
         
+        elif self.config.model.vla == "smolvla":
+            from verl.utils.vla_utils.smolvla.configuration_smolvla import SmolVLAConfig
+            from verl.utils.vla_utils.smolvla.modeling_smolvla import SmolVLAPolicy
+            AutoConfig.register("smolvla", SmolVLAConfig)
+            AutoModelForVision2Seq.register(SmolVLAConfig, SmolVLAPolicy)
+            if self.rank == 0:
+                update_auto_map(local_path)
+                check_model_logic_mismatch(local_path)
+            torch.distributed.barrier()
         #add end
 
         # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
@@ -165,15 +174,25 @@ class RobActorRolloutRefWorker(Worker):
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
         # override model kwargs
-        actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
+        if self.config.model.vla == "smolvla":
+            actor_model_config = SmolVLAConfig()
+        else:
+            actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
         if self.config.model.use_remove_padding:
             from verl.models.registry import check_model_support_rmpad
             check_model_support_rmpad(actor_model_config.model_type)
-        override_config_kwargs = {
-            'bos_token_id': self.tokenizer.bos_token_id,
-            'eos_token_id': self.tokenizer.eos_token_id,
-            'pad_token_id': self.tokenizer.pad_token_id,
-        }
+        if self.tokenizer is None:  # SmolVLA do not use tokenizer
+            override_config_kwargs = {
+                'bos_token_id': -1,
+                'eos_token_id': -1,
+                'pad_token_id': -1,
+            }
+        else:
+            override_config_kwargs = {
+                'bos_token_id': self.tokenizer.bos_token_id,
+                'eos_token_id': self.tokenizer.eos_token_id,
+                'pad_token_id': self.tokenizer.pad_token_id,
+            }
         override_config_kwargs.update(override_model_config)
         update_model_config(actor_model_config, override_config_kwargs=override_config_kwargs)
         if self.rank == 0:
@@ -214,6 +233,26 @@ class RobActorRolloutRefWorker(Worker):
                                                     config=actor_model_config,              
                                                     trust_remote_code=True,
                                                 )
+            elif self.config.model.vla == "smolvla":
+                from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
+                from lerobot.datasets.utils import dataset_to_policy_features
+                from lerobot.configs.types import FeatureType
+                policy_cfg = SmolVLAConfig()
+                ds_meta = LeRobotDatasetMetadata(
+                    "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+                )
+
+                logger.info('Loading SmolVLA...')
+                kwargs = {}
+                features = dataset_to_policy_features(ds_meta.features)
+                kwargs["dataset_stats"] = ds_meta.stats
+                policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
+                policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
+                kwargs["config"] = policy_cfg
+                # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
+                kwargs["pretrained_model_name_or_path"] = local_path
+                actor_module = AutoModelForVision2Seq.from_pretrained(**kwargs)
+                
            
             actor_module.to(torch_dtype)
 
@@ -345,7 +384,6 @@ class RobActorRolloutRefWorker(Worker):
 
         from omegaconf import OmegaConf
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
-
         if self._is_actor or self._is_rollout:
             # we need the model for actor and rollout
             if self._is_actor:
@@ -472,7 +510,6 @@ class RobActorRolloutRefWorker(Worker):
     def generate_sequences(self, prompts):
         prompts = prompts.to('cuda')
         # set to False if it is validation
-        
         recompute_log_prob = prompts.meta_info.get('recompute_log_prob', True)
 
         assert self._is_rollout
@@ -482,7 +519,10 @@ class RobActorRolloutRefWorker(Worker):
                                      load_grad=self._is_offload_grad)
 
         prompts.batch = prompts.batch.cuda()
-        meta_info = {'eos_token_id': self.tokenizer.eos_token_id, 'pad_token_id': self.tokenizer.pad_token_id}
+        if self.tokenizer is None:
+            meta_info = {'eos_token_id': -1, 'pad_token_id': -1}
+        else:
+            meta_info = {'eos_token_id': self.tokenizer.eos_token_id, 'pad_token_id': self.tokenizer.pad_token_id}
         prompts.meta_info.update(meta_info)
         
         #tmp_sample = prompts.meta_info.get('n_samples', -1)

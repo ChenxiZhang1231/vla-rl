@@ -14,7 +14,7 @@ export MASTER_PORT=34229
 export TF_CPP_MIN_LOG_LEVEL=3
 export LAUNCHER=pytorch
 
-OUTPUT_DIR='work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full'
+OUTPUT_DIR='work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"

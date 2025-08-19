@@ -124,7 +124,6 @@ def center_crop_image(image):
 
 
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
-    
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
@@ -231,7 +230,10 @@ class RobHFRollout(BaseRollout):
                                     "libero_10": 512,        # max step length 505
                                     "libero_90": 512         # max step length 373 org 400 now change to 512
                                 }
-        self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
+        if 'smolvla' in config.pretrained_checkpoint:
+            self.processor = None
+        else:
+            self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
         self.vla_preprocess()
         
         #oft add
@@ -260,7 +262,6 @@ class RobHFRollout(BaseRollout):
 
 
     def generate_sequences(self, prompts):
-        # breakpoint()
         batch_size = prompts.batch.batch_size[0]
         
         if prompts.meta_info.get('n_samples') is None:
@@ -358,6 +359,8 @@ class RobHFRollout(BaseRollout):
         processes = []
         input_queues = []
         output_queues = []
+        # breakpoint()
+        # env_worker(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
         
         for idx in range(batch_size):
             task_name = task_suite_name[idx]

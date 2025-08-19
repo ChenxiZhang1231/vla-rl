@@ -53,8 +53,10 @@ def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kw
         kwargs['eos_token'] = '<end_of_turn>'
         kwargs['eos_token_id'] = 107
     
-    model = kwargs.get("model",None)
+    if "smolvla" in name_or_path:
+        return None
     
+    model = kwargs.get("model", None)
     if model == "openvla-oft":   
         from verl.utils.vla_utils.openvla_oft.configuration_prismatic import OpenVLAConfig
         from verl.utils.vla_utils.openvla_oft.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
