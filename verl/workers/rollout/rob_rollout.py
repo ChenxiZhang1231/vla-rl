@@ -23,6 +23,7 @@ from tensordict import TensorDict
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn.utils.rnn import pad_sequence
+from torchvision import transforms
 
 from verl import DataProto
 from verl.utils.torch_functional import get_eos_mask
@@ -341,6 +342,60 @@ class RobHFRollout(BaseRollout):
                 batchdata[key] = torch.cat(batchdata[key], dim=0).to(device)
 
         return batchdata
+    
+    def process_input_smolvla(self, inputs:list, task_descriptions:list):
+        
+        batchdata = {"observation.images.image":[], 
+                     "observation.images.wrist_image":[], 
+                     "observation.images.image_is_pad": [],
+                     "observation.images.wrist_image_is_pad": [],
+                     "observation.state":[], 
+                     "observation.state_is_pad": [],
+                     "task": []}  
+        
+        transform = transforms.Compose([
+            # transforms.Resize((256, 256)),
+            transforms.ToTensor(),
+        ])
+        for i in range(len(inputs)):
+            input = inputs[i]
+            task_description = task_descriptions[i]
+            batchdata["task"].append(task_description)
+           
+            image = Image.fromarray(input["full_image"]).convert("RGB")
+            if self.config.center_crop:
+                image = center_crop_image(image)
+            image_tensor = transform(image).to(torch.bfloat16)
+            batchdata["observation.images.image"].append(image_tensor)
+            batchdata["observation.images.image_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
+            
+                
+            if "wrist_image" in input.keys():
+                wrist_image = Image.fromarray(input["wrist_image"]).convert("RGB")
+                if self.config.center_crop:
+                    wrist_image = center_crop_image(wrist_image)
+                wrist_image_tensor = transform(wrist_image).to(torch.bfloat16)
+                batchdata["observation.images.wrist_image"].append(wrist_image_tensor) 
+                batchdata["observation.images.wrist_image_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
+            
+            state_tensor = torch.tensor(input['state']).unsqueeze(0).to(torch.bfloat16)
+            batchdata["observation.state"].append(state_tensor)
+            batchdata["observation.state_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
+            
+            
+            
+            
+        
+        device = torch.device('cuda') 
+        
+        batchdata["observation.images.image"] = torch.stack([x for x in batchdata["observation.images.image"]]).to(device)
+        batchdata["observation.images.image_is_pad"] = torch.stack([x for x in batchdata["observation.images.image_is_pad"]]).to(device)
+        batchdata["observation.images.wrist_image"] = torch.stack([x for x in batchdata["observation.images.wrist_image"]]).to(device)
+        batchdata["observation.images.wrist_image_is_pad"] = torch.stack([x for x in batchdata["observation.images.wrist_image_is_pad"]]).to(device)
+        batchdata["observation.state"] = torch.stack([x for x in batchdata["observation.state"]]).to(device)
+        batchdata["observation.state_is_pad"] = torch.stack([x for x in batchdata["observation.state_is_pad"]]).to(device)
+
+        return batchdata
    
     
         
@@ -404,10 +459,17 @@ class RobHFRollout(BaseRollout):
             current_inputs = inputs
             current_task_descriptions = task_descriptions
            
-            breakpoint()
-            vla_input = self.process_input(current_inputs, current_task_descriptions)
+            
+            if self.config.vla == 'smolvla':
+                vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            else:
+                vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
-            vla_output = self._generate_one_step(vla_input)
+            breakpoint()
+            if self.config.vla == 'smolvla':
+                vla_output = self._generate_one_step_smolvla(vla_input)
+            else:
+                vla_output = self._generate_one_step(vla_input)
             actions = vla_output["action"]
             
             step_data = {
@@ -651,10 +713,21 @@ class RobHFRollout(BaseRollout):
                 }
             
             return batch
-                
-            
-
         
+    @torch.no_grad()
+    def _generate_one_step_smolvla(self, prompts: dict):
+        if isinstance(self.module, FSDP):
+            # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
+            param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
+        
+        with param_ctx:
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                actions = self.module.select_action(prompts)
+        
+        batch = prompts.copy()
+        batch["action"] = actions
+        return batch
+
     def _obs_to_input(self, obs):
         
         if self.config.num_images_in_input > 1:

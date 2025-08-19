@@ -55,6 +55,7 @@ def get_libero_image(obs, resize_size):
         resize_size = (resize_size, resize_size)
     img = obs["agentview_image"]
     img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    # img = img[::-1]
     img = resize_image(img, resize_size)
     return img
 
@@ -66,6 +67,7 @@ def get_libero_wrist_image(obs, resize_size):
         resize_size = (resize_size, resize_size)
     img = obs["robot0_eye_in_hand_image"]
     img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    # img = img[::-1]
     img = resize_image(img, resize_size)
     return img
 

@@ -132,6 +132,7 @@ def get_libero_image(obs, resize_size, use_2view=False, use_depth=False, env=Non
     if use_2view:
         wrist = obs['robot0_eye_in_hand_image']
         wrist = wrist[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+        # wrist = wrist[::-1]
         wrist = resize_image(wrist, resize_size)
     
     return img, wrist if use_2view else None, depth if use_depth else None, intrinsics if use_depth else None, pose if use_depth else None
