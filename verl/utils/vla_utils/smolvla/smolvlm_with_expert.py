@@ -83,7 +83,7 @@ class SmolVLMWithExpertModel(nn.Module):
             config = self.vlm.config
         else:
             config = AutoConfig.from_pretrained(model_id)
-            config.text_config._attn_implementation = "flash_attention_2"
+            # config.text_config._attn_implementation = "flash_attention_2"
             self.vlm = SmolVLMForConditionalGeneration(config=config)
         self.processor = AutoProcessor.from_pretrained(model_id)
         if num_vlm_layers > 0:
@@ -182,6 +182,7 @@ class SmolVLMWithExpertModel(nn.Module):
     def embed_image(self, image: torch.Tensor):
         patch_attention_mask = None
         # Get sequence from the vision encoder
+        breakpoint()
         image_hidden_states = (
             self.get_vlm_model()
             .vision_model(

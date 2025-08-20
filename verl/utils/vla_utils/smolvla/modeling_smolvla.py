@@ -89,6 +89,7 @@ from transformers.utils import (CONFIG_NAME,
 from transformers.modeling_utils import (_get_resolved_checkpoint_files,
                                          _find_mismatched_keys,
                                          _find_missing_and_unexpected_keys,
+                                         _get_device_map,
                                          load_state_dict,
                                          expand_device_map,
                                          get_disk_only_shard_files,
@@ -101,6 +102,7 @@ from transformers.modeling_utils import (_get_resolved_checkpoint_files,
 from accelerate.utils import (
     save_offload_index,
 )
+from accelerate import dispatch_model, infer_auto_device_map
 from safetensors import safe_open
 from safetensors.torch import load_file as safe_load_file
 from safetensors.torch import save_file as safe_save_file
@@ -401,6 +403,7 @@ class SmolVLAPolicy(PreTrainedModel):
         """
 
         super().__init__(config)
+        self._tp_plan = {}
         config.validate_features()
         self.config = config
         self.normalize_inputs = Normalize(config.input_features, config.normalization_mapping, dataset_stats)
@@ -1393,7 +1396,8 @@ class SmolVLAPolicy(PreTrainedModel):
         actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
 
         # Unpad actions
-        original_action_dim = self.config.action_feature.shape[0]
+        # original_action_dim = self.config.action_feature.shape[0]
+        original_action_dim = 7
         actions = actions[:, :, :original_action_dim]
 
         actions = self.unnormalize_outputs({ACTION: actions})[ACTION]

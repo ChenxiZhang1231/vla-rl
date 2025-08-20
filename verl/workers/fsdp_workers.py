@@ -251,7 +251,9 @@ class RobActorRolloutRefWorker(Worker):
                 kwargs["config"] = policy_cfg
                 # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
                 kwargs["pretrained_model_name_or_path"] = local_path
-                actor_module = AutoModelForVision2Seq.from_pretrained(**kwargs)
+                kwargs["device_map"] = 'cuda' 
+                actor_module = SmolVLAPolicy.from_pretrained(**kwargs)
+                breakpoint()
                 
            
             actor_module.to(torch_dtype)

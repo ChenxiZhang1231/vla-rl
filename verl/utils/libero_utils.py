@@ -5,10 +5,16 @@ import os
 
 import imageio
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 import random
+import torch
+
+import torchvision.transforms.functional as F
+from torchvision.transforms import InterpolationMode
+from PIL import Image
+import io
 # from experiments.robot.robot_utils import (
 #     DATE,
 #     DATE_TIME,
@@ -30,22 +36,56 @@ def get_libero_dummy_action(model_family: str):
     return [0, 0, 0, 0, 0, 0, -1]
 
 
-def resize_image(img, resize_size):
-    """
-    Takes numpy array corresponding to a single image and returns resized image as numpy array.
+# def resize_image(img, resize_size):
+#     """
+#     Takes numpy array corresponding to a single image and returns resized image as numpy array.
 
-    NOTE (Moo Jin): To make input images in distribution with respect to the inputs seen at training time, we follow
-                    the same resizing scheme used in the Octo dataloader, which OpenVLA uses for training.
-    """
+#     NOTE (Moo Jin): To make input images in distribution with respect to the inputs seen at training time, we follow
+#                     the same resizing scheme used in the Octo dataloader, which OpenVLA uses for training.
+#     """
 
-    assert isinstance(resize_size, tuple)
-    # Resize to image size expected by model
-    img = tf.image.encode_jpeg(img)  # Encode as JPEG, as done in RLDS dataset builder
-    img = tf.io.decode_image(img, expand_animations=False, dtype=tf.uint8)  # Immediately decode back
-    img = tf.image.resize(img, resize_size, method="lanczos3", antialias=True)
-    img = tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8)
-    img = img.numpy()
-    return img
+#     assert isinstance(resize_size, tuple)
+#     # Resize to image size expected by model
+#     img = tf.image.encode_jpeg(img)  # Encode as JPEG, as done in RLDS dataset builder
+#     img = tf.io.decode_image(img, expand_animations=False, dtype=tf.uint8)  # Immediately decode back
+#     img = tf.image.resize(img, resize_size, method="lanczos3", antialias=True)
+#     img = tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8)
+#     img = img.numpy()
+#     return img
+
+def resize_image(img: np.ndarray, resize_size: tuple):
+    """
+    接受一个 numpy 数组图像，并返回调整大小后的 numpy 数组。
+    这是一个简化的 PyTorch 版本，移除了 JPEG 编解码步骤以提高效率。
+    """
+    assert isinstance(resize_size, tuple), "resize_size 必须是一个元组"
+
+    # 如果输入的 numpy 数组是 (1, H, W, C) 格式，先移除批次维度
+    if img.ndim == 4 and img.shape[0] == 1:
+        img = img.squeeze(0)
+
+    # --- 图像尺寸调整 ---
+    # 将 (H, W, C) 的 numpy 数组转换为 (C, H, W) 的 PyTorch 张量
+    # F.resize 需要一个 float 类型的输入来进行抗锯齿处理
+    tensor_img = torch.from_numpy(img.copy()).permute(2, 0, 1).to(torch.float32)
+
+    # 使用 "lanczos3" 插值和抗锯齿调整图像大小
+    # 此时的 tensor_img 保证是 3D 的 [C, H, W]
+    resized_tensor = F.resize(
+        tensor_img,
+        list(resize_size),
+        interpolation=InterpolationMode.BILINEAR,
+        antialias=True
+    )
+
+    # --- 后处理 ---
+    # 将结果四舍五入，裁剪到 [0, 255] 范围，并转换回 uint8
+    final_tensor = resized_tensor.round().clamp(0, 255).to(torch.uint8)
+
+    # 将维度顺序从 (C, H, W) 转换回 (H, W, C) 以匹配 numpy 的格式
+    numpy_img = final_tensor.permute(1, 2, 0).numpy()
+
+    return numpy_img
 
 
 def get_libero_image(obs, resize_size):

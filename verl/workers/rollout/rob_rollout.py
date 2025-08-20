@@ -17,6 +17,7 @@ TODO: refactor this class. Currently, it will hang when using FSDP HybridShard. 
 Then, get full state_dict and bind the state_dict to the single GPU model. Then, use the single GPU model to perform generation.
 """
 import contextlib
+import math
 import torch
 import torch.distributed
 from tensordict import TensorDict
@@ -24,6 +25,8 @@ from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn.utils.rnn import pad_sequence
 from torchvision import transforms
+import torch.multiprocessing as mp
+import torchvision.transforms.functional as F
 
 from verl import DataProto
 from verl.utils.torch_functional import get_eos_mask
@@ -35,7 +38,7 @@ from transformers import GenerationConfig, AutoProcessor
 from verl.utils.libero_utils import get_libero_env, get_libero_dummy_action, get_image_resize_size, get_libero_image, get_libero_wrist_image, quat2axisangle, normalize_gripper_action, invert_gripper_action, save_rollout_video
 import numpy as np
 from PIL import Image
-import tensorflow as tf
+# import tensorflow as tf
 from verl import DataProto
 from libero.libero import benchmark
 from codetiming import Timer
@@ -54,74 +57,106 @@ OPENVLA_V01_SYSTEM_PROMPT = (
     "The assistant gives helpful, detailed, and polite answers to the user's questions."
 )
 
-def crop_and_resize(image, crop_scale, batch_size):
-    """
-    Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
-    to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
-    distribution shift at test time.
+# def crop_and_resize(image, crop_scale, batch_size):
+#     """
+#     Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
+#     to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
+#     distribution shift at test time.
 
-    Args:
-        image: TF Tensor of shape (batch_size, H, W, C) or (H, W, C) and datatype tf.float32 with
-               values between [0,1].
-        crop_scale: The area of the center crop with respect to the original image.
-        batch_size: Batch size.
-    """
-    # Convert from 3D Tensor (H, W, C) to 4D Tensor (batch_size, H, W, C)
-    assert image.shape.ndims == 3 or image.shape.ndims == 4
-    expanded_dims = False
-    if image.shape.ndims == 3:
-        image = tf.expand_dims(image, axis=0)
-        expanded_dims = True
+#     Args:
+#         image: TF Tensor of shape (batch_size, H, W, C) or (H, W, C) and datatype tf.float32 with
+#                values between [0,1].
+#         crop_scale: The area of the center crop with respect to the original image.
+#         batch_size: Batch size.
+#     """
+#     # Convert from 3D Tensor (H, W, C) to 4D Tensor (batch_size, H, W, C)
+#     assert image.shape.ndims == 3 or image.shape.ndims == 4
+#     expanded_dims = False
+#     if image.shape.ndims == 3:
+#         image = tf.expand_dims(image, axis=0)
+#         expanded_dims = True
 
-    # Get height and width of crop
-    new_heights = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
-    new_widths = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+#     # Get height and width of crop
+#     new_heights = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+#     new_widths = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
 
-    # Get bounding box representing crop
-    height_offsets = (1 - new_heights) / 2
-    width_offsets = (1 - new_widths) / 2
-    bounding_boxes = tf.stack(
-        [
-            height_offsets,
-            width_offsets,
-            height_offsets + new_heights,
-            width_offsets + new_widths,
-        ],
-        axis=1,
+#     # Get bounding box representing crop
+#     height_offsets = (1 - new_heights) / 2
+#     width_offsets = (1 - new_widths) / 2
+#     bounding_boxes = tf.stack(
+#         [
+#             height_offsets,
+#             width_offsets,
+#             height_offsets + new_heights,
+#             width_offsets + new_widths,
+#         ],
+#         axis=1,
+#     )
+
+#     # Crop and then resize back up
+#     image = tf.image.crop_and_resize(image, bounding_boxes, tf.range(batch_size), (224, 224))
+
+#     # Convert back to 3D Tensor (H, W, C)
+#     if expanded_dims:
+#         image = image[0]
+
+#     return image
+
+# def center_crop_image(image):
+#     batch_size = 1
+#     crop_scale = 0.9
+
+#     # Convert to TF Tensor and record original data type (should be tf.uint8)
+#     image = tf.convert_to_tensor(np.array(image))
+#     orig_dtype = image.dtype
+
+#     # Convert to data type tf.float32 and values between [0,1]
+#     image = tf.image.convert_image_dtype(image, tf.float32)
+
+#     # Crop and then resize back to original size
+#     image = crop_and_resize(image, crop_scale, batch_size)
+
+#     # Convert back to original data type
+#     image = tf.clip_by_value(image, 0, 1)
+#     image = tf.image.convert_image_dtype(image, orig_dtype, saturate=True)
+
+#     # Convert back to PIL Image
+#     image = Image.fromarray(image.numpy())
+#     image = image.convert("RGB")
+#     return image
+
+
+
+def center_crop_image(image: Image.Image) -> Image.Image:
+  
+    crop_scale = 0.9
+    final_size = (224, 224)
+
+    image_np = np.array(image.convert("RGB"))
+    orig_height, orig_width, _ = image_np.shape
+
+    tensor_img = torch.from_numpy(image_np).permute(2, 0, 1)
+
+    side_scale = math.sqrt(crop_scale)
+    crop_height = int(orig_height * side_scale)
+    crop_width = int(orig_width * side_scale)
+
+    cropped_tensor = F.center_crop(tensor_img, (crop_height, crop_width))
+
+
+    resized_tensor = F.resize(
+        cropped_tensor.to(torch.float32), 
+        size=list(final_size), 
+        interpolation=F.InterpolationMode.BILINEAR, 
+        antialias=True
     )
 
-    # Crop and then resize back up
-    image = tf.image.crop_and_resize(image, bounding_boxes, tf.range(batch_size), (224, 224))
+    final_tensor = resized_tensor.round().clamp(0, 255).to(torch.uint8)
 
-    # Convert back to 3D Tensor (H, W, C)
-    if expanded_dims:
-        image = image[0]
+    final_numpy = final_tensor.permute(1, 2, 0).numpy()
+    pil_image = Image.fromarray(final_numpy)
 
-    return image
-
-def center_crop_image(image):
-    batch_size = 1
-    crop_scale = 0.9
-
-    # Convert to TF Tensor and record original data type (should be tf.uint8)
-    image = tf.convert_to_tensor(np.array(image))
-    orig_dtype = image.dtype
-
-    # Convert to data type tf.float32 and values between [0,1]
-    image = tf.image.convert_image_dtype(image, tf.float32)
-
-    # Crop and then resize back to original size
-    image = crop_and_resize(image, crop_scale, batch_size)
-
-    # Convert back to original data type
-    image = tf.clip_by_value(image, 0, 1)
-    image = tf.image.convert_image_dtype(image, orig_dtype, saturate=True)
-
-    # Convert back to PIL Image
-    image = Image.fromarray(image.numpy())
-    image = image.convert("RGB")
-    return image
-
+    return pil_image.convert("RGB")
 
 
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
@@ -232,7 +267,7 @@ class RobHFRollout(BaseRollout):
                                     "libero_10": 512,        # max step length 505
                                     "libero_90": 512         # max step length 373 org 400 now change to 512
                                 }
-        if 'smolvla' in config.pretrained_checkpoint:
+        if self.config.vla in ["smolvla"]:
             self.processor = None
         else:
             self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
@@ -273,7 +308,10 @@ class RobHFRollout(BaseRollout):
         
         num_chunks = max(batch_size // micro_batch_size, 1)
         batch_prompts = prompts.chunk(chunks=num_chunks)
-        output = [self._generate_minibatch(p) for p in batch_prompts]
+        if self.config.vla == "smolvla":
+            output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+        else:
+            output = [self._generate_minibatch(p) for p in batch_prompts]
         output = DataProto.concat(output)
         return output
     
@@ -381,10 +419,6 @@ class RobHFRollout(BaseRollout):
             state_tensor = torch.tensor(input['state']).unsqueeze(0).to(torch.bfloat16)
             batchdata["observation.state"].append(state_tensor)
             batchdata["observation.state_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
-            
-            
-            
-            
         
         device = torch.device('cuda') 
         
@@ -460,16 +494,10 @@ class RobHFRollout(BaseRollout):
             current_task_descriptions = task_descriptions
            
             
-            if self.config.vla == 'smolvla':
-                vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
-            else:
-                vla_input = self.process_input(current_inputs, current_task_descriptions)
+            vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
-            breakpoint()
-            if self.config.vla == 'smolvla':
-                vla_output = self._generate_one_step_smolvla(vla_input)
-            else:
-                vla_output = self._generate_one_step(vla_input)
+
+            vla_output = self._generate_one_step(vla_input)
             actions = vla_output["action"]
             
             step_data = {
@@ -543,6 +571,157 @@ class RobHFRollout(BaseRollout):
         
         batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['responses'].device)
         batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['responses'].device)
+        
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        # breakpoint()
+        return DataProto(batch=output_batch)
+    
+    def _generate_minibatch_smolvla(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        
+        processes = []
+        input_queues = []
+        output_queues = []
+        # mp.set_start_method('spawn')
+        
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+            t_id = task_id[idx][0].item()
+            tr_id = trial_id[idx][0].item()
+            input_q = Queue()
+            output_q = Queue()
+            p = Process(
+                target=env_worker,
+                args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+            )
+            p.start()
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            init_data = output_queues[idx].get(timeout=120)
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs']))
+            task_records.append({
+                "active": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name']
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_smolvla(vla_input)
+            actions = vla_output["action"]
+            
+            # step_data = {
+            #         "responses": vla_output["responses"],
+            #         "input_ids": vla_output["input_ids"],
+            #         "attention_mask": vla_output["attention_mask"],
+            #         "pixel_values": vla_output["pixel_values"],
+            #         "action": actions,
+            #         "step": step
+            #     }
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["step"] = step
+            
+            vla_history.append(step_data)
+            
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                result = output_queues[idx].get(timeout=30)
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'])
+                task_records[idx]['active'] = result['active']
+                task_records[idx]['complete'] = result['complete']
+                task_records[idx]['finish_step'] = result['finish_step']
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
+        
+        torch.cuda.empty_cache()
+        
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete
+                )
+        
+        self.module.train()
+
+        batch = {"observation.images.image":[], 
+                "observation.images.wrist_image":[], 
+                "observation.images.image_is_pad": [],
+                "observation.images.wrist_image_is_pad": [],
+                "observation.state":[], 
+                "observation.state_is_pad": [],
+                "task": []}  
+        for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+                  "observation.state", "observation.state_is_pad", "task"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            if k != "task":
+                batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete"] = []
+        batch["finish_step"] = []
+        
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
         
         output_batch = TensorDict(
             batch,
@@ -719,13 +898,13 @@ class RobHFRollout(BaseRollout):
         if isinstance(self.module, FSDP):
             # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
             param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
-        
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                actions = self.module.select_action(prompts)
+                # actions = self.module.select_action(prompts)
+                actions = self.module.predict_action_chunk(prompts)
         
         batch = prompts.copy()
-        batch["action"] = actions
+        batch["action"] = actions.to(torch.float32).cpu().numpy()
         return batch
 
     def _obs_to_input(self, obs):
