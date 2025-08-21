@@ -3,8 +3,6 @@ set -x
 export NCCL_DEBUG=WARN 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=true
-export CUDA_LAUNCH_BLOCKING=1
-export TORCH_USE_CUDA_DSA=1
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'
@@ -15,7 +13,7 @@ CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
 VLA_NAME="smolvla"
-NUM_GPUS=8
+NUM_GPUS=1
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
 NUM_NODES=1
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/align.json"
@@ -29,7 +27,7 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     data.accuracy_upper_bound=0.9 \
     data.oversample_factor=1 \
     data.train_batch_size=64 \
-    data.val_batch_size=496 \
+    data.val_batch_size=8 \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
@@ -42,8 +40,8 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_micro_batch_size=$NUM_GPUS \
     actor_rollout_ref.actor.use_dynamic_bsz=False \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
-    actor_rollout_ref.actor.fsdp_config.grad_offload=True \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
+    actor_rollout_ref.actor.fsdp_config.grad_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
     actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.actor.grad_clip=1 \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \

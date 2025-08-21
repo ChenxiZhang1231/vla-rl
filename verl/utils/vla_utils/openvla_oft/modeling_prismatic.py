@@ -193,6 +193,7 @@ class PrismaticVisionBackbone(nn.Module):
         Args:
             pixel_values (torch.Tensor): Pixels for input image(s), (B, C, H, W).
         """
+        breakpoint()
         if self.num_images_in_input == 1:
             if not self.use_fused_vision_backbone:
                 return self.featurizer(pixel_values)

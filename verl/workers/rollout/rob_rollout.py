@@ -38,7 +38,7 @@ from transformers import GenerationConfig, AutoProcessor
 from verl.utils.libero_utils import get_libero_env, get_libero_dummy_action, get_image_resize_size, get_libero_image, get_libero_wrist_image, quat2axisangle, normalize_gripper_action, invert_gripper_action, save_rollout_video
 import numpy as np
 from PIL import Image
-# import tensorflow as tf
+import tensorflow as tf
 from verl import DataProto
 from libero.libero import benchmark
 from codetiming import Timer
@@ -57,106 +57,106 @@ OPENVLA_V01_SYSTEM_PROMPT = (
     "The assistant gives helpful, detailed, and polite answers to the user's questions."
 )
 
-# def crop_and_resize(image, crop_scale, batch_size):
-#     """
-#     Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
-#     to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
-#     distribution shift at test time.
+def crop_and_resize(image, crop_scale, batch_size):
+    """
+    Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
+    to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
+    distribution shift at test time.
 
-#     Args:
-#         image: TF Tensor of shape (batch_size, H, W, C) or (H, W, C) and datatype tf.float32 with
-#                values between [0,1].
-#         crop_scale: The area of the center crop with respect to the original image.
-#         batch_size: Batch size.
-#     """
-#     # Convert from 3D Tensor (H, W, C) to 4D Tensor (batch_size, H, W, C)
-#     assert image.shape.ndims == 3 or image.shape.ndims == 4
-#     expanded_dims = False
-#     if image.shape.ndims == 3:
-#         image = tf.expand_dims(image, axis=0)
-#         expanded_dims = True
+    Args:
+        image: TF Tensor of shape (batch_size, H, W, C) or (H, W, C) and datatype tf.float32 with
+               values between [0,1].
+        crop_scale: The area of the center crop with respect to the original image.
+        batch_size: Batch size.
+    """
+    # Convert from 3D Tensor (H, W, C) to 4D Tensor (batch_size, H, W, C)
+    assert image.shape.ndims == 3 or image.shape.ndims == 4
+    expanded_dims = False
+    if image.shape.ndims == 3:
+        image = tf.expand_dims(image, axis=0)
+        expanded_dims = True
 
-#     # Get height and width of crop
-#     new_heights = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
-#     new_widths = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+    # Get height and width of crop
+    new_heights = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+    new_widths = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
 
-#     # Get bounding box representing crop
-#     height_offsets = (1 - new_heights) / 2
-#     width_offsets = (1 - new_widths) / 2
-#     bounding_boxes = tf.stack(
-#         [
-#             height_offsets,
-#             width_offsets,
-#             height_offsets + new_heights,
-#             width_offsets + new_widths,
-#         ],
-#         axis=1,
-#     )
-
-#     # Crop and then resize back up
-#     image = tf.image.crop_and_resize(image, bounding_boxes, tf.range(batch_size), (224, 224))
-
-#     # Convert back to 3D Tensor (H, W, C)
-#     if expanded_dims:
-#         image = image[0]
-
-#     return image
-
-# def center_crop_image(image):
-#     batch_size = 1
-#     crop_scale = 0.9
-
-#     # Convert to TF Tensor and record original data type (should be tf.uint8)
-#     image = tf.convert_to_tensor(np.array(image))
-#     orig_dtype = image.dtype
-
-#     # Convert to data type tf.float32 and values between [0,1]
-#     image = tf.image.convert_image_dtype(image, tf.float32)
-
-#     # Crop and then resize back to original size
-#     image = crop_and_resize(image, crop_scale, batch_size)
-
-#     # Convert back to original data type
-#     image = tf.clip_by_value(image, 0, 1)
-#     image = tf.image.convert_image_dtype(image, orig_dtype, saturate=True)
-
-#     # Convert back to PIL Image
-#     image = Image.fromarray(image.numpy())
-#     image = image.convert("RGB")
-#     return image
-
-
-
-def center_crop_image(image: Image.Image) -> Image.Image:
-  
-    crop_scale = 0.9
-    final_size = (224, 224)
-
-    image_np = np.array(image.convert("RGB"))
-    orig_height, orig_width, _ = image_np.shape
-
-    tensor_img = torch.from_numpy(image_np).permute(2, 0, 1)
-
-    side_scale = math.sqrt(crop_scale)
-    crop_height = int(orig_height * side_scale)
-    crop_width = int(orig_width * side_scale)
-
-    cropped_tensor = F.center_crop(tensor_img, (crop_height, crop_width))
-
-
-    resized_tensor = F.resize(
-        cropped_tensor.to(torch.float32), 
-        size=list(final_size), 
-        interpolation=F.InterpolationMode.BILINEAR, 
-        antialias=True
+    # Get bounding box representing crop
+    height_offsets = (1 - new_heights) / 2
+    width_offsets = (1 - new_widths) / 2
+    bounding_boxes = tf.stack(
+        [
+            height_offsets,
+            width_offsets,
+            height_offsets + new_heights,
+            width_offsets + new_widths,
+        ],
+        axis=1,
     )
 
-    final_tensor = resized_tensor.round().clamp(0, 255).to(torch.uint8)
+    # Crop and then resize back up
+    image = tf.image.crop_and_resize(image, bounding_boxes, tf.range(batch_size), (224, 224))
 
-    final_numpy = final_tensor.permute(1, 2, 0).numpy()
-    pil_image = Image.fromarray(final_numpy)
+    # Convert back to 3D Tensor (H, W, C)
+    if expanded_dims:
+        image = image[0]
 
-    return pil_image.convert("RGB")
+    return image
+
+def center_crop_image(image):
+    batch_size = 1
+    crop_scale = 0.9
+
+    # Convert to TF Tensor and record original data type (should be tf.uint8)
+    image = tf.convert_to_tensor(np.array(image))
+    orig_dtype = image.dtype
+
+    # Convert to data type tf.float32 and values between [0,1]
+    image = tf.image.convert_image_dtype(image, tf.float32)
+
+    # Crop and then resize back to original size
+    image = crop_and_resize(image, crop_scale, batch_size)
+
+    # Convert back to original data type
+    image = tf.clip_by_value(image, 0, 1)
+    image = tf.image.convert_image_dtype(image, orig_dtype, saturate=True)
+
+    # Convert back to PIL Image
+    image = Image.fromarray(image.numpy())
+    image = image.convert("RGB")
+    return image
+
+
+
+# def center_crop_image(image: Image.Image) -> Image.Image:
+  
+#     crop_scale = 0.9
+#     final_size = (224, 224)
+
+#     image_np = np.array(image.convert("RGB"))
+#     orig_height, orig_width, _ = image_np.shape
+
+#     tensor_img = torch.from_numpy(image_np).permute(2, 0, 1)
+
+#     side_scale = math.sqrt(crop_scale)
+#     crop_height = int(orig_height * side_scale)
+#     crop_width = int(orig_width * side_scale)
+
+#     cropped_tensor = F.center_crop(tensor_img, (crop_height, crop_width))
+
+
+#     resized_tensor = F.resize(
+#         cropped_tensor.to(torch.float32), 
+#         size=list(final_size), 
+#         interpolation=F.InterpolationMode.BILINEAR, 
+#         antialias=True
+#     )
+
+#     final_tensor = resized_tensor.round().clamp(0, 255).to(torch.uint8)
+
+#     final_numpy = final_tensor.permute(1, 2, 0).numpy()
+#     pil_image = Image.fromarray(final_numpy)
+
+#     return pil_image.convert("RGB")
 
 
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
@@ -654,6 +654,7 @@ class RobHFRollout(BaseRollout):
             #     }
             step_data = vla_input.copy()
             step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
             step_data["step"] = step
             
             vla_history.append(step_data)
@@ -696,16 +697,16 @@ class RobHFRollout(BaseRollout):
                 )
         
         self.module.train()
-
         batch = {"observation.images.image":[], 
                 "observation.images.wrist_image":[], 
                 "observation.images.image_is_pad": [],
                 "observation.images.wrist_image_is_pad": [],
                 "observation.state":[], 
                 "observation.state_is_pad": [],
+                "action_tensor": [],
                 "task": []}  
         for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
-                  "observation.state", "observation.state_is_pad", "task"]:
+                  "observation.state", "observation.state_is_pad", "action_tensor", "task"]:
             for h in vla_history:
                 batch[k].append(h[k])
                 
@@ -904,7 +905,9 @@ class RobHFRollout(BaseRollout):
                 actions = self.module.predict_action_chunk(prompts)
         
         batch = prompts.copy()
+        batch["action_tensor"] = actions
         batch["action"] = actions.to(torch.float32).cpu().numpy()
+        
         return batch
 
     def _obs_to_input(self, obs):

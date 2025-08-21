@@ -204,7 +204,15 @@ class RobActorRolloutRefWorker(Worker):
         with init_context(), warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if self.config.model.vla == "openvla-oft":
-                actor_module = AutoModelForVision2Seq.from_pretrained(
+                # actor_module = AutoModelForVision2Seq.from_pretrained(
+                #                                         pretrained_model_name_or_path=local_path,
+                #                                         torch_dtype=torch_dtype,
+                #                                         attn_implementation="flash_attention_2",
+                #                                         config=actor_model_config,              
+                #                                         trust_remote_code=True,
+                #                                     )
+                
+                actor_module = OpenVLAForActionPrediction.from_pretrained(
                                                         pretrained_model_name_or_path=local_path,
                                                         torch_dtype=torch_dtype,
                                                         attn_implementation="flash_attention_2",
@@ -251,9 +259,8 @@ class RobActorRolloutRefWorker(Worker):
                 kwargs["config"] = policy_cfg
                 # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
                 kwargs["pretrained_model_name_or_path"] = local_path
-                kwargs["device_map"] = 'cuda' 
+                # kwargs["device_map"] = 'cuda' 
                 actor_module = SmolVLAPolicy.from_pretrained(**kwargs)
-                breakpoint()
                 
            
             actor_module.to(torch_dtype)
@@ -281,7 +288,7 @@ class RobActorRolloutRefWorker(Worker):
 
         if self.rank == 0:
             print_model_size(actor_module)
-
+        # breakpoint()
         log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
 
         # We wrap FSDP for rollout as well
@@ -300,10 +307,12 @@ class RobActorRolloutRefWorker(Worker):
         if self._is_ref:
             mixed_precision = None
         
-        #oft add
-        auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
-        #oft add end
-        
+        if self.config.model.vla == "smolvla":
+            auto_wrap_policy = None
+        elif self.config.model.vla == "openvla-oft":
+            auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
+        else:
+            raise ValueError()
 
         print(f'wrap_policy: {auto_wrap_policy}')
 

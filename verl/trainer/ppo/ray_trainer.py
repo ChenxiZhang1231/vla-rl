@@ -354,7 +354,6 @@ class RayTrainer(object):
 
             test_output_gen_batch = self.actor_rollout_wg.generate_sequences(test_batch)
             print('validation generation end')
-            breakpoint()
             test_batch = test_batch.union(test_output_gen_batch)
 
             # evaluate using reward_function

@@ -19,7 +19,7 @@ from torch import nn
 from transformers import (
     AutoConfig,
     AutoModel,
-    AutoModelForImageTextToText,
+    # AutoModelForImageTextToText,
     AutoProcessor,
     SmolVLMForConditionalGeneration,
 )
@@ -83,7 +83,8 @@ class SmolVLMWithExpertModel(nn.Module):
             config = self.vlm.config
         else:
             config = AutoConfig.from_pretrained(model_id)
-            # config.text_config._attn_implementation = "flash_attention_2"
+            config.text_config._attn_implementation = "flash_attention_2"
+            config.vision_config._attn_implementation = "flash_attention_2"
             self.vlm = SmolVLMForConditionalGeneration(config=config)
         self.processor = AutoProcessor.from_pretrained(model_id)
         if num_vlm_layers > 0:
@@ -131,7 +132,7 @@ class SmolVLMWithExpertModel(nn.Module):
         self.train_expert_only = train_expert_only
         self.attention_mode = attention_mode
         self.expert_hidden_size = lm_expert_config.hidden_size
-        self.set_requires_grad()
+        # self.set_requires_grad()
         
         
 
@@ -182,11 +183,12 @@ class SmolVLMWithExpertModel(nn.Module):
     def embed_image(self, image: torch.Tensor):
         patch_attention_mask = None
         # Get sequence from the vision encoder
-        breakpoint()
+        # breakpoint()
+        contiguous_image = image.contiguous().to(dtype=self.get_vlm_model().vision_model.dtype)
         image_hidden_states = (
             self.get_vlm_model()
             .vision_model(
-                pixel_values=image.to(dtype=self.get_vlm_model().vision_model.dtype),
+                pixel_values=contiguous_image,
                 patch_attention_mask=patch_attention_mask,
             )
             .last_hidden_state

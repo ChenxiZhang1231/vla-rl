@@ -57,7 +57,6 @@ def create_stats_buffers(
         # Note: we initialize mean, std, min, max to infinity. They should be overwritten
         # downstream by `stats` or `policy.load_state_dict`, as expected. During forward,
         # we assert they are not infinity anymore.
-
         device = torch.device('cuda')
         buffer = {}
         if norm_mode is NormalizationMode.MEAN_STD:

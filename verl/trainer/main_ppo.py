@@ -33,16 +33,20 @@ class RobRewardManager():
     def __init__(self, num_examine,config) -> None:
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.config=config
+        if config.actor_rollout_ref.model.vla == 'smolvla':
+            self.data_key = 'action_tensor'
+        else:
+            self.data_key = 'responses'
 
     def verify(self, data):
         completes = data.batch['complete'].tolist()
-        batch_size = data.batch['responses'].size(0)
+        batch_size = data.batch[self.data_key].size(0)
         assert len(completes) == batch_size
         score = [float(item) for item in completes]
         format = [1.0 for _ in range(len(completes))]
 
-        data.batch['acc'] = torch.tensor(score, dtype=torch.float32, device=data.batch['responses'].device)
-        data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch['responses'].device)
+        data.batch['acc'] = torch.tensor(score, dtype=torch.float32, device=data.batch[self.data_key].device)
+        data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
         
         reward_metrics = {}
         format_metrics = {}

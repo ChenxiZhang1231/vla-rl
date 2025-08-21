@@ -80,10 +80,16 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
     #         transformer_auto_wrap_policy, transformer_layer_cls={self.transformer_layer_cls}
     #     )\
     
-    if module.name == 'smolvla':
-        default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+    # if module.name == 'smolvla':
+    #     default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+    # else:
+    #     #default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+    #     default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
+    # default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
+    if hasattr(module, 'name') and module.name == 'smolvla':
+        # default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+        default_transformer_cls_names_to_wrap = None
     else:
-        #default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
         default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
     
     fsdp_transformer_layer_cls_to_wrap = default_transformer_cls_names_to_wrap
