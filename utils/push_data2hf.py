@@ -2,15 +2,15 @@ from huggingface_hub import HfApi, CommitOperationAdd
 from pathlib import Path
 
 api = HfApi()
-repo_id = "jasonzhango/LIBERO-Processed"
-local_root = Path("/SSD_DISK/users/zhangjiahui/LIBERO/libero/dataset")
+repo_id = "jasonzhango/LIBERO-Lerobot"
+local_root = Path("/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot")
 
 # 确保仓库存在
 api.create_repo(repo_id=repo_id, repo_type="dataset", exist_ok=True)
 
 ops = []
 for subdir in sorted(local_root.iterdir()):
-    if subdir.is_dir() and subdir.name.endswith("no_noops"):
+    if subdir.is_dir() and subdir.name.endswith("meta"):
         for f in subdir.rglob("*"):
             if f.is_file():
                 print(f"Adding file: {f}")
