@@ -63,6 +63,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVa
 from functools import partial, wraps
 import tempfile
 import shutil
+from torch.distributions import Normal
+import numpy as np
 
 import safetensors
 import torch
@@ -1392,7 +1394,7 @@ class SmolVLAPolicy(PreTrainedModel):
         images, img_masks = self.prepare_images(batch)
         state = self.prepare_state(batch)
         lang_tokens, lang_masks = self.prepare_language(batch)
-
+        breakpoint()
         actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
 
         # Unpad actions
@@ -1925,6 +1927,94 @@ class VLAFlowMatching(nn.Module):
         return x_t
 
     def denoise_step(
+        self,
+        prefix_pad_masks,
+        past_key_values,
+        x_t,
+        timestep,
+    ):
+        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(x_t, timestep)
+
+        suffix_len = suffix_pad_masks.shape[1]
+        batch_size = prefix_pad_masks.shape[0]
+        prefix_len = prefix_pad_masks.shape[1]
+        prefix_pad_2d_masks = prefix_pad_masks[:, None, :].expand(batch_size, suffix_len, prefix_len)
+
+        suffix_att_2d_masks = make_att_2d_masks(suffix_pad_masks, suffix_att_masks)
+
+        full_att_2d_masks = torch.cat([prefix_pad_2d_masks, suffix_att_2d_masks], dim=2)
+        prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
+        position_ids = prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1
+
+        outputs_embeds, _ = self.vlm_with_expert.forward(
+            attention_mask=full_att_2d_masks,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=[None, suffix_embs],
+            use_cache=self.config.use_cache,
+            fill_kv_cache=False,
+        )
+        suffix_out = outputs_embeds[1]
+        suffix_out = suffix_out[:, -self.config.chunk_size :]
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        v_t = self.action_out_proj(suffix_out)
+        return v_t
+    
+    def sample_actions_sde(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
+        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+        bsize = state.shape[0]
+        device = state.device
+
+        if noise is None:
+            actions_shape = (bsize, self.config.chunk_size, self.config.max_action_dim)
+            noise = self.sample_noise(actions_shape, device)
+
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            images, img_masks, lang_tokens, lang_masks, state=state
+        )
+        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+        # Compute image and language key value cache
+        _, past_key_values = self.vlm_with_expert.forward(
+            attention_mask=prefix_att_2d_masks,
+            position_ids=prefix_position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, None],
+            use_cache=self.config.use_cache,
+            fill_kv_cache=True,
+        )
+        dt = -1.0 / self.config.num_steps
+        dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+        x_t = noise
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        trajectory = [x_t]
+        log_probs = []
+        while time >= -dt / 2:
+            expanded_time = time.expand(bsize)
+            v_t = self.denoise_step_sde(
+                prefix_pad_masks,
+                past_key_values,
+                x_t,
+                expanded_time,
+            )
+            sigma_t = self.config.noise_level * torch.sqrt(time / (1 - time + 1e-6))
+            drift = v_t + (sigma_t ** 2 / (2 * time + 1e-6)) * (x_t + (1 - time) * v_t)
+            epsilon = torch.randn_like(x_t)
+            diffusion = sigma_t * torch.sqrt(-dt) * epsilon
+            x_next = x_t + drift * (-dt) + diffusion
+            
+            mean = x_t + drift * (-dt)
+            log_prob = Normal(mean, sigma_t * np.sqrt(-dt)).log_prob(x_next)
+            trajectory.append(x_next)
+            log_probs.append(log_prob)
+            # Euler step
+            x_t = x_next
+            time += dt
+        return trajectory, log_probs
+
+    def denoise_step_sde(
         self,
         prefix_pad_masks,
         past_key_values,
