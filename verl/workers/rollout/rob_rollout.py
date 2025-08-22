@@ -902,7 +902,7 @@ class RobHFRollout(BaseRollout):
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 # actions = self.module.select_action(prompts)
-                actions = self.module.predict_action_chunk(prompts)
+                actions = self.module.predict_action_chunk(prompts, use_sde=True)
         
         batch = prompts.copy()
         batch["action_tensor"] = actions

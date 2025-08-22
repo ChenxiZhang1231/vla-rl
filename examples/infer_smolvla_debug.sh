@@ -6,14 +6,14 @@ export TOKENIZERS_PARALLELISM=true
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='infer-smolvla' 
+EXPERIMENT_NAME='infer-smolvla_sft_full_eval_spatial_sde' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full/checkpoint-53216"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
 VLA_NAME="smolvla"
-NUM_GPUS=1
+NUM_GPUS=8
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
 NUM_NODES=1
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/align.json"

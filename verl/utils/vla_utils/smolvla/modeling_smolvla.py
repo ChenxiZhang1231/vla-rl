@@ -1381,7 +1381,7 @@ class SmolVLAPolicy(PreTrainedModel):
     def get_optim_params(self) -> dict:
         return self.parameters()
 
-    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False) -> Tensor:
         # TODO: Check if this for loop is needed.
         # Context: In fact, self.queues contains only ACTION field, and in inference, we don't have action in the batch
         # In the case of offline inference, we have the action in the batch
@@ -1394,8 +1394,10 @@ class SmolVLAPolicy(PreTrainedModel):
         images, img_masks = self.prepare_images(batch)
         state = self.prepare_state(batch)
         lang_tokens, lang_masks = self.prepare_language(batch)
-        breakpoint()
-        actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+        if use_sde:
+            actions = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+        else:
+            actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
 
         # Unpad actions
         # original_action_dim = self.config.action_feature.shape[0]
@@ -1418,13 +1420,13 @@ class SmolVLAPolicy(PreTrainedModel):
         return batch
 
     @torch.no_grad()
-    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
+    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False) -> Tensor:
         self.eval()
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions = self._get_action_chunk(batch, noise)
+        actions = self._get_action_chunk(batch, noise, use_sde=use_sde)
         return actions
 
     @torch.no_grad()
@@ -1991,21 +1993,22 @@ class VLAFlowMatching(nn.Module):
         sde_sigma_max = 0.07
         sde_sigma_power = 1.5
         x_t = noise
-        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        t = torch.tensor(1.0, dtype=torch.float32, device=device)
         trajectory, log_probs = [x_t], []
-        while time >= -dt / 2:
-            t_b = time.expand(bsize)
-            t_safe = t_b.clamp(1e-4, 1 - 1e-4).to(dtype=torch.float32)
+        while t >= -dt / 2:
+            t_b = t.expand(bsize)
+            t_safe = t_b
+            # t_safe = t_b.clamp(1e-4, 1 - 1e-4).to(dtype=torch.float32)
             v_t = self.denoise_step_sde(
                 prefix_pad_masks,
                 past_key_values,
                 x_t,
                 t_b,
-            )
+            )  # bs, num_step, action_dim
             # sigma_t = self.config.noise_level * torch.sqrt(t_safe / (1 - t_safe + 1e-6))
-            sigma_t  = (sde_sigma_max * t_safe.pow(sde_sigma_power))[:, None, None]
+            sigma_t  = (sde_sigma_max * t.pow(sde_sigma_power))  # bs, 1, 1
 
-            drift = v_t + (sigma_t ** 2 / (2 * t_safe + 1e-6)) * (x_t + (1 - t_safe) * v_t)
+            drift = v_t + (sigma_t ** 2 / (2 * t + 1e-6)) * (x_t + (1 - t) * v_t)
             mean = x_t + drift * dt
             std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)
             eps = torch.randn_like(x_t)
@@ -2019,7 +2022,7 @@ class VLAFlowMatching(nn.Module):
 
             trajectory.append(x_next)
             x_t  = x_next
-            time = time + dt
+            t = t + dt
 
         return (trajectory, log_probs) if return_logprob else x_t
 
