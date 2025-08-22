@@ -1961,7 +1961,7 @@ class VLAFlowMatching(nn.Module):
         v_t = self.action_out_proj(suffix_out)
         return v_t
     
-    def sample_actions_sde(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
+    def sample_actions_sde(self, images, img_masks, lang_tokens, lang_masks, state, noise=None, return_logprob=False) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
         bsize = state.shape[0]
         device = state.device
@@ -1986,33 +1986,42 @@ class VLAFlowMatching(nn.Module):
         )
         dt = -1.0 / self.config.num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
+        sqrt_abs_dt = torch.sqrt(-dt)
 
+        sde_sigma_max = 0.07
+        sde_sigma_power = 1.5
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
-        trajectory = [x_t]
-        log_probs = []
+        trajectory, log_probs = [x_t], []
         while time >= -dt / 2:
-            expanded_time = time.expand(bsize)
+            t_b = time.expand(bsize)
+            t_safe = t_b.clamp(1e-4, 1 - 1e-4).to(dtype=torch.float32)
             v_t = self.denoise_step_sde(
                 prefix_pad_masks,
                 past_key_values,
                 x_t,
-                expanded_time,
+                t_b,
             )
-            sigma_t = self.config.noise_level * torch.sqrt(time / (1 - time + 1e-6))
-            drift = v_t + (sigma_t ** 2 / (2 * time + 1e-6)) * (x_t + (1 - time) * v_t)
-            epsilon = torch.randn_like(x_t)
-            diffusion = sigma_t * torch.sqrt(-dt) * epsilon
-            x_next = x_t + drift * (-dt) + diffusion
+            # sigma_t = self.config.noise_level * torch.sqrt(t_safe / (1 - t_safe + 1e-6))
+            sigma_t  = (sde_sigma_max * t_safe.pow(sde_sigma_power))[:, None, None]
+
+            drift = v_t + (sigma_t ** 2 / (2 * t_safe + 1e-6)) * (x_t + (1 - t_safe) * v_t)
+            mean = x_t + drift * dt
+            std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)
+            eps = torch.randn_like(x_t)
+            x_next = mean + std * eps
             
-            mean = x_t + drift * (-dt)
-            log_prob = Normal(mean, sigma_t * np.sqrt(-dt)).log_prob(x_next)
+            
+            if return_logprob:
+                lp = Normal(mean, std).log_prob(x_next.detach())
+                lp = lp.sum(dim=tuple(range(1, lp.ndim)))
+                log_probs.append(lp)
+
             trajectory.append(x_next)
-            log_probs.append(log_prob)
-            # Euler step
-            x_t = x_next
-            time += dt
-        return trajectory, log_probs
+            x_t  = x_next
+            time = time + dt
+
+        return (trajectory, log_probs) if return_logprob else x_t
 
     def denoise_step_sde(
         self,
