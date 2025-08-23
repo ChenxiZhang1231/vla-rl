@@ -551,7 +551,7 @@ class RobActorRolloutRefWorker(Worker):
 
         # with Timer(name=f'gen seq end ,  old log will begin', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print("gen seq end ,  old log will begin")
-        
+        breakpoint()
         if self._is_actor and recompute_log_prob:
             # we should always recompute old_log_probs when it is HybridEngine
             
@@ -559,7 +559,7 @@ class RobActorRolloutRefWorker(Worker):
             output.meta_info['temperature'] = self.config.rollout.temperature
             output.meta_info['use_dynamic_bsz'] = self.config.rollout.log_prob_use_dynamic_bsz
             output.meta_info['max_token_len'] = self.config.rollout.log_prob_max_token_len_per_gpu
-            output.meta_info['pad_token_id'] = self.tokenizer.pad_token_id
+            output.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
             old_log_probs = self.actor.compute_log_prob(data=output)
             output.batch['old_log_probs'] = old_log_probs
 
@@ -1037,7 +1037,7 @@ class ActorRolloutRefWorker(Worker):
         prompts.meta_info.update(meta_info)
         with self.sharding_manager:
             log_gpu_memory_usage('After entering sharding manager', logger=logger)
-
+            breakpoint()
             prompts = self.sharding_manager.preprocess_data(prompts)
             output = self.rollout.generate_sequences(prompts=prompts)
 

@@ -1381,7 +1381,7 @@ class SmolVLAPolicy(PreTrainedModel):
     def get_optim_params(self) -> dict:
         return self.parameters()
 
-    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False) -> Tensor:
+    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False, return_logprob: bool = False) -> Tensor:
         # TODO: Check if this for loop is needed.
         # Context: In fact, self.queues contains only ACTION field, and in inference, we don't have action in the batch
         # In the case of offline inference, we have the action in the batch
@@ -1395,7 +1395,9 @@ class SmolVLAPolicy(PreTrainedModel):
         state = self.prepare_state(batch)
         lang_tokens, lang_masks = self.prepare_language(batch)
         if use_sde:
-            actions = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+            actions = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
+            if return_logprob:
+                actions, log_probs = actions
         else:
             actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
 
@@ -1409,7 +1411,7 @@ class SmolVLAPolicy(PreTrainedModel):
         if self.config.adapt_to_pi_aloha:
             actions = self._pi_aloha_encode_actions(actions)
 
-        return actions
+        return (actions, log_probs) if return_logprob else actions
 
     def _prepare_batch(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         if self.config.adapt_to_pi_aloha:
@@ -1420,13 +1422,13 @@ class SmolVLAPolicy(PreTrainedModel):
         return batch
 
     @torch.no_grad()
-    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False) -> Tensor:
+    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False, return_logprob: bool = False) -> Tensor:
         self.eval()
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions = self._get_action_chunk(batch, noise, use_sde=use_sde)
+        actions = self._get_action_chunk(batch, noise, use_sde=use_sde, return_logprob=return_logprob)
         return actions
 
     @torch.no_grad()

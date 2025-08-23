@@ -590,6 +590,7 @@ class RobHFRollout(BaseRollout):
         batch_size = task_id.size(0)
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
         
         processes = []
         input_queues = []
@@ -641,7 +642,7 @@ class RobHFRollout(BaseRollout):
             vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
 
-            vla_output = self._generate_one_step_smolvla(vla_input)
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
             actions = vla_output["action"]
             
             # step_data = {
@@ -895,14 +896,14 @@ class RobHFRollout(BaseRollout):
             return batch
         
     @torch.no_grad()
-    def _generate_one_step_smolvla(self, prompts: dict):
+    def _generate_one_step_smolvla(self, prompts: dict, use_sde: bool = False):
         if isinstance(self.module, FSDP):
             # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
             param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 # actions = self.module.select_action(prompts)
-                actions = self.module.predict_action_chunk(prompts, use_sde=True)
+                actions = self.module.predict_action_chunk(prompts, use_sde=use_sde)
         
         batch = prompts.copy()
         batch["action_tensor"] = actions

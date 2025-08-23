@@ -495,7 +495,6 @@ class RayTrainer(object):
             logger.log(data=val_metrics, step=global_steps)
             if self.config.trainer.get('val_only', False):
                 return
-        # breakpoint()
         progress_bar = tqdm(total=self.total_training_steps, initial=global_steps, desc="Training Progress")
 
         for epoch in range(self.config.trainer.total_epochs):
@@ -539,14 +538,22 @@ class RayTrainer(object):
                         batch_lst = sum([[newbatch[i:i + 1] for _ in range(n_samples)] for i in range(len(newbatch))],
                                         [])
 
-                        gen_batch.meta_info = {
-                            'eos_token_id': self.tokenizer.eos_token_id,
-                            'n_samples': n_samples,
-                            'pad_token_id': self.tokenizer.pad_token_id,
-                        }
-                        
+                        if self.tokenizer is not None:
+                            gen_batch.meta_info = {
+                                'eos_token_id': self.tokenizer.eos_token_id,
+                                'n_samples': n_samples,
+                                'pad_token_id': self.tokenizer.pad_token_id,
+                                'is_train': True,
+                            }
+                        else:
+                            gen_batch.meta_info = {
+                                'eos_token_id': -1,
+                                'n_samples': n_samples,
+                                'pad_token_id': -1,
+                                'is_train': True,
+                            }
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(prompts=gen_batch)
-                        
+                        breakpoint()
                         roll_batch = DataProto.concat(batch_lst)
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)

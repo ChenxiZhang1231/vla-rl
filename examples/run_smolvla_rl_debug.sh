@@ -6,7 +6,7 @@ export TOKENIZERS_PARALLELISM=true
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='infer-smolvla-debug' 
+EXPERIMENT_NAME='debug' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full/checkpoint-53216"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -15,7 +15,7 @@ DATASET_NAME="libero_spatial"
 VLA_NAME="smolvla"
 NUM_GPUS=8
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
-NUM_NODES=1
+NUM_NODES=1 
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/align.json"
 
 HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
@@ -26,7 +26,7 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     data.accuracy_lower_bound=0.1 \
     data.accuracy_upper_bound=0.9 \
     data.oversample_factor=1 \
-    data.train_batch_size=64 \
+    data.train_batch_size=8 \
     data.val_batch_size=496 \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
@@ -76,15 +76,16 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     trainer.default_local_dir=$CKPT_PATH/$PROJECT_NAME/$EXPERIMENT_NAME \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.nnodes=$NUM_NODES \
-    trainer.save_freq=25 \
+    trainer.save_freq=4 \
     trainer.test_freq=4 \
     trainer.total_epochs=100 \
-    trainer.val_only=True \
+    trainer.val_only=False \
     ray_init.num_cpus=32 \
     algorithm.adv_estimator=grpo \
     algorithm.adv_params.verifier_gamma=1.0 \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
+
 
