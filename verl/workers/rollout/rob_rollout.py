@@ -657,6 +657,9 @@ class RobHFRollout(BaseRollout):
             step_data["action"] = actions
             step_data["action_tensor"] = vla_output["action_tensor"]
             step_data["step"] = step
+            step_data["x_t"] = vla_output["return_dict"]["x_t"]
+            step_data["t"] = vla_output["return_dict"]["t"]
+            step_data["x_next"] = vla_output["return_dict"]["x_next"]
             
             vla_history.append(step_data)
             
@@ -705,9 +708,12 @@ class RobHFRollout(BaseRollout):
                 "observation.state":[], 
                 "observation.state_is_pad": [],
                 "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
                 "task": []}  
         for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
-                  "observation.state", "observation.state_is_pad", "action_tensor", "task"]:
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "task"]:
             for h in vla_history:
                 batch[k].append(h[k])
                 
@@ -903,11 +909,12 @@ class RobHFRollout(BaseRollout):
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 # actions = self.module.select_action(prompts)
-                actions = self.module.predict_action_chunk(prompts, use_sde=use_sde)
+                actions, return_dict = self.module.predict_action_chunk(prompts, use_sde=use_sde)
         
         batch = prompts.copy()
         batch["action_tensor"] = actions
         batch["action"] = actions.to(torch.float32).cpu().numpy()
+        batch["return_dict"] = return_dict
         
         return batch
 

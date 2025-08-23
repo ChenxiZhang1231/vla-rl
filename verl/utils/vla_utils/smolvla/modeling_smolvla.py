@@ -1395,11 +1395,13 @@ class SmolVLAPolicy(PreTrainedModel):
         state = self.prepare_state(batch)
         lang_tokens, lang_masks = self.prepare_language(batch)
         if use_sde:
-            actions = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
+            return_dict = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
             if return_logprob:
-                actions, log_probs = actions
+                return_dict, log_probs = return_dict
+            actions = return_dict['x_next'][-1]
         else:
             actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+            return_dict = {}
 
         # Unpad actions
         # original_action_dim = self.config.action_feature.shape[0]
@@ -1411,7 +1413,7 @@ class SmolVLAPolicy(PreTrainedModel):
         if self.config.adapt_to_pi_aloha:
             actions = self._pi_aloha_encode_actions(actions)
 
-        return (actions, log_probs) if return_logprob else actions
+        return (actions, return_dict, log_probs) if return_logprob else actions, return_dict
 
     def _prepare_batch(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         if self.config.adapt_to_pi_aloha:
@@ -1428,8 +1430,8 @@ class SmolVLAPolicy(PreTrainedModel):
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions = self._get_action_chunk(batch, noise, use_sde=use_sde, return_logprob=return_logprob)
-        return actions
+        actions, return_dict = self._get_action_chunk(batch, noise, use_sde=use_sde, return_logprob=return_logprob)
+        return actions, return_dict
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
@@ -1996,10 +1998,10 @@ class VLAFlowMatching(nn.Module):
         sde_sigma_power = 1.5
         x_t = noise
         t = torch.tensor(1.0, dtype=torch.float32, device=device)
-        trajectory, log_probs = [x_t], []
+        x_t_all, t_all, x_next_all, log_probs = [], [], [], []
         while t >= -dt / 2:
             t_b = t.expand(bsize)
-            t_safe = t_b
+            # t_safe = t_b
             # t_safe = t_b.clamp(1e-4, 1 - 1e-4).to(dtype=torch.float32)
             v_t = self.denoise_step_sde(
                 prefix_pad_masks,
@@ -2022,11 +2024,18 @@ class VLAFlowMatching(nn.Module):
                 lp = lp.sum(dim=tuple(range(1, lp.ndim)))
                 log_probs.append(lp)
 
-            trajectory.append(x_next)
+            x_t_all.append(x_t)
+            t_all.append(t_b.detach().cpu())
+            x_next_all.append(x_next)
             x_t  = x_next
             t = t + dt
 
-        return (trajectory, log_probs) if return_logprob else x_t
+        return_dict = {
+            "x_t": x_t_all,
+            "t": t_all,
+            "x_next": x_next_all,
+        }
+        return (return_dict, log_probs) if return_logprob else return_dict
 
     def denoise_step_sde(
         self,
