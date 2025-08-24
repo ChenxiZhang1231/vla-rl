@@ -539,7 +539,6 @@ class RobActorRolloutRefWorker(Worker):
         #tmp_sample = prompts.meta_info.get('n_samples', -1)
         # with Timer(name=f'gen seq will start, and the num samples are: {tmp_sample}', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print(f"gen seq will start, and the num samples are: {tmp_sample}")
-    
         with self.sharding_manager:
             log_gpu_memory_usage('After entering sharding manager', logger=logger)    
             prompts = self.sharding_manager.preprocess_data(prompts)
@@ -551,10 +550,9 @@ class RobActorRolloutRefWorker(Worker):
 
         # with Timer(name=f'gen seq end ,  old log will begin', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print("gen seq end ,  old log will begin")
-        breakpoint()
         if self._is_actor and recompute_log_prob:
             # we should always recompute old_log_probs when it is HybridEngine
-            
+
             output.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
             output.meta_info['temperature'] = self.config.rollout.temperature
             output.meta_info['use_dynamic_bsz'] = self.config.rollout.log_prob_use_dynamic_bsz

@@ -253,7 +253,33 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         output_queue.put(output_data)
         
       
+LANG_TOKENS = "lang_tokens"
+LANG_MASKS  = "lang_masks"
 
+def pad_dataprotos_lang(dp_list, pad_id: int, pad_to: int | None = None):
+
+    lengths = [dp.batch[LANG_TOKENS].shape[-1] for dp in dp_list]
+    max_L = max(lengths) if pad_to is None else int(pad_to)
+    
+    out = []
+    for dp in dp_list:
+        bt = dp.batch.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
+        tok = bt[LANG_TOKENS]  # [B, L_i]
+        msk = bt[LANG_MASKS]   # [B, L_i]
+        B, N, L = tok.shape
+
+        if L < max_L:
+            pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
+            pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
+            tok = torch.cat([tok, pad_tok], dim=-1)
+            msk = torch.cat([msk, pad_msk], dim=-1)
+
+        bt[LANG_TOKENS] = tok
+        bt[LANG_MASKS]  = msk
+
+        new_dp = type(dp)(batch=bt, non_tensor_batch=dp.non_tensor_batch,)
+        out.append(new_dp)
+    return out
 
 class RobHFRollout(BaseRollout):
 
@@ -312,6 +338,9 @@ class RobHFRollout(BaseRollout):
             output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
+            
+        output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
+        
         output = DataProto.concat(output)
         return output
     
@@ -657,10 +686,12 @@ class RobHFRollout(BaseRollout):
             step_data["action"] = actions
             step_data["action_tensor"] = vla_output["action_tensor"]
             step_data["step"] = step
-            step_data["x_t"] = vla_output["return_dict"]["x_t"]
-            step_data["t"] = vla_output["return_dict"]["t"]
-            step_data["x_next"] = vla_output["return_dict"]["x_next"]
-            
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
             vla_history.append(step_data)
             
             for idx in active_indices:
@@ -686,9 +717,7 @@ class RobHFRollout(BaseRollout):
             p.join(timeout=20)
             if p.is_alive():
                 p.terminate()
-        
         torch.cuda.empty_cache()
-        
         if is_valid:
             for task_file, images in valid_video.items():
                 complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
@@ -699,7 +728,6 @@ class RobHFRollout(BaseRollout):
                     global_steps,
                     complete
                 )
-        
         self.module.train()
         batch = {"observation.images.image":[], 
                 "observation.images.wrist_image":[], 
@@ -711,15 +739,16 @@ class RobHFRollout(BaseRollout):
                 "x_t": [],
                 "t": [],
                 "x_next": [],
-                "task": []}  
+                "lang_tokens": [],
+                "lang_masks": []
+                }  
         for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
-                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "task"]:
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
             for h in vla_history:
                 batch[k].append(h[k])
                 
         for k,v in batch.items():
-            if k != "task":
-                batch[k] = torch.stack(v, dim=1) 
+            batch[k] = torch.stack(v, dim=1) 
         
         batch["complete"] = []
         batch["finish_step"] = []
@@ -734,7 +763,6 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
-        # breakpoint()
         return DataProto(batch=output_batch)
     
     @torch.no_grad()
@@ -909,12 +937,14 @@ class RobHFRollout(BaseRollout):
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 # actions = self.module.select_action(prompts)
-                actions, return_dict = self.module.predict_action_chunk(prompts, use_sde=use_sde)
+                actions, lang_tokens, lang_masks, return_dict = self.module.predict_action_chunk(prompts, use_sde=use_sde)
         
         batch = prompts.copy()
         batch["action_tensor"] = actions
         batch["action"] = actions.to(torch.float32).cpu().numpy()
         batch["return_dict"] = return_dict
+        batch["lang_tokens"] = lang_tokens
+        batch["lang_masks"] = lang_masks
         
         return batch
 

@@ -191,7 +191,7 @@ class RobDataParallelPPOActor(BasePPOActor):
 
             return entropy, log_probs
     
-    def _forward_micro_batch_smolvla(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _forward_micro_batch_smolvla(self, micro_batch, return_logprob=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         micro_batch:
         
@@ -200,30 +200,16 @@ class RobDataParallelPPOActor(BasePPOActor):
             log_probs: # (bs, response_len)
         """
         
-        batch_size = micro_batch['action_tenser'].size(0)
-        traj_len = micro_batch['action_tenser'].size(1)
+        batch_size = micro_batch['action_tensor'].size(0)
+        traj_len = micro_batch['action_tensor'].size(1)
         
         # breakpoint()
-        breakpoint()
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            input_ids = micro_batch['input_ids']
-            attention_mask = micro_batch['attention_mask']
-            pixel_values = micro_batch["pixel_values"]
-            responses = micro_batch["responses"]
+            _, (logp_step, logp_outer, logp_joint) = self.actor_module.predict_action_chunk(micro_batch, recompute_log_prob=True)
             
-            input_ids = input_ids.reshape((batch_size * traj_len,) + input_ids.shape[2:])
-            attention_mask = attention_mask.reshape((batch_size * traj_len,) + attention_mask.shape[2:])
-            pixel_values = pixel_values.reshape((batch_size * traj_len,) + pixel_values.shape[2:])
-            responses = responses.reshape((batch_size * traj_len,) + responses.shape[2:])
-            
-            input_ids_unpad, _ = self.process_tensor(input_ids, self.pad_token_id)
-            attention_mask_unpad, _ = self.process_tensor(attention_mask, 0)
             
             if self.config.vla == "smolvla":
-                logits = self.actor_module(input_ids=input_ids_unpad,
-                                        attention_mask=attention_mask_unpad,
-                                        pixel_values=pixel_values,
-                                        )  # prevent model thinks we are generating
+                  # prevent model thinks we are generating
                 
                 assert self.actor_module.vocab_size == 32000
                 start_index = self.actor_module.vocab_size - 256 
@@ -415,10 +401,13 @@ class RobDataParallelPPOActor(BasePPOActor):
         if self.config.vla == 'smolvla':
             select_keys = ['observation.images.image', 'observation.images.wrist_image', 
                            'observation.images.image_is_pad', 'observation.images.wrist_image_is_pad', 
-                           'observation.state', 'observation.state_is_pad', 'action_tensor', "finish_step"]
+                           'observation.state', 'observation.state_is_pad', 'action_tensor', 
+                           "x_t", "t", "x_next",
+                           "lang_tokens", "lang_masks", "finish_step"]
         else:
             select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
+
 
         if use_dynamic_bsz:
             # split using dynamic bsz
@@ -431,7 +420,6 @@ class RobDataParallelPPOActor(BasePPOActor):
         for micro_batch in micro_batches:
             with torch.no_grad():
                 if self.config.vla == 'smolvla':
-                    breakpoint()
                     _, log_probs = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
                 else:
                     _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)

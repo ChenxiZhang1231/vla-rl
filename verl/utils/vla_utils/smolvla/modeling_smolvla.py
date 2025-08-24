@@ -293,18 +293,42 @@ def make_att_2d_masks(pad_masks, att_masks):
     return att_2d_masks
 
 
+# def resize_with_pad(img, width, height, pad_value=-1):
+#     # assume no-op when width height fits already
+#     if img.ndim != 4:
+#         raise ValueError(f"(b,c,h,w) expected, but {img.shape}")
+
+#     cur_height, cur_width = img.shape[2:]
+
+#     ratio = max(cur_width / width, cur_height / height)
+#     resized_height = int(cur_height / ratio)
+#     resized_width = int(cur_width / ratio)
+#     resized_img = F.interpolate(
+#         img, size=(resized_height, resized_width), mode="bilinear", align_corners=False
+#     )
+
+#     pad_height = max(0, int(height - resized_height))
+#     pad_width = max(0, int(width - resized_width))
+
+#     # pad on left and top of image
+#     padded_img = F.pad(resized_img, (pad_width, 0, pad_height, 0), value=pad_value)
+#     return padded_img
+
 def resize_with_pad(img, width, height, pad_value=-1):
     # assume no-op when width height fits already
-    if img.ndim != 4:
+    if img.ndim < 4:
         raise ValueError(f"(b,c,h,w) expected, but {img.shape}")
 
     cur_height, cur_width = img.shape[2:]
-
-    ratio = max(cur_width / width, cur_height / height)
+    *lead, C, cur_height, cur_width = img.shape
+    img_4d = img.reshape(-1, C, cur_height, cur_width)
+    
+    ratio = max(cur_width / float(width), cur_height / float(height))
     resized_height = int(cur_height / ratio)
-    resized_width = int(cur_width / ratio)
+    resized_width  = int(cur_width  / ratio)
+    
     resized_img = F.interpolate(
-        img, size=(resized_height, resized_width), mode="bilinear", align_corners=False
+        img_4d, size=(resized_height, resized_width), mode="bilinear", align_corners=False
     )
 
     pad_height = max(0, int(height - resized_height))
@@ -312,7 +336,9 @@ def resize_with_pad(img, width, height, pad_value=-1):
 
     # pad on left and top of image
     padded_img = F.pad(resized_img, (pad_width, 0, pad_height, 0), value=pad_value)
-    return padded_img
+    out = padded_img.reshape(*lead, C, height, width)
+
+    return out
 
 
 def pad_vector(vector, new_dim):
@@ -1381,7 +1407,14 @@ class SmolVLAPolicy(PreTrainedModel):
     def get_optim_params(self) -> dict:
         return self.parameters()
 
-    def _get_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False, return_logprob: bool = False) -> Tensor:
+    def _get_action_chunk(
+        self, 
+        batch: dict[str, Tensor], 
+        noise: Tensor | None = None, 
+        use_sde: bool = False, 
+        return_logprob: bool = False,
+        recompute_log_prob: bool = False,
+    ) -> Tensor:
         # TODO: Check if this for loop is needed.
         # Context: In fact, self.queues contains only ACTION field, and in inference, we don't have action in the batch
         # In the case of offline inference, we have the action in the batch
@@ -1390,10 +1423,25 @@ class SmolVLAPolicy(PreTrainedModel):
         for k in batch:
             if k in self._queues and k != ACTION:
                 batch[k] = torch.stack(list(self._queues[k]), dim=1)
-
-        images, img_masks = self.prepare_images(batch)
+                
+        if batch.get("lang_tokens", None) is None:
+            lang_tokens, lang_masks = self.prepare_language(batch)
+            is_train = True
+        else:
+            lang_tokens, lang_masks = batch["lang_tokens"], batch["lang_masks"]
+            is_train = False
+            
+        images, img_masks = self.prepare_images(batch, is_train=is_train)
         state = self.prepare_state(batch)
-        lang_tokens, lang_masks = self.prepare_language(batch)
+
+        if recompute_log_prob:
+            breakpoint()
+            x_t = batch['x_t']
+            t = batch['t']
+            x_next = batch['x_next']
+            finish_step = batch['finish_step']
+            return_logp = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
+            return None, return_logp
         if use_sde:
             return_dict = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
             if return_logprob:
@@ -1413,7 +1461,7 @@ class SmolVLAPolicy(PreTrainedModel):
         if self.config.adapt_to_pi_aloha:
             actions = self._pi_aloha_encode_actions(actions)
 
-        return (actions, return_dict, log_probs) if return_logprob else actions, return_dict
+        return (actions, lang_tokens, lang_masks, return_dict, log_probs) if return_logprob else actions, lang_tokens, lang_masks, return_dict
 
     def _prepare_batch(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         if self.config.adapt_to_pi_aloha:
@@ -1424,14 +1472,27 @@ class SmolVLAPolicy(PreTrainedModel):
         return batch
 
     @torch.no_grad()
-    def predict_action_chunk(self, batch: dict[str, Tensor], noise: Tensor | None = None, use_sde: bool = False, return_logprob: bool = False) -> Tensor:
+    def predict_action_chunk(
+        self, 
+        batch: dict[str, Tensor], 
+        noise: Tensor | None = None, 
+        use_sde: bool = False, 
+        return_logprob: bool = False,
+        recompute_log_prob: bool = False
+    ) -> Tensor:
         self.eval()
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions, return_dict = self._get_action_chunk(batch, noise, use_sde=use_sde, return_logprob=return_logprob)
-        return actions, return_dict
+        actions, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+            batch,
+            noise,
+            use_sde=use_sde,
+            return_logprob=return_logprob,
+            recompute_log_prob=recompute_log_prob
+        )
+        return actions, lang_tokens, lang_masks, return_dict
 
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
@@ -1493,7 +1554,7 @@ class SmolVLAPolicy(PreTrainedModel):
         loss_dict["loss"] = loss.item()
         return loss, loss_dict
 
-    def prepare_images(self, batch):
+    def prepare_images(self, batch, is_train=False):
         """Apply SmolVLA preprocessing to the images, like resizing to 224x224 and padding to keep aspect ratio, and
         convert pixel range from [0.0, 1.0] to [-1.0, 1.0] as requested by SigLIP.
         """
@@ -1508,7 +1569,12 @@ class SmolVLAPolicy(PreTrainedModel):
             )
         # Preprocess image features present in the batch
         for key in present_img_keys:
-            img = batch[key][:, -1, :, :, :] if batch[key].ndim == 5 else batch[key]
+            if is_train:
+                img = batch[key]
+            else:
+                img = batch[key][:, -1, :, :, :] if batch[key].ndim == 5 else batch[key]
+            
+            breakpoint()
             if self.config.resize_imgs_with_padding is not None:
                 img = resize_with_pad(img, *self.config.resize_imgs_with_padding, pad_value=0)
 
@@ -1588,7 +1654,10 @@ class SmolVLAPolicy(PreTrainedModel):
 
     def prepare_state(self, batch):
         """Pad state"""
-        state = batch[OBS_STATE][:, -1, :] if batch[OBS_STATE].ndim > 2 else batch[OBS_STATE]
+        if batch[OBS_STATE].ndim == 4:
+            state = batch[OBS_STATE]
+        else:
+            state = batch[OBS_STATE][:, -1, :] if batch[OBS_STATE].ndim > 2 else batch[OBS_STATE]
         state = pad_vector(state, self.config.max_state_dim)
         return state
 
@@ -2071,3 +2140,140 @@ class VLAFlowMatching(nn.Module):
         suffix_out = suffix_out.to(dtype=torch.float32)
         v_t = self.action_out_proj(suffix_out)
         return v_t
+
+    def recompute_logprob(
+        self,
+        images,             # [B,S,3,H,W]
+        img_masks,          # [B,S,1]
+        lang_tokens,        # [B,S,L]
+        lang_masks,         # [B,S,L]
+        state,              # [B,S,1,Ds]
+        x_t,                # [B,S,K,50,Da]
+        t,                  # [B,S,K]
+        x_next,             # [B,S,K,50,Da]
+        finish_step,        # [B]
+    ):
+        """
+        返回:
+        logp_step  : [B,S,K]   —— 每个外层步、每个流步的 log-prob（已mask）
+        logp_outer : [B,S]     —— 每个外层步联合（对K求和，已mask）
+        logp_joint : [B]       —— 整条有效轨迹联合（对S再求和，已mask）
+        """
+        # ---------- 基本维度 ----------
+        device = state.device
+        B, S, K, CH, D = x_t.shape  # CH=50, D=动作维
+        assert t.shape == (B, S, K)
+        assert x_next.shape == (B, S, K, CH, D)
+        dt = -1.0 / float(K)                       # 按你的设定：K个等步，t: 1→0
+        sqrt_abs_dt = math.sqrt(-dt)
+        dtype = torch.float32                      # 计算用 fp32 更稳
+
+        # ---------- 构建 prefix KV（按 [B*S] 批量） ----------
+        BS = B * S
+        # 展平外层时间 S 维
+        def _flat(x, keep_tail=0):
+            # 把 [B,S,...] → [B*S,...]
+            if keep_tail == 0:
+                return x.reshape(BS, *x.shape[2:])
+            elif keep_tail == 1:
+                return x.reshape(BS, x.shape[-1])
+            else:
+                raise ValueError
+
+        images_flat    = _flat(images)
+        img_masks_flat = _flat(img_masks)
+        lang_tokens_f  = _flat(lang_tokens)
+        lang_masks_f   = _flat(lang_masks)
+        state_flat     = _flat(state)
+
+        # prefix embeds & KV cache
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            images_flat, img_masks_flat, lang_tokens_f, lang_masks_f, state=state_flat
+        )
+        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+        _, past_key_values = self.vlm_with_expert.forward(
+            attention_mask=prefix_att_2d_masks,
+            position_ids=prefix_position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, None],
+            use_cache=self.config.use_cache,
+            fill_kv_cache=True,
+        )
+        # 把 KV 从 [BS,...] 复制成 [BS*K,...]
+        prefix_pad_masks_rep = prefix_pad_masks.repeat_interleave(K, dim=0)   # [BS*K, Lp]
+        past_kv_rep = _repeat_past_kv_batch(past_key_values, repeats=K)       # 每层KV沿batch复制K次
+
+        # ---------- 展平到 [BS*K]，一次性前向得到 v_t ----------
+        # x_t / t / x_next 搬到 device + fp32
+        x_t_f    = x_t.to(device=device, dtype=dtype)       # [B,S,K,CH,D]
+        x_next_f = x_next.to(device=device, dtype=dtype)
+        t_f      = t.to(device=device, dtype=dtype)
+
+        # [B,S,K,...] → [BS*K,...]
+        x_t_flat    = x_t_f.reshape(BS * K, CH, D)          # [BSK,CH,D]
+        x_next_flat = x_next_f.reshape(BS * K, CH, D)       # [BSK,CH,D]
+        t_flat      = t_f.reshape(BS * K)                   # [BSK]
+
+        # 调 denoise_step_sde（一次处理所有 step）
+        # 需要把 prefix mask/KV 扩到 [BS*K]（上面已处理）
+        # denoise_step_sde 内部会 embed_suffix(x_t_flat, t_flat)
+        outputs_embeds, _ = self.vlm_with_expert.forward(
+            attention_mask=torch.cat([
+                prefix_pad_masks_rep[:, None, :].expand(BS * K, self.embed_suffix(x_t_flat, t_flat)[1].shape[1], prefix_pad_masks_rep.shape[1]),
+                make_att_2d_masks(*self.embed_suffix(x_t_flat, t_flat)[1:])  # (suffix_pad_masks, suffix_att_masks)
+            ], dim=2),
+            position_ids=(torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(self.embed_suffix(x_t_flat, t_flat)[1], dim=1) - 1),
+            past_key_values=past_kv_rep,
+            inputs_embeds=[None, self.embed_suffix(x_t_flat, t_flat)[0]],
+            use_cache=self.config.use_cache,
+            fill_kv_cache=False,
+        )
+        # 上面为了避免多次计算，可拆开：先一次 self.embed_suffix(...)，再复用结果
+        # 这里做个小优化：实际写法请参考下面“更高效版本”注释
+
+        suffix_out = outputs_embeds[1][:, -self.config.chunk_size :]      # [BSK, CH, H]
+        v_t_flat   = self.action_out_proj(suffix_out).to(dtype)           # [BSK, CH, D]
+        v_t_all    = v_t_flat.view(B, S, K, CH, D)                        # [B,S,K,CH,D]
+
+        # ---------- 构造 sigma(t)、漂移、mean/std ----------
+        t_safe = t_f.clamp(1e-4, 1 - 1e-4).view(B, S, K)                  # [B,S,K]
+        t3     = t_safe[..., None, None]                                   # [B,S,K,1,1]
+        sigma_t = (sde_sigma_max * t_safe.pow(sde_sigma_power))[..., None, None]  # [B,S,K,1,1]
+        if use_ito:
+            drift = v_t_all + (sigma_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
+        else:
+            drift = v_t_all
+
+        mean = x_t_f + dt * drift                                          # [B,S,K,CH,D]
+        std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)                     # [B,S,K,1,1]
+
+        # ---------- finish_step → 掩码 [B,S,CH] ----------
+        # 有效动作：扁平索引 0..finish_step[b]（含）为1，其它0
+        # 映射到外层步 s 和 chunk 内索引 c
+        #   s_finish = finish_step // CH
+        #   c_finish = finish_step %  CH
+        CH_idx = torch.arange(CH, device=device)[None, None, :]            # [1,1,CH]
+        S_idx  = torch.arange(S,  device=device)[None, :, None]            # [1,S,1]
+        s_fin  = (finish_step.to(device) // CH).view(B, 1, 1)              # [B,1,1]
+        c_fin  = (finish_step.to(device) %  CH).view(B, 1, 1)              # [B,1,1]
+
+        mask_before = (S_idx <  s_fin).float()                             # [B,S,1]（广播到CH）
+        mask_equal  = (S_idx == s_fin).float() * (CH_idx <= c_fin).float() # [B,S,CH]
+        mask_actions = mask_before.expand(B, S, CH) + mask_equal           # [B,S,CH] ∈ {0,1}
+        # 扩到 [B,S,K,CH,1] 以逐元素遮罩
+        mask_elem = mask_actions[:, :, None, :, None]                      # [B,S,K,CH,1]
+
+        # ---------- 逐元素 log-prob（各向同性对角高斯） ----------
+        # 注意 detach x_next，避免噪声路径入图
+        lp_elem = Normal(mean, std).log_prob(x_next_f.detach())            # [B,S,K,CH,D]
+        # 遮罩无效动作（常数项也被mask掉——表示完全不计入目标）
+        lp_elem = lp_elem * mask_elem                                      # [B,S,K,CH,D]
+        # 聚合：先动作维 (CH,D)，得到每步的 logp
+        logp_step = lp_elem.sum(dim=(-1, -2))                               # [B,S,K]
+        # 外层步联合（对K求和）
+        logp_outer = logp_step.sum(dim=2)                                   # [B,S]
+        # 全轨迹联合（对S求和；后续也可只取到 s_fin 的和）
+        logp_joint = logp_outer.sum(dim=1)                                  # [B]
+
+        return logp_step, logp_outer, logp_joint
