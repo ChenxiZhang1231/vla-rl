@@ -130,7 +130,7 @@ def concat_pad_data_collator_smovla(features, max_item_length=None, pad_id=0):
             if isinstance(v, str):
                 batch[k].extend([f[k] for f in features])
                 
-        if k in ('observation.images.image', 'observation.images.wrist_image', 'observation.state', 'observation.states.ee_state',
+        if k in ('observation.images.image', 'observation.images.front', 'observation.images.wrist_image', 'observation.state', 'observation.states.ee_state',
                  'observation.states.joint_state', 'observation.states.gripper_state', 'observation.images.image_is_pad',
                  'observation.images.wrist_image_is_pad', 'observation.state_is_pad', 'observation.states.ee_state_is_pad',
                  'observation.states.joint_state_is_pad', 'observation.states.gripper_state_is_pad', 'action_is_pad',

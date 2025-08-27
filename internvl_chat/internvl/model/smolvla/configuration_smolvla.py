@@ -105,6 +105,7 @@ class SmolVLAConfig(PretrainedConfig):
 
     pretrained_path: str = ""
     vlm_model_name: str = "/inspire/ssd/project/robotsimulation/public/huggingface_models/SmolVLM2-500M-Video-Instruct"  # Select the VLM backbone.
+    # vlm_model_name: str = "/SSD_DISK/users/zhangjiahui/SimpleVLA-RL/hugg_models/SmolVLM2-500M-Video-Instruct"  # Select the VLM backbone.
     load_vlm_weights: bool = False  # Set to True in case of training the expert from scratch. True when init from pretrained SmolVLA weights
 
     add_image_special_tokens: bool = False  # Whether to use special image tokens around image features.
