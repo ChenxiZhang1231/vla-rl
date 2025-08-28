@@ -238,7 +238,20 @@ def load_smolvla(
 
     return model
 
-
+def _repeat_past_kv_batch(past_kv, repeats: int):
+    """
+    把 past_key_values 的 batch 维复制 repeats 次。
+    兼容 tuple/list 的递归结构：每个张量都沿 dim=0 repeat_interleave。
+    """
+    if torch.is_tensor(past_kv):
+        return past_kv.repeat_interleave(repeats, dim=0)
+    elif isinstance(past_kv, (list, tuple)):
+        return type(past_kv)(_repeat_past_kv_batch(x, repeats) for x in past_kv)
+    elif isinstance(past_kv, dict):
+        return {k: _repeat_past_kv_batch(v, repeats) for k, v in past_kv.items()}
+    else:
+        raise TypeError(f"Unsupported past_kv type: {type(past_kv)}")
+    
 def create_sinusoidal_pos_embedding(
     time: torch.tensor, dimension: int, min_period: float, max_period: float, device="cpu"
 ) -> Tensor:
@@ -319,7 +332,7 @@ def resize_with_pad(img, width, height, pad_value=-1):
     if img.ndim < 4:
         raise ValueError(f"(b,c,h,w) expected, but {img.shape}")
 
-    cur_height, cur_width = img.shape[2:]
+    cur_height, cur_width = img.shape[-2:]
     *lead, C, cur_height, cur_width = img.shape
     img_4d = img.reshape(-1, C, cur_height, cur_width)
     
@@ -1429,27 +1442,45 @@ class SmolVLAPolicy(PreTrainedModel):
             is_train = True
         else:
             lang_tokens, lang_masks = batch["lang_tokens"], batch["lang_masks"]
-            is_train = False
+            # is_train = False
+            is_train = True
             
         images, img_masks = self.prepare_images(batch, is_train=is_train)
-        state = self.prepare_state(batch)
+        # state = self.prepare_state(batch)
+        state = None
 
         if recompute_log_prob:
-            breakpoint()
             x_t = batch['x_t']
             t = batch['t']
             x_next = batch['x_next']
             finish_step = batch['finish_step']
-            return_logp = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
-            return None, return_logp
+            images = images[0]
+            img_masks = img_masks[0]
+            B, S, _, H, W = images.shape
+            img_masks = img_masks.unsqueeze(-1).unsqueeze(-1).repeat(1, S, 1)
+            (logp_step, 
+             logp_outer, 
+             logp_joint, 
+             ent_step, 
+             ent_outer, 
+             ent_joint) = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
+            return_dict = {
+                "logp_step": logp_step, 
+                "logp_outer": logp_outer, 
+                "logp_joint": logp_joint,
+                "ent_step": ent_step, 
+                "ent_outer": ent_outer, 
+                "ent_joint": ent_joint,
+                }
+            return None, lang_tokens, lang_masks, return_dict
         if use_sde:
             return_dict = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
             if return_logprob:
                 return_dict, log_probs = return_dict
             actions = return_dict['x_next'][-1]
         else:
-            actions = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
-            return_dict = {}
+            return_dict = self.model.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
+            actions = return_dict['x_next'][-1]
 
         # Unpad actions
         # original_action_dim = self.config.action_feature.shape[0]
@@ -1574,7 +1605,6 @@ class SmolVLAPolicy(PreTrainedModel):
             else:
                 img = batch[key][:, -1, :, :, :] if batch[key].ndim == 5 else batch[key]
             
-            breakpoint()
             if self.config.resize_imgs_with_padding is not None:
                 img = resize_with_pad(img, *self.config.resize_imgs_with_padding, pad_value=0)
 
@@ -1592,13 +1622,14 @@ class SmolVLAPolicy(PreTrainedModel):
 
         # Create image features not present in the batch
         # as fully 0 padded images.
-        for num_empty_cameras in range(len(missing_img_keys)):
-            if num_empty_cameras >= self.config.empty_cameras:
-                break
-            img = torch.ones_like(img) * -1
-            mask = torch.zeros_like(mask)
-            images.append(img)
-            img_masks.append(mask)
+        
+        # for num_empty_cameras in range(len(missing_img_keys)):
+        #     if num_empty_cameras >= self.config.empty_cameras:
+        #         break
+        #     img = torch.ones_like(img) * -1
+        #     mask = torch.zeros_like(mask)
+        #     images.append(img)
+        #     img_masks.append(mask)
         return images, img_masks
 
     def prepare_language(self, batch) -> tuple[Tensor, Tensor]:
@@ -1850,19 +1881,19 @@ class VLAFlowMatching(nn.Module):
 
         num_lang_embs = lang_emb.shape[1]
         att_masks += [0] * num_lang_embs
+        if state is not None:
+            state_emb = self.state_proj(state)
+            state_emb = state_emb[:, None, :] if state_emb.ndim == 2 else state_emb
+            embs.append(state_emb)
+            bsize = state_emb.shape[0]
+            device = state_emb.device
 
-        state_emb = self.state_proj(state)
-        state_emb = state_emb[:, None, :] if state_emb.ndim == 2 else state_emb
-        embs.append(state_emb)
-        bsize = state_emb.shape[0]
-        device = state_emb.device
+            states_seq_len = state_emb.shape[1]
+            state_mask = torch.ones(bsize, states_seq_len, dtype=torch.bool, device=device)
+            pad_masks.append(state_mask)
 
-        states_seq_len = state_emb.shape[1]
-        state_mask = torch.ones(bsize, states_seq_len, dtype=torch.bool, device=device)
-        pad_masks.append(state_mask)
-
-        # Set attention masks so that image and language inputs do not attend to state or actions
-        att_masks += [1] * (states_seq_len)
+            # Set attention masks so that image and language inputs do not attend to state or actions
+            att_masks += [1] * (states_seq_len)
         embs = torch.cat(embs, dim=1)
         pad_masks = torch.cat(pad_masks, dim=1)
         att_masks = torch.tensor(att_masks, dtype=torch.bool, device=pad_masks.device)
@@ -1962,8 +1993,8 @@ class VLAFlowMatching(nn.Module):
 
     def sample_actions(self, images, img_masks, lang_tokens, lang_masks, state, noise=None) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
-        bsize = state.shape[0]
-        device = state.device
+        bsize = lang_tokens.shape[0]
+        device = lang_tokens.device
 
         if noise is None:
             actions_shape = (bsize, self.config.chunk_size, self.config.max_action_dim)
@@ -1988,6 +2019,7 @@ class VLAFlowMatching(nn.Module):
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        x_t_all, t_all, x_next_all, log_probs = [], [], [], []
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
             v_t = self.denoise_step(
@@ -1997,9 +2029,21 @@ class VLAFlowMatching(nn.Module):
                 expanded_time,
             )
             # Euler step
-            x_t += dt * v_t
+            x_next = x_t + dt * v_t
+            
+            x_t_all.append(x_t)
+            t_all.append(expanded_time.detach().cpu())
+            x_next_all.append(x_next)
+            
+            x_t = x_next
             time += dt
-        return x_t
+            
+        return_dict = {
+            "x_t": x_t_all,
+            "t": t_all,
+            "x_next": x_next_all,
+        }
+        return return_dict
 
     def denoise_step(
         self,
@@ -2038,13 +2082,12 @@ class VLAFlowMatching(nn.Module):
     
     def sample_actions_sde(self, images, img_masks, lang_tokens, lang_masks, state, noise=None, return_logprob=False) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
-        bsize = state.shape[0]
-        device = state.device
+        bsize = lang_tokens.shape[0]
+        device = lang_tokens.device
 
         if noise is None:
             actions_shape = (bsize, self.config.chunk_size, self.config.max_action_dim)
             noise = self.sample_noise(actions_shape, device)
-
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
             images, img_masks, lang_tokens, lang_masks, state=state
         )
@@ -2160,7 +2203,7 @@ class VLAFlowMatching(nn.Module):
         logp_joint : [B]       —— 整条有效轨迹联合（对S再求和，已mask）
         """
         # ---------- 基本维度 ----------
-        device = state.device
+        device = lang_tokens.device
         B, S, K, CH, D = x_t.shape  # CH=50, D=动作维
         assert t.shape == (B, S, K)
         assert x_next.shape == (B, S, K, CH, D)
@@ -2184,11 +2227,11 @@ class VLAFlowMatching(nn.Module):
         img_masks_flat = _flat(img_masks)
         lang_tokens_f  = _flat(lang_tokens)
         lang_masks_f   = _flat(lang_masks)
-        state_flat     = _flat(state)
+        state_flat     = _flat(state) if state is not None else None
 
         # prefix embeds & KV cache
         prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
-            images_flat, img_masks_flat, lang_tokens_f, lang_masks_f, state=state_flat
+            [images_flat], [img_masks_flat.squeeze(-1)], lang_tokens_f, lang_masks_f, state=state_flat
         )
         prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
         prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
@@ -2218,17 +2261,34 @@ class VLAFlowMatching(nn.Module):
         # 调 denoise_step_sde（一次处理所有 step）
         # 需要把 prefix mask/KV 扩到 [BS*K]（上面已处理）
         # denoise_step_sde 内部会 embed_suffix(x_t_flat, t_flat)
+        # outputs_embeds, _ = self.vlm_with_expert.forward(
+        #     attention_mask=torch.cat([
+        #         prefix_pad_masks_rep[:, None, :].expand(BS * K, self.embed_suffix(x_t_flat, t_flat)[1].shape[1], prefix_pad_masks_rep.shape[1]),
+        #         make_att_2d_masks(*self.embed_suffix(x_t_flat, t_flat)[1:])  # (suffix_pad_masks, suffix_att_masks)
+        #     ], dim=2),
+        #     position_ids=(torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(self.embed_suffix(x_t_flat, t_flat)[1], dim=1) - 1),
+        #     past_key_values=past_kv_rep,
+        #     inputs_embeds=[None, self.embed_suffix(x_t_flat, t_flat)[0]],
+        #     use_cache=self.config.use_cache,
+        #     fill_kv_cache=False,
+        # )
+        
+        suffix_embs, suffix_pad, suffix_att = self.embed_suffix(x_t_flat, t_flat)   # [BSK, Ls, H], [BSK, Ls], [BSK, Ls]
+
+        prefix_pad2d = prefix_pad_masks_rep[:, None, :].expand(BS*K, suffix_pad.shape[1], prefix_pad_masks_rep.shape[1])
+        suffix_att2d = make_att_2d_masks(suffix_pad, suffix_att)
+        full_att2d   = torch.cat([prefix_pad2d, suffix_att2d], dim=2)
+        pos_ids      = (torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(suffix_pad, dim=1) - 1)
+
         outputs_embeds, _ = self.vlm_with_expert.forward(
-            attention_mask=torch.cat([
-                prefix_pad_masks_rep[:, None, :].expand(BS * K, self.embed_suffix(x_t_flat, t_flat)[1].shape[1], prefix_pad_masks_rep.shape[1]),
-                make_att_2d_masks(*self.embed_suffix(x_t_flat, t_flat)[1:])  # (suffix_pad_masks, suffix_att_masks)
-            ], dim=2),
-            position_ids=(torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(self.embed_suffix(x_t_flat, t_flat)[1], dim=1) - 1),
+            attention_mask=full_att2d,
+            position_ids=pos_ids,
             past_key_values=past_kv_rep,
-            inputs_embeds=[None, self.embed_suffix(x_t_flat, t_flat)[0]],
+            inputs_embeds=[None, suffix_embs],
             use_cache=self.config.use_cache,
             fill_kv_cache=False,
         )
+        
         # 上面为了避免多次计算，可拆开：先一次 self.embed_suffix(...)，再复用结果
         # 这里做个小优化：实际写法请参考下面“更高效版本”注释
 
@@ -2239,11 +2299,10 @@ class VLAFlowMatching(nn.Module):
         # ---------- 构造 sigma(t)、漂移、mean/std ----------
         t_safe = t_f.clamp(1e-4, 1 - 1e-4).view(B, S, K)                  # [B,S,K]
         t3     = t_safe[..., None, None]                                   # [B,S,K,1,1]
+        sde_sigma_max = 0.07
+        sde_sigma_power = 1.5
         sigma_t = (sde_sigma_max * t_safe.pow(sde_sigma_power))[..., None, None]  # [B,S,K,1,1]
-        if use_ito:
-            drift = v_t_all + (sigma_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
-        else:
-            drift = v_t_all
+        drift = v_t_all + (sigma_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
 
         mean = x_t_f + dt * drift                                          # [B,S,K,CH,D]
         std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)                     # [B,S,K,1,1]
@@ -2275,5 +2334,23 @@ class VLAFlowMatching(nn.Module):
         logp_outer = logp_step.sum(dim=2)                                   # [B,S]
         # 全轨迹联合（对S求和；后续也可只取到 s_fin 的和）
         logp_joint = logp_outer.sum(dim=1)                                  # [B]
+        
+        
+        # ---------- 对应的熵（entropy） ----------
+        # 单维熵: 0.5*(1 + log(2π)) + log(std)
+        c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
+        # std: [B,S,K,1,1]  ->  [B,S,K]
+        h_per_dim = c0 + torch.log(std).squeeze(-1).squeeze(-1)            # [B,S,K]
 
-        return logp_step, logp_outer, logp_joint
+        # 有效维度个数 = 有效动作个数(沿 CH 求和) * D
+        # mask_actions: [B,S,CH] ∈ {0,1}
+        num_valid_actions = mask_actions.sum(dim=-1)                        # [B,S]
+        num_valid_dims    = (num_valid_actions * D).unsqueeze(-1)           # [B,S,1]
+        num_valid_dims    = num_valid_dims.to(h_per_dim.dtype)
+
+        # 每步熵 = 单维熵 × 有效维度数
+        ent_step  = h_per_dim * num_valid_dims                              # [B,S,K]
+        ent_outer = ent_step.sum(dim=2)                                     # [B,S]
+        ent_joint = ent_outer.sum(dim=1)                                    # [B]
+
+        return logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint

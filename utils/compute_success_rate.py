@@ -49,6 +49,8 @@ def calculate_success_rates(directory_path):
 
 
 # target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial'
-target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial_sde'
-
+# target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial_sde'
+# target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial_fixbug'
+# target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial_fixbug_step53216'
+target_directory = '/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/rollouts/infer-smolvla_sft_full_eval_spatial_fixbug_1img'
 calculate_success_rates(target_directory)

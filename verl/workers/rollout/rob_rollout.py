@@ -194,7 +194,8 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         t += 1
         
     if is_valid:
-        img = obs["agentview_image"][::-1, ::-1]
+        # img = obs["agentview_image"][::-1, ::-1]
+        img = obs["agentview_image"][::-1, :]
         valid_images.append(img)
     
     output_queue.put({
@@ -229,8 +230,8 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
             obs, reward, done, info = env.step(inverted_action.tolist())
             
             if is_valid:
-                img = obs["agentview_image"][::-1, ::-1]
-                # img = obs["agentview_image"][::-1, :]. # flip up down,
+                # img = obs["agentview_image"][::-1, ::-1]
+                img = obs["agentview_image"][::-1, :]  # flip up down,
                 step_images.append(img)
             
             
@@ -413,13 +414,14 @@ class RobHFRollout(BaseRollout):
     def process_input_smolvla(self, inputs:list, task_descriptions:list):
         
         batchdata = {"observation.images.image":[], 
-                     "observation.images.wrist_image":[], 
                      "observation.images.image_is_pad": [],
-                     "observation.images.wrist_image_is_pad": [],
                      "observation.state":[], 
                      "observation.state_is_pad": [],
                      "task": []}  
-        
+        if "wrist_image" in inputs[0].keys():
+            batchdata["observation.images.wrist_image"] = []
+            batchdata["observation.images.wrist_image_is_pad"] = []
+            
         transform = transforms.Compose([
             # transforms.Resize((256, 256)),
             transforms.ToTensor(),
@@ -453,11 +455,12 @@ class RobHFRollout(BaseRollout):
         
         batchdata["observation.images.image"] = torch.stack([x for x in batchdata["observation.images.image"]]).to(device)
         batchdata["observation.images.image_is_pad"] = torch.stack([x for x in batchdata["observation.images.image_is_pad"]]).to(device)
-        batchdata["observation.images.wrist_image"] = torch.stack([x for x in batchdata["observation.images.wrist_image"]]).to(device)
-        batchdata["observation.images.wrist_image_is_pad"] = torch.stack([x for x in batchdata["observation.images.wrist_image_is_pad"]]).to(device)
         batchdata["observation.state"] = torch.stack([x for x in batchdata["observation.state"]]).to(device)
         batchdata["observation.state_is_pad"] = torch.stack([x for x in batchdata["observation.state_is_pad"]]).to(device)
-
+        if "wrist_image" in input.keys():
+            batchdata["observation.images.wrist_image"] = torch.stack([x for x in batchdata["observation.images.wrist_image"]]).to(device)
+            batchdata["observation.images.wrist_image_is_pad"] = torch.stack([x for x in batchdata["observation.images.wrist_image_is_pad"]]).to(device)
+        
         return batchdata
    
     
@@ -730,9 +733,9 @@ class RobHFRollout(BaseRollout):
                 )
         self.module.train()
         batch = {"observation.images.image":[], 
-                "observation.images.wrist_image":[], 
                 "observation.images.image_is_pad": [],
-                "observation.images.wrist_image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
                 "observation.state":[], 
                 "observation.state_is_pad": [],
                 "action_tensor": [],
@@ -742,7 +745,9 @@ class RobHFRollout(BaseRollout):
                 "lang_tokens": [],
                 "lang_masks": []
                 }  
-        for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
                   "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
             for h in vla_history:
                 batch[k].append(h[k])
