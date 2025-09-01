@@ -465,15 +465,15 @@ class RobDataParallelPPOActor(BasePPOActor):
                 #     # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
                 #     param_ctx = FSDP.summon_full_params(self.actor_module, writeback=False, recurse=False)
                 # with param_ctx:
-                #     with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                #         if self.config.vla == 'smolvla':
-                #             ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
-                #             log_probs = logp_action
-                #         else:
-                #             _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
                 with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-                    ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
-                    log_probs = logp_action
+                    if self.config.vla == 'smolvla':
+                        ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                        log_probs = logp_action
+                    else:
+                        _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
+                # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                #     ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                #     log_probs = logp_action
             log_probs_lst.append(log_probs)
         log_probs = torch.concat(log_probs_lst, dim=0)
         # breakpoint()

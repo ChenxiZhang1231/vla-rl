@@ -685,7 +685,10 @@ class RayTrainer(object):
                         valid_batch = roll_batch_to_add
                     else:
                         # breakpoint()
-                        batch = pad_dataprotos_lang([valid_batch, roll_batch_to_add], 2)
+                        if self.config.actor_rollout_ref.model.vla == 'smolvla':
+                            batch = pad_dataprotos_lang([valid_batch, roll_batch_to_add], 2)
+                        else:
+                            batch = [valid_batch, roll_batch_to_add]
                         valid_batch = DataProto.concat(batch)
                     print(
                         f"collected {len(valid_batch)} / {batch_size * n_samples} rollouts and each prompt has {n_samples} responses")
@@ -695,7 +698,7 @@ class RayTrainer(object):
                 elif len(valid_batch) > batch_size * n_samples:
                     valid_batch = self.add_to_buffer(valid_batch, batch_size, n_samples)
 
-                for k, v in reward_metrics.items():
+                for k, v in reward_metrics.items():  # success before filter
                     metrics['train_verify_score/' + k] = np.mean(metrics['train_verify_score/' + k])
                     
                 for k, v in format_metrics.items():

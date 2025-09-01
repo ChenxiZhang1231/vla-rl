@@ -3,6 +3,8 @@ set -x
 export NCCL_DEBUG=WARN 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=true
+export ACCELERATE_USE_FSDP=true
+export FSDP_CPU_RAM_EFFICIENT_LOADING=true
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'

@@ -19,6 +19,7 @@ Then, get full state_dict and bind the state_dict to the single GPU model. Then,
 import itertools
 import contextlib
 import math
+import os
 import torch
 import torch.distributed
 from tensordict import TensorDict
@@ -26,7 +27,7 @@ from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn.utils.rnn import pad_sequence
 from torchvision import transforms
-import torch.multiprocessing as mp
+# import torch.multiprocessing as mp
 import torchvision.transforms.functional as F
 
 from verl import DataProto
@@ -49,6 +50,11 @@ import random
 import multiprocessing
 import gc
 from multiprocessing import Process, Queue
+from collections import defaultdict
+from multiprocessing.connection import Connection
+import time
+import multiprocessing as mp
+from multiprocessing import connection as mp_connection
 from collections import defaultdict
 
 __all__ = ['RobHFRollout']
@@ -127,7 +133,27 @@ def center_crop_image(image):
     return image
 
 
+def _to_cpu_list(x):
+    import numpy as np, torch
+    if isinstance(x, torch.Tensor): return x.detach().cpu().float().tolist()
+    if isinstance(x, np.ndarray):   return x.astype(np.float32).tolist()
+    return x
 
+def _close_workers_with_pipe(processes, parents, grace_s=20):
+    # 通知退出
+    for conn in parents:
+        try: conn.send(None)
+        except Exception: pass
+    # 等待退出
+    for p in processes: p.join(timeout=grace_s)
+    # 强杀残留
+    for p in processes:
+        if p.is_alive(): p.terminate()
+    # 关闭连接
+    for conn in parents:
+        try: conn.close()
+        except Exception: pass
+        
 # def center_crop_image(image: Image.Image) -> Image.Image:
   
 #     crop_scale = 0.9
@@ -170,6 +196,8 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
     
     env = None
     while True:
+        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
+        # env, task_description = get_libero_env(task, config.model_family, resolution=256)
         try:
             env, task_description = get_libero_env(task, config.model_family, resolution=256)
             break  
@@ -253,7 +281,125 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         }
         output_queue.put(output_data)
         
-      
+def env_worker_pipe(task_name, task_id, trial_id, config, conn: Connection, is_valid, global_steps, max_steps):
+    """
+    Pipe 版 env_worker：父进程通过 conn.send(action_list/None) 发消息；
+    子进程通过 conn.send({'type': ...}) 回消息。
+    """
+    import gc
+    import torch
+    import traceback
+
+    env = None
+    try:
+        # 1) 任务与初始状态
+        benchmark_dict = benchmark.get_benchmark_dict()
+        task_suite = benchmark_dict[task_name]()
+        task = task_suite.get_task(task_id)
+        initial_states = task_suite.get_task_init_states(task_id)
+        initial_state = initial_states[trial_id]
+
+        # 2) 初始化 env（带重试）
+        max_retries = getattr(getattr(config, "env", None), "init_retries", None)
+        if max_retries is None:
+            max_retries = getattr(config, "env_init_retries", 5)
+        attempt, last_exc = 0, None
+        while True:
+            try:
+                env, task_description = get_libero_env(task, config.model_family, resolution=256)
+                break
+            except Exception as e:
+                last_exc = e
+                print(f"*** env initialization failed (attempt {attempt+1}) ***: {e}")
+                if env is not None:
+                    try: env.close()
+                    except Exception as ce: print(f"error when close the env: {ce}")
+                    env = None
+                torch.cuda.empty_cache(); gc.collect()
+                attempt += 1
+                if attempt >= max_retries:
+                    raise RuntimeError(f"Env init failed after {max_retries} attempts") from last_exc
+
+        # 3) reset + set init + 等待若干步
+        env.reset()
+        obs = env.set_init_state(initial_state)
+        t = 0
+        valid_images = []
+        while t < config.num_steps_wait:
+            obs, _, _, _ = env.step(get_libero_dummy_action(config.model_family))
+            t += 1
+
+        if is_valid:
+            img = obs["agentview_image"][::-1, :]  # flip up-down
+            valid_images.append(img)
+
+        # 4) 发送 init
+        conn.send({
+            'type': 'init',
+            'obs': obs,
+            "task_description": task_description,
+            'valid_images': valid_images.copy(),
+            'task_file_name': f"{task_name}_task_{task_id}_trial_{trial_id}",
+            'active': True,
+            'complete': False,
+            'finish_step': 0
+        })
+
+        # 5) 主循环
+        active = True
+        complete = False
+        finish_step = 0
+
+        while True:
+            msg = conn.recv()          # 父进程发来：list[actions] 或 None
+            if msg is None:
+                try: env.close()
+                finally:
+                    conn.send({'type': 'terminate'})
+                break
+
+            # 一段 action-chunk
+            step_images = []
+            if active:
+                actions = msg
+                for i in range(len(actions)):
+                    a = actions[i]
+                    if isinstance(a, list):
+                        a = np.array(a)
+                    normalized_action = normalize_gripper_action(a, binarize=True)
+                    inverted_action   = invert_gripper_action(normalized_action)
+                    obs, reward, done, info = env.step(inverted_action.tolist())
+
+                    if is_valid:
+                        img = obs["agentview_image"][::-1, :]
+                        step_images.append(img)
+
+                    finish_step += 1
+                    if done or finish_step >= max_steps:
+                        active = False
+                        complete = done
+                        break
+            # 若已 inactive，则忽略动作但仍回消息，避免父进程阻塞
+
+            conn.send({
+                'type': 'step',
+                'obs': obs,
+                'active': active,
+                'complete': complete,
+                'finish_step': finish_step,
+                'valid_images': step_images.copy() if is_valid else []
+            })
+
+    except Exception:
+        tb = traceback.format_exc()
+        try: conn.send({'type': 'error', 'traceback': tb})
+        except Exception: pass
+        try:
+            if env is not None: env.close()
+        except Exception: pass
+        torch.cuda.empty_cache(); gc.collect()
+
+  
 LANG_TOKENS = "lang_tokens"
 LANG_MASKS  = "lang_masks"
 
@@ -338,9 +484,10 @@ class RobHFRollout(BaseRollout):
         batch_prompts = prompts.chunk(chunks=num_chunks)
         if self.config.vla == "smolvla":
             output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+            output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
-        output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
+        
         
         output = DataProto.concat(output)
         return output
@@ -478,27 +625,53 @@ class RobHFRollout(BaseRollout):
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         
+        # processes = []
+        # input_queues = []
+        # output_queues = []
+        # # breakpoint()
+        # # env_worker(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+        
+        # for idx in range(batch_size):
+        #     task_name = task_suite_name[idx]
+        #     t_id = task_id[idx][0].item()
+        #     tr_id = trial_id[idx][0].item()
+        #     input_q = Queue()
+        #     output_q = Queue()
+        #     p = Process(
+        #         target=env_worker,
+        #         args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+        #     )
+        #     p.start()
+        #     processes.append(p)
+        #     input_queues.append(input_q)
+        #     output_queues.append(output_q)
+        
+        ctx = mp.get_context("spawn")  # 用 spawn 上下文
         processes = []
         input_queues = []
         output_queues = []
-        # breakpoint()
-        # env_worker(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
-        
+
+        num_gpus = int(os.environ.get("NUM_GPUS", "1"))  # 自己按需设定
         for idx in range(batch_size):
             task_name = task_suite_name[idx]
             t_id = task_id[idx][0].item()
             tr_id = trial_id[idx][0].item()
-            input_q = Queue()
-            output_q = Queue()
-            p = Process(
-                target=env_worker,
-                args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+
+            in_q = ctx.Queue()
+            out_q = ctx.Queue()
+
+            p = ctx.Process(
+                target=env_worker,   # 用 wrapper 作为入口
+                args=(task_name, t_id, tr_id, self.config, in_q, out_q, is_valid, global_steps, max_steps),
+                kwargs=dict(worker_idx=idx, num_gpus=num_gpus),
+                daemon=False,               # 建议 False，便于优雅清理
             )
             p.start()
+
             processes.append(p)
-            input_queues.append(input_q)
-            output_queues.append(output_q)
-        
+            input_queues.append(in_q)
+            output_queues.append(out_q)
+            
         inputs = []
         task_descriptions = []
         task_records = []
@@ -767,6 +940,184 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+    def _generate_minibatch_smolvla_pipe(self, prompts):
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id   = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id  = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+
+        init_timeout = getattr(self.config, "env_init_timeout", 120)
+        step_total_timeout = getattr(self.config, "env_step_total_timeout", 120)
+        join_grace = getattr(self.config, "env_join_grace", 20)
+
+        # === 启动子进程（spawn）并建立 Pipe ===
+        ctx = mp.get_context("spawn")
+        processes, parents = [], []
+        conn_to_idx = {}
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+            t_id = task_id[idx][0].item()
+            tr_id = trial_id[idx][0].item()
+            parent_conn, child_conn = ctx.Pipe(duplex=True)
+            p = ctx.Process(
+                target=env_worker,
+                args=(task_name, t_id, tr_id, self.config, child_conn, is_valid, global_steps, max_steps)
+            )
+            p.start()
+            processes.append(p)
+            parents.append(parent_conn)
+            conn_to_idx[parent_conn] = idx
+
+        # === 聚合 init：用 connection.wait ===
+        inputs, task_descriptions, task_records = [], [], []
+        valid_video = defaultdict(list)
+
+        pending = set(range(batch_size))
+        deadline = time.time() + init_timeout
+        while pending:
+            timeout = max(0.0, deadline - time.time())
+            ready = mp_connection.wait([parents[i] for i in pending], timeout)
+            if not ready:
+                stuck = [(i, processes[i].is_alive(), processes[i].exitcode) for i in pending]
+                _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                raise RuntimeError(f"Init wait timeout; stuck workers: {stuck}")
+            for conn in ready:
+                idx = conn_to_idx[conn]
+                msg = conn.recv()
+                typ = msg.get('type')
+                if typ == 'error':
+                    _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                    raise RuntimeError(f"env_worker[{idx}] crashed during init:\n{msg['traceback']}")
+                if typ != 'init':
+                    _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                    raise RuntimeError(f"worker {idx} bad init type: {typ}")
+                task_descriptions.append(msg["task_description"])
+                inputs.append(self._obs_to_input(msg['obs']))
+                task_records.append({
+                    "active": msg['active'],
+                    "complete": msg['complete'],
+                    "finish_step": msg['finish_step'],
+                    "task_file_name": msg['task_file_name']
+                })
+                if is_valid:
+                    valid_video[msg['task_file_name']].extend(msg.get('valid_images', []))
+                pending.remove(idx)
+
+        step = 0
+        vla_history = []
+
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            if not active_indices: break
+
+            # 整 batch 推一次模型（保持你的逻辑）
+            vla_input = self.process_input_smolvla(inputs, task_descriptions)
+            vla_input.update(meta_info)
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+
+            # 记录历史
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+            vla_history.append(step_data)
+
+            # 发送动作（仅 active）
+            for i in active_indices:
+                parents[i].send(_to_cpu_list(actions[i]))
+
+            # 聚合本轮 step：wait 直到所有 active 都返回
+            pending = set(active_indices)
+            deadline = time.time() + step_total_timeout
+            new_inputs = list(inputs)
+            while pending:
+                timeout = max(0.0, deadline - time.time())
+                ready = mp_connection.wait([parents[i] for i in pending], timeout)
+                if not ready:
+                    stuck = [(i, processes[i].is_alive(), processes[i].exitcode) for i in pending]
+                    _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                    raise RuntimeError(f"Step wait timeout; stuck workers: {stuck}")
+                for conn in ready:
+                    idx = conn_to_idx[conn]
+                    msg = conn.recv()
+                    typ = msg.get('type')
+                    if typ == 'error':
+                        _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                        raise RuntimeError(f"env_worker[{idx}] crashed:\n{msg['traceback']}")
+                    if typ not in ('step', 'done', 'terminate'):
+                        _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+                        raise RuntimeError(f"worker {idx} unexpected msg type: {typ}")
+
+                    if typ in ('step', 'done'):
+                        new_inputs[idx] = self._obs_to_input(msg['obs'])
+                        task_records[idx]['active'] = msg['active']
+                        task_records[idx]['complete'] = msg['complete']
+                        task_records[idx]['finish_step'] = msg['finish_step']
+                        if is_valid:
+                            valid_video[task_records[idx]['task_file_name']].extend(msg.get('valid_images', []))
+
+                    pending.remove(idx)
+
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+
+        # 关闭 workers
+        _close_workers_with_pipe(processes, parents, grace_s=join_grace)
+        torch.cuda.empty_cache()
+
+        # 保存 valid 视频
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                save_rollout_video(images, self.config.experiment_name, task_file, global_steps, complete)
+
+        self.module.train()
+
+        # 组装训练 batch（保持你的键与形状）
+        batch = {
+            "observation.images.image": [],
+            "observation.images.image_is_pad": [],
+            "observation.state": [],
+            "observation.state_is_pad": [],
+            "action_tensor": [],
+            "x_t": [],
+            "t": [],
+            "x_next": [],
+            "lang_tokens": [],
+            "lang_masks": []
+        }
+        for k in list(batch.keys()):
+            for h in vla_history:
+                batch[k].append(h[k])
+            batch[k] = torch.stack(batch[k], dim=1)
+
+        batch["complete"] = []
+        batch["finish_step"] = []
+        for rec in task_records:
+            batch["complete"].append(rec["complete"])
+            batch["finish_step"].append(rec["finish_step"])
+
+        dev = batch['observation.images.image'].device
+        batch["complete"]    = torch.tensor(batch["complete"], dtype=torch.bool,  device=dev)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=dev)
+
+        output_batch = TensorDict(batch, batch_size=batch_size)
         return DataProto(batch=output_batch)
     
     @torch.no_grad()
