@@ -7,10 +7,10 @@ api = HfApi()
 
 # 设置您的Hugging Face模型仓库ID
 # 格式应为 "your-username/your-model-name" 或 "your-org/your-model-name"
-repo_id = "jasonzhango/finetune-smolvla-libero-bug" 
+repo_id = "jasonzhango/finetune-smolvla-debug" 
 
 # 设置您本地模型文件所在的根目录
-local_model_path = Path("/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full/checkpoint-53216")
+local_model_path = Path("/SSD_DISK/users/zhangjiahui/SimpleVLA-RL/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-ur-real-bs16-kb")
 
 # --- 2. 创建仓库并准备上传文件 ---
 # 确保Hugging Face Hub上的仓库存在，如果不存在则创建

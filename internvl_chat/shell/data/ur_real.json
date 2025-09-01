@@ -1,0 +1,9 @@
+{
+  "ur_real": {
+    "root": "/SSD_DISK/users/zhangjiahui/data/pick_black_eraser_merged",
+    "annotation": "",
+    "data_augment": false,
+    "repeat_time": 1,
+    "length": 1
+  }
+}

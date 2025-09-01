@@ -1,0 +1,9 @@
+{
+  "ur_real": {
+    "root": "/SSD_DISK/users/zhangjiahui/data/pick_black_eraser_kb_jsonl",
+    "annotation": "/SSD_DISK/users/zhangjiahui/data/pick_black_eraser_kb_jsonl/data.jsonl",
+    "data_augment": false,
+    "repeat_time": 20,
+    "length": 1
+  }
+}

@@ -24,6 +24,7 @@ def create_stats_buffers(
     features: dict[str, PolicyFeature],
     norm_map: dict[str, NormalizationMode],
     stats: dict[str, dict[str, Tensor]] | None = None,
+    device_name: str = 'cuda',
 ) -> dict[str, dict[str, nn.ParameterDict]]:
     """
     Create buffers per modality (e.g. "observation.image", "action") containing their mean, std, min, max
@@ -57,7 +58,7 @@ def create_stats_buffers(
         # Note: we initialize mean, std, min, max to infinity. They should be overwritten
         # downstream by `stats` or `policy.load_state_dict`, as expected. During forward,
         # we assert they are not infinity anymore.
-        device = torch.device('cuda')
+        device = torch.device(device_name)
         buffer = {}
         if norm_mode is NormalizationMode.MEAN_STD:
             # mean = torch.ones(shape, dtype=torch.float32) * torch.inf
@@ -138,6 +139,7 @@ class Normalize(nn.Module):
         features: dict[str, PolicyFeature],
         norm_map: dict[str, NormalizationMode],
         stats: dict[str, dict[str, Tensor]] | None = None,
+        device_name: str = 'cuda',
     ):
         """
         Args:
@@ -161,7 +163,7 @@ class Normalize(nn.Module):
         self.features = features
         self.norm_map = norm_map
         self.stats = stats
-        stats_buffers = create_stats_buffers(features, norm_map, stats)
+        stats_buffers = create_stats_buffers(features, norm_map, stats, device_name=device_name)
         for key, buffer in stats_buffers.items():
             setattr(self, "buffer_" + key.replace(".", "_"), buffer)
 
