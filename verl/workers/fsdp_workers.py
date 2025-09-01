@@ -54,6 +54,9 @@ from verl.utils.openvla_utils import update_auto_map , check_model_logic_mismatc
 from peft import LoraConfig, PeftModel, get_peft_model, TaskType
 import json
 
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
+from torch.distributed.fsdp import FullStateDictConfig, ShardedStateDictConfig, LocalStateDictConfig
+from verl.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv('VERL_PPO_LOGGING_LEVEL', 'WARN'))
@@ -69,6 +72,25 @@ def convert_to_regular_types(obj):
         return {k: convert_to_regular_types(v) for k, v in obj.items()}
     return obj
 
+def _fsdp_get_state_dict(fsdp_model: FSDP, mode="sharded"):
+    torch.distributed.barrier()
+    with torch.no_grad():
+        torch.cuda.synchronize()
+
+        if mode == "full":
+            cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            sdt = StateDictType.FULL_STATE_DICT
+        elif mode == "local":
+            cfg = LocalStateDictConfig()
+            sdt = StateDictType.LOCAL_STATE_DICT
+        else:  # "sharded"
+            cfg = ShardedStateDictConfig(offload_to_cpu=True)
+            sdt = StateDictType.SHARDED_STATE_DICT
+
+        with FSDP.state_dict_type(fsdp_model, sdt, cfg):
+            sd = fsdp_model.state_dict()
+    torch.distributed.barrier()
+    return sd
 
 class RobActorRolloutRefWorker(Worker):
     """
@@ -479,6 +501,21 @@ class RobActorRolloutRefWorker(Worker):
             self.actor = RobDataParallelPPOActor(config=self.config.actor,
                                               actor_module=self.actor_module_fsdp,
                                               actor_optimizer=self.actor_optimizer)
+            self.checkpoint_manager = FSDPCheckpointManager(
+                model=self.actor_module_fsdp,
+                optimizer=self.actor_optimizer,
+                lr_scheduler=self.actor_lr_scheduler,
+                processing_class=None,
+                checkpoint_config=None,
+            )
+            import threading
+            self._save_req  = threading.Event()
+            self._save_done = threading.Event()
+            self._save_args = None
+            self._saving_lock = threading.Lock()  # 防重入/并发
+            # self.checkpoint_manager.save_checkpoint(
+            #     local_path='debug', hdfs_path=None, global_step=0, max_ckpt_to_keep=None
+            # )
 
         if self._is_rollout:
             self.rollout, self.sharding_manager = self._build_rollout()
@@ -655,14 +692,19 @@ class RobActorRolloutRefWorker(Worker):
         return output
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
-    def save_checkpoint(self, local_path, hdfs_path=None):
+    def save_checkpoint(self, local_path, hdfs_path=None, global_step=0, max_ckpt_to_keep=None, blocking=True):
         assert self._is_actor
         
         import torch.distributed as dist
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
         from peft import PeftModel
         import transformers
-        
+        # return
+        self.checkpoint_manager.save_checkpoint(
+            local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
+        )
+        return
+        breakpoint()
         if self._is_offload_param:
             load_fsdp_param_and_grad(module=self.actor_module_fsdp,
                                      device_id=torch.cuda.current_device(),
@@ -714,11 +756,35 @@ class RobActorRolloutRefWorker(Worker):
         
         # TODO: support DCP and save sharded checkpoints
         else:
+            pass
             import torch.distributed
-            from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
-            cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-            with FSDP.state_dict_type(self.actor.actor_module, StateDictType.FULL_STATE_DICT, cfg):
-                state_dict = self.actor.actor_module.state_dict()
+            from torch.distributed.checkpoint.state_dict import get_state_dict
+            from torch.distributed.checkpoint import save, FileSystemWriter
+            from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+            # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            # with FSDP.state_dict_type(self.actor.actor_module, StateDictType.FULL_STATE_DICT, cfg):
+            #     state_dict = self.actor.actor_module.state_dict()
+            
+            # state_dict = _fsdp_get_state_dict(self.actor.actor_module, mode="sharded")
+            if dist.get_rank() == 0:
+                os.makedirs(local_path, exist_ok=True)
+                
+            torch.distributed.barrier()
+            with torch.no_grad():
+                torch.cuda.synchronize()
+
+            # 生成“统一视图”的 sharded state dict（自动适配 FSDP）
+            # 注意：这里不需要你自己调 FSDP.state_dict_type，上层 API 会处理
+            fsdp_model = self.actor_module_fsdp
+            # state = get_state_dict({"model": fsdp_model, "optimizer": []})
+            state = get_state_dict(fsdp_model, optimizers=[])
+
+            # 所有 rank 都要创建同一个 writer（路径相同）
+            save(state, storage_writer=FileSystemWriter(local_path))
+
+            torch.distributed.barrier()
+            breakpoint()
+            
             if self.rank == 0:
                 print(f'Saving actor checkpoint to {local_path}')
                 os.makedirs(local_path, exist_ok=True)

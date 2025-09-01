@@ -755,6 +755,30 @@ class RayTrainer(object):
 
                 # critic is disabled
 
+                
+                # self.actor_rollout_wg.save_checkpoint(
+                #     local_path="debug", hdfs_path=None, global_step=0, max_ckpt_to_keep=None
+                # )
+                if self.config.trainer.save_freq > 0 and (global_steps + 1) % self.config.trainer.save_freq == 0:
+                    actor_local_path = os.path.join(self.config.trainer.default_local_dir, 'actor',
+                                                    f'global_step_{global_steps}')
+                    actor_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
+                        # self.config.trainer.default_hdfs_dir, 'actor')
+                    self.actor_rollout_wg.save_checkpoint(actor_local_path, actor_remote_path, global_steps, max_ckpt_to_keep=None)
+
+                    if self.use_critic:
+                        critic_local_path = os.path.join(self.config.trainer.default_local_dir, 'critic',
+                                                         f'global_step_{global_steps}')
+                        critic_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
+                            # self.config.trainer.default_hdfs_dir, 'critic')
+                        self.critic_wg.save_checkpoint(critic_local_path, critic_remote_path)
+                    if self.use_rm:
+                        prm_local_path = os.path.join(self.config.trainer.default_local_dir, 'prm',
+                                                         f'global_step_{global_steps}')
+                        prm_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
+                            # self.config.trainer.default_hdfs_dir, 'critic')
+                        self.rm_wg.save_checkpoint(prm_local_path, prm_remote_path)
+                        
                 # implement critic warmup
                 if self.config.trainer.critic_warmup <= global_steps:
                     # update actor
@@ -787,25 +811,6 @@ class RayTrainer(object):
                     # TODO: make a canonical logger that supports various backend
                     logger.log(data=metrics, step=global_steps)
 
-                if self.config.trainer.save_freq > 0 and (global_steps + 1) % self.config.trainer.save_freq == 0:
-                    actor_local_path = os.path.join(self.config.trainer.default_local_dir, 'actor',
-                                                    f'global_step_{global_steps}')
-                    actor_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
-                        # self.config.trainer.default_hdfs_dir, 'actor')
-                    self.actor_rollout_wg.save_checkpoint(actor_local_path, actor_remote_path)
-
-                    if self.use_critic:
-                        critic_local_path = os.path.join(self.config.trainer.default_local_dir, 'critic',
-                                                         f'global_step_{global_steps}')
-                        critic_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
-                            # self.config.trainer.default_hdfs_dir, 'critic')
-                        self.critic_wg.save_checkpoint(critic_local_path, critic_remote_path)
-                    if self.use_rm:
-                        prm_local_path = os.path.join(self.config.trainer.default_local_dir, 'prm',
-                                                         f'global_step_{global_steps}')
-                        prm_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
-                            # self.config.trainer.default_hdfs_dir, 'critic')
-                        self.rm_wg.save_checkpoint(prm_local_path, prm_remote_path)
 
                 progress_bar.update(1)
                 global_steps += 1

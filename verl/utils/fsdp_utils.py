@@ -19,11 +19,76 @@ from torch.distributed.fsdp.wrap import (
     _module_wrap_policy,
     lambda_auto_wrap_policy,
 )
-from transformers.trainer_pt_utils import get_module_class_from_name
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from contextlib import contextmanager, nullcontext
+from packaging import version
 import torch
+
+from transformers.trainer_pt_utils import get_module_class_from_name
 import torch.nn as nn
 from verl.utils.vla_utils.openvla_oft.modeling_prismatic import  PrismaticProjector
+if version.parse(torch.__version__) >= version.parse("2.6"):
+    from torch.distributed.fsdp import CPUOffloadPolicy, FSDPModule, MixedPrecisionPolicy, fully_shard
+    from torch.distributed.tensor import Shard
 
+    fully_shard_module = torch.distributed.fsdp._fully_shard._fully_shard
+elif version.parse(torch.__version__) >= version.parse("2.4"):
+    from torch.distributed._composable.fsdp import CPUOffloadPolicy, FSDPModule, MixedPrecisionPolicy, fully_shard
+
+    fully_shard_module = torch.distributed._composable.fsdp.fully_shard
+else:
+    fully_shard, MixedPrecisionPolicy, FSDPModule, CPUOffloadPolicy, fully_shard_module = None, None, None, None, None
+    
+
+def fsdp_version(model):
+    if isinstance(model, FSDP):
+        return 1
+    elif isinstance(model, FSDPModule):
+        return 2
+    else:
+        return 0
+
+def get_fsdp_full_state_dict(model: torch.nn.Module, offload_to_cpu: bool = True, rank0_only: bool = True):
+    """
+    Get the full state dict from an FSDP model.
+
+    Args:
+        model (torch.nn.Module): The FSDP model to get state dict from
+        offload_to_cpu (bool, optional): Whether to offload the state dict to CPU. Defaults to True.
+        rank0_only (bool, optional): Whether to only get state dict on rank 0. Defaults to True.
+
+    Returns:
+        dict: The full state dict of the model
+
+    Raises:
+        NotImplementedError: If the FSDP version is unknown
+    """
+    if fsdp_version(model) == 1:
+        from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+
+        state_dict_config = FullStateDictConfig(offload_to_cpu=offload_to_cpu, rank0_only=rank0_only)
+        with get_fsdp_state_ctx(
+            model, state_type=StateDictType.FULL_STATE_DICT, state_cfg=state_dict_config, optim_cfg=None
+        ):
+            state_dict = model.state_dict()
+        return state_dict
+    elif fsdp_version(model) == 2:
+        from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
+
+        state_dict_config = StateDictOptions(
+            full_state_dict=True, cpu_offload=offload_to_cpu, broadcast_from_rank0=not rank0_only
+        )
+        state_dict = get_model_state_dict(model, options=state_dict_config)
+        return state_dict
+    else:
+        raise NotImplementedError(f"Unknown FSDP version {fsdp_version}")
+
+def get_fsdp_state_ctx(model, state_type, state_cfg, optim_cfg):
+    if fsdp_version(model) == 1:
+        return FSDP.state_dict_type(model, state_type, state_cfg, optim_cfg)
+    else:
+        return nullcontext()
+      
 def init_fn(x: torch.nn.Module):
     if not torch.distributed.get_rank() == 0:
         x = x.to_empty(device=torch.cuda.current_device(), recurse=False)
