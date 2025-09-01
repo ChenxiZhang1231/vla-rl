@@ -428,7 +428,7 @@ class SmolVLAPolicy(PreTrainedModel):
 
     config_class = SmolVLAConfig
     name = "smolvla"
-    _no_split_modules = ['VLAFlowMatching']
+    _no_split_modules = ['LlamaDecoderLayer']
 
     def __init__(
         self,
@@ -1458,13 +1458,15 @@ class SmolVLAPolicy(PreTrainedModel):
             img_masks = img_masks[0]
             B, S, _, H, W = images.shape
             img_masks = img_masks.unsqueeze(-1).unsqueeze(-1).repeat(1, S, 1)
-            (logp_step, 
+            (logp_action,
+             logp_step, 
              logp_outer, 
              logp_joint, 
              ent_step, 
              ent_outer, 
              ent_joint) = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
             return_dict = {
+                "logp_action": logp_action,
                 "logp_step": logp_step, 
                 "logp_outer": logp_outer, 
                 "logp_joint": logp_joint,
@@ -1473,6 +1475,7 @@ class SmolVLAPolicy(PreTrainedModel):
                 "ent_joint": ent_joint,
                 }
             return None, lang_tokens, lang_masks, return_dict
+        
         if use_sde:
             return_dict = self.model.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise, return_logprob=return_logprob)
             if return_logprob:
@@ -1512,6 +1515,27 @@ class SmolVLAPolicy(PreTrainedModel):
         recompute_log_prob: bool = False
     ) -> Tensor:
         self.eval()
+
+        batch = self._prepare_batch(batch)
+        self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
+
+        actions, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+            batch,
+            noise,
+            use_sde=use_sde,
+            return_logprob=return_logprob,
+            recompute_log_prob=recompute_log_prob
+        )
+        return actions, lang_tokens, lang_masks, return_dict
+    
+    def predict_action_chunk_update(
+        self, 
+        batch: dict[str, Tensor], 
+        noise: Tensor | None = None, 
+        use_sde: bool = False, 
+        return_logprob: bool = False,
+        recompute_log_prob: bool = False
+    ) -> Tensor:
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
@@ -2320,14 +2344,17 @@ class VLAFlowMatching(nn.Module):
         mask_before = (S_idx <  s_fin).float()                             # [B,S,1]（广播到CH）
         mask_equal  = (S_idx == s_fin).float() * (CH_idx <= c_fin).float() # [B,S,CH]
         mask_actions = mask_before.expand(B, S, CH) + mask_equal           # [B,S,CH] ∈ {0,1}
-        # 扩到 [B,S,K,CH,1] 以逐元素遮罩
+        # [B,S,K,CH,1]
         mask_elem = mask_actions[:, :, None, :, None]                      # [B,S,K,CH,1]
 
         # ---------- 逐元素 log-prob（各向同性对角高斯） ----------
         # 注意 detach x_next，避免噪声路径入图
         lp_elem = Normal(mean, std).log_prob(x_next_f.detach())            # [B,S,K,CH,D]
-        # 遮罩无效动作（常数项也被mask掉——表示完全不计入目标）
-        lp_elem = lp_elem * mask_elem                                      # [B,S,K,CH,D]
+        lp_elem = lp_elem * mask_elem   
+        original_action_dim = 7
+        lp_elem = lp_elem[..., :original_action_dim]
+        
+        logp_action = lp_elem.mean(dim=(-3))     # [B,S,50,7]
         # 聚合：先动作维 (CH,D)，得到每步的 logp
         logp_step = lp_elem.sum(dim=(-1, -2))                               # [B,S,K]
         # 外层步联合（对K求和）
@@ -2353,4 +2380,4 @@ class VLAFlowMatching(nn.Module):
         ent_outer = ent_step.sum(dim=2)                                     # [B,S]
         ent_joint = ent_outer.sum(dim=1)                                    # [B]
 
-        return logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint
+        return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint

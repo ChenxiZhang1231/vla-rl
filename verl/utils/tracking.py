@@ -16,7 +16,7 @@ A unified tracking interface that supports logging data to different backend
 """
 
 from typing import List, Union
-
+import warnings
 
 class Tracking(object):
     supported_backend = ['wandb', 'console', 'tensorboard', 'swanlab']
@@ -48,8 +48,42 @@ class Tracking(object):
             from verl.utils.logger.aggregate_logger import LocalLogger
             self.console_logger = LocalLogger(print_to_console=True, log_dir=local_dir)
             self.logger['console'] = self.console_logger
+            
+        if 'tensorboard' in default_backend:
+            from torch.utils.tensorboard import SummaryWriter
+            # TensorBoard logs are typically saved in a runs/ directory
+            # You might want to customize the log_dir for TensorBoard
+            log_dir = local_dir if local_dir else f"runs/{project_name}/{experiment_name}"
+            self.tensorboard_writer = SummaryWriter(log_dir=log_dir)
+            self.logger['tensorboard'] = self.tensorboard_writer
 
     def log(self, data, step, backend=None):
         for default_backend, logger_instance in self.logger.items():
             if backend is None or default_backend in backend:
-                logger_instance.log(data=data, step=step)
+                if default_backend == 'tensorboard':
+                    # For TensorBoard, we need to iterate through the data dictionary
+                    # and log each item separately.
+                    for key, value in data.items():
+                        if isinstance(value, (int, float)):
+                            logger_instance.add_scalar(key, value, step)
+                        # You can add more types if needed, e.g., images, histograms
+                        # elif isinstance(value, torch.Tensor):
+                        #     logger_instance.add_histogram(key, value, step)
+                        # elif isinstance(value, np.ndarray):
+                        #     logger_instance.add_image(key, value, step)
+                        else:
+                            warnings.warn(f"TensorBoard does not support direct logging of type {type(value)} for key {key}. Skipping.")
+                else:
+                    logger_instance.log(data=data, step=step)
+
+    def close(self):
+        """
+        Close any open loggers, especially important for TensorBoard.
+        """
+        if 'tensorboard' in self.logger:
+            self.logger['tensorboard'].close()
+        # Add similar closing logic for other loggers if they have it (e.g., wandb.finish())
+        if 'wandb' in self.logger:
+            self.logger['wandb'].finish()
+        if 'swanlab' in self.logger:
+            self.logger['swanlab'].finish()

@@ -16,6 +16,7 @@ Rollout with huggingface models.
 TODO: refactor this class. Currently, it will hang when using FSDP HybridShard. We should actually create a single GPU model.
 Then, get full state_dict and bind the state_dict to the single GPU model. Then, use the single GPU model to perform generation.
 """
+import itertools
 import contextlib
 import math
 import torch
@@ -212,7 +213,6 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
     active = True
     complete = False
     finish_step = 0
-    
     while True:
         
         action = input_queue.get()
@@ -282,6 +282,8 @@ def pad_dataprotos_lang(dp_list, pad_id: int, pad_to: int | None = None):
         out.append(new_dp)
     return out
 
+
+
 class RobHFRollout(BaseRollout):
 
     def __init__(self, module: nn.Module, config):
@@ -332,14 +334,12 @@ class RobHFRollout(BaseRollout):
             micro_batch_size = self.config.val_micro_batch_size if self.config.val_micro_batch_size is not None else 1
         else:
             micro_batch_size = self.config.get('micro_batch_size', batch_size)
-        
         num_chunks = max(batch_size // micro_batch_size, 1)
         batch_prompts = prompts.chunk(chunks=num_chunks)
         if self.config.vla == "smolvla":
             output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
-            
         output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         
         output = DataProto.concat(output)
@@ -628,7 +628,6 @@ class RobHFRollout(BaseRollout):
         input_queues = []
         output_queues = []
         # mp.set_start_method('spawn')
-        
         for idx in range(batch_size):
             task_name = task_suite_name[idx]
             t_id = task_id[idx][0].item()

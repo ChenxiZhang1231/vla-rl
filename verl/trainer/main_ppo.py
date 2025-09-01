@@ -64,12 +64,18 @@ class RobRewardManager():
 
         reward_tensor_dict={}
         reward_metrics={}
-        reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32) # batch * 64 * 56
-        verifier_reward=torch.zeros_like(data.batch['responses'], dtype=torch.float32)
-        reward_tensor = reward_tensor.reshape((reward_tensor.shape[0],-1))
-        verifier_reward = verifier_reward.reshape((verifier_reward.shape[0],-1))
+        reward_tensor = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32) # batch * 64 * 56
+        verifier_reward = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32)
+        # reward_tensor = reward_tensor.reshape((reward_tensor.shape[0], -1))
+        # verifier_reward = verifier_reward.reshape((verifier_reward.shape[0], -1))
+        reward_tensor = verifier_reward.reshape(reward_tensor.shape[0], -1, reward_tensor.shape[-1])
+        verifier_reward = verifier_reward.reshape(verifier_reward.shape[0], -1, verifier_reward.shape[-1])
         
-        valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len 
+        # valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len
+        B, S, K, CH, D = data.batch['x_t'].shape
+        s_fin  = (data.batch['finish_step'] // CH).view(B)
+        c_fin  = (data.batch['finish_step'] %  CH).view(B)
+        valid_response_length = data.batch['finish_step']
        
         if 'acc' in data.batch:
             # the separated rewards have been logged; now we add format correctness back for reward shaping
@@ -79,9 +85,9 @@ class RobRewardManager():
             verifier_score, verifier_metrics, format_metrics, reward_format_metrics = self.verify(data)
             reward_metrics.update(verifier_metrics)
         for i in range(verifier_reward.shape[0]):
-            verifier_reward[i,valid_response_length[i]-1] += verifier_score[i]
+            verifier_reward[i, valid_response_length[i]-1, :] += verifier_score[i]
             
-        reward_tensor_dict['gt_scores'] = verifier_reward
+        reward_tensor_dict['gt_scores'] = verifier_reward  # .reshape(B, S, CH, 7)
 
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
         # if 'rm_scores' in data.batch.keys():
@@ -92,12 +98,17 @@ class RobRewardManager():
         #         reward_tensor += self.config.reward_model.rm_coef * reward_tensor_dict['rm_scores']
 
         if self.config.verifier.reward_coef!=0:
-            
-            reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=1).mean().item()
+            # reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=1).mean().item()
+            reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=(1, 2)).mean().item()
             reward_tensor += self.config.verifier.reward_coef * reward_tensor_dict['gt_scores']
 
         reward_tensor_dict['all'] = reward_tensor
-        reward_metrics['reward_all'] = reward_tensor.sum(dim=-1).mean(dim=0).item()
+        # reward_metrics['reward_all'] = reward_tensor.sum(dim=-1).mean(dim=0).item()
+        # reward_tensor_dict['all'] = reward_tensor.reshape(B, S, CH, 7)
+        
+        # reward_tensor_dict['gt_scores'] = reward_tensor_dict['gt_scores'].reshape(B, S, CH, 7)
+        reward_metrics['reward_all'] = reward_tensor.sum(dim=(-1, -2)).mean(dim=0).item()
+        
 
         return reward_tensor_dict, reward_metrics
 

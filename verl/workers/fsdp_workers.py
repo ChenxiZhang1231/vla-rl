@@ -23,6 +23,7 @@ import torch
 import torch.distributed
 from omegaconf import DictConfig, open_dict
 from transformers import AutoModelForCausalLM
+from safetensors.torch import load_file as safe_load_file
 
 from verl.single_controller.base import Worker
 from verl.single_controller.base.decorator import register, Dispatch
@@ -30,7 +31,15 @@ import verl.utils.torch_functional as verl_F
 from verl import DataProto
 from verl.utils.model import compute_position_id_with_mask
 from verl.utils.fs import copy_local_path_from_hdfs
-from verl.utils.fsdp_utils import get_fsdp_wrap_policy, load_fsdp_grad, offload_fsdp_grad, init_fn, get_init_weight_context_manager, get_fsdp_wrap_policy_vla
+from verl.utils.fsdp_utils import (
+    get_fsdp_wrap_policy, 
+    load_fsdp_grad, 
+    offload_fsdp_grad, 
+    init_fn, 
+    get_init_weight_context_manager, 
+    get_fsdp_wrap_policy_vla,
+    get_fsdp_wrap_policy_smolvla,
+)
 from verl.utils.fsdp_utils import offload_fsdp_optimizer, offload_fsdp_param_and_grad, load_fsdp_optimizer, load_fsdp_param_and_grad
 from verl.utils.import_utils import import_external_libs
 from verl.utils.debug import log_gpu_memory_usage
@@ -259,10 +268,26 @@ class RobActorRolloutRefWorker(Worker):
                 kwargs["config"] = policy_cfg
                 # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
                 kwargs["pretrained_model_name_or_path"] = local_path
-                # kwargs["device_map"] = 'cuda' 
-                actor_module = SmolVLAPolicy.from_pretrained(**kwargs)
+                kwargs["device_map"] = {"": "cpu"}, 
+                kwargs["low_cpu_mem_usage"] = False
+                # actor_module = SmolVLAPolicy.from_pretrained(**kwargs)                    
+                # ckpt = safe_load_file(os.path.join(local_path, "model.safetensors"))
+                # missing, unexpected = actor_module.load_state_dict(ckpt, strict=False)
                 
-           
+                # breakpoint()
+                # from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+                # with init_empty_weights():
+                #     actor_module = SmolVLAPolicy(policy_cfg, ds_meta.stats)
+                from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+                with init_empty_weights():
+                    actor_module = SmolVLAPolicy(policy_cfg, ds_meta. stats)
+                actor_module = load_checkpoint_and_dispatch(
+                    actor_module,
+                    checkpoint=local_path,   # 目录（里有 model.safetensors 或 shard）
+                    device_map={"": "cpu"},
+                    dtype="float32",
+                )
+            # breakpoint()
             actor_module.to(torch_dtype)
 
             if enable_gradient_checkpointing:
@@ -285,6 +310,20 @@ class RobActorRolloutRefWorker(Worker):
                 
                 
         torch.distributed.barrier()
+        def _find_meta_or_zero_storage(mod):
+            bad = []
+            for n, p in mod.named_parameters():
+                if getattr(p, "is_meta", False):
+                    bad.append(("META", n, tuple(p.shape)))
+                    continue
+                try:  # 2.1+ 才有 untyped_storage
+                    if p.numel() > 0 and p.untyped_storage().nbytes() == 0:
+                        bad.append(("ZERO", n, tuple(p.shape)))
+                except Exception:
+                    pass
+            return bad
+        bad = _find_meta_or_zero_storage(actor_module)
+        assert not bad, f"Found meta/zero-storage params before FSDP: {bad[:5]} (total={len(bad)})"
 
         if self.rank == 0:
             print_model_size(actor_module)
@@ -308,7 +347,8 @@ class RobActorRolloutRefWorker(Worker):
             mixed_precision = None
         
         if self.config.model.vla == "smolvla":
-            auto_wrap_policy = None
+            # auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None))
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_smolvla(actor_module, wrap_qkv_linears=True)
         elif self.config.model.vla == "openvla-oft":
             auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
         else:
@@ -316,22 +356,32 @@ class RobActorRolloutRefWorker(Worker):
 
         print(f'wrap_policy: {auto_wrap_policy}')
 
-        # TODO(sgm): support hybrid
+        # # TODO(sgm): support hybrid
         if auto_wrap_policy is None:
             sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
         else:
             sharding_strategy = ShardingStrategy.FULL_SHARD
 
         # TODO: add transformer policy
+        # actor_module_fsdp = FSDP(
+        #     actor_module,
+        #     param_init_fn=init_fn,
+        #     use_orig_params=False,
+        #     auto_wrap_policy=auto_wrap_policy,
+        #     device_id=torch.cuda.current_device(),
+        #     sharding_strategy=sharding_strategy,  # zero3
+        #     mixed_precision=mixed_precision,
+        #     sync_module_states=True,
+        #     device_mesh=self.device_mesh)
         actor_module_fsdp = FSDP(
             actor_module,
-            param_init_fn=init_fn,
-            use_orig_params=False,
+            use_orig_params=True,
             auto_wrap_policy=auto_wrap_policy,
             device_id=torch.cuda.current_device(),
-            sharding_strategy=sharding_strategy,  # zero3
+            sharding_strategy=ShardingStrategy.SHARD_GRAD_OP, 
             mixed_precision=mixed_precision,
             sync_module_states=True,
+            limit_all_gathers=True,
             device_mesh=self.device_mesh)
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
@@ -403,6 +453,7 @@ class RobActorRolloutRefWorker(Worker):
             else:
                 optim_config = None
                 fsdp_config = OmegaConf.create()
+            
             self.actor_module_fsdp, self.actor_optimizer, self.actor_lr_scheduler, self.actor_model_config = self._build_model_optimizer(
                 model_path=self.config.model.path,
                 fsdp_config=fsdp_config,
@@ -410,7 +461,8 @@ class RobActorRolloutRefWorker(Worker):
                 override_model_config=override_model_config,
                 enable_gradient_checkpointing=self.config.model.get('enable_gradient_checkpointing', False),
                 trust_remote_code=True) #self.config.model.get('trust_remote_code', True)
-
+            # if self._is_rollout:
+            #     breakpoint()
             # get the original unwrapped module
             self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
 
@@ -542,12 +594,13 @@ class RobActorRolloutRefWorker(Worker):
         with self.sharding_manager:
             log_gpu_memory_usage('After entering sharding manager', logger=logger)    
             prompts = self.sharding_manager.preprocess_data(prompts)
+            # breakpoint()
             output = self.rollout.generate_sequences(prompts=prompts)
             log_gpu_memory_usage('After rollout generation', logger=logger)
 
             output = self.sharding_manager.postprocess_data(output)
             torch.cuda.synchronize()
-
+            
         # with Timer(name=f'gen seq end ,  old log will begin', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print("gen seq end ,  old log will begin")
         if self._is_actor and recompute_log_prob:
@@ -560,9 +613,8 @@ class RobActorRolloutRefWorker(Worker):
             output.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
             old_log_probs = self.actor.compute_log_prob(data=output)
             output.batch['old_log_probs'] = old_log_probs
-
         output = output.to('cpu')
-
+        # breakpoint()
         if self._is_offload_param:
             # NOTE(sgm): the grad is already in CPU, only offload param here
             offload_fsdp_param_and_grad(module=self.actor_module_fsdp, offload_grad=self._is_offload_grad)
@@ -671,7 +723,8 @@ class RobActorRolloutRefWorker(Worker):
                 print(f'Saving actor checkpoint to {local_path}')
                 os.makedirs(local_path, exist_ok=True)
                 self.actor_module.save_pretrained(local_path, state_dict=state_dict)
-                self.tokenizer.save_pretrained(local_path)
+                if self.tokenizer is not None:
+                    self.tokenizer.save_pretrained(local_path)
                 if hdfs_path is not None:
                     print(f'Uploading actor checkpoint to {hdfs_path}')
                     hdfs_io.makedirs(hdfs_path, exist_ok=True)

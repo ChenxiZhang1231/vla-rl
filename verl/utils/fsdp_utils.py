@@ -14,6 +14,11 @@
 
 import functools
 from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+from torch.distributed.fsdp.wrap import (
+    _or_policy,
+    _module_wrap_policy,
+    lambda_auto_wrap_policy,
+)
 from transformers.trainer_pt_utils import get_module_class_from_name
 import torch
 import torch.nn as nn
@@ -87,8 +92,8 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
     #     default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
     # default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
     if hasattr(module, 'name') and module.name == 'smolvla':
-        # default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
-        default_transformer_cls_names_to_wrap = None
+        default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+        # default_transformer_cls_names_to_wrap = None
     else:
         default_transformer_cls_names_to_wrap = getattr(module.language_model, "_no_split_modules", None)
     
@@ -162,6 +167,204 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
         _or_policy,
         policies=vla_policies
     )
+
+
+def _find_text_stack(root):
+    """
+    尝试在你的 SmolVLA 层级中找到 text model（decoder 层列表）。
+    返回 (text_model, decoder_layer_cls, attn_cls) 三元组；不存在则为 (None, None, None)。
+    """
+    candidates = []
+    # 常见路径：actor_module.model.vlm_with_expert.get_vlm_model().text_model
+    try:
+        vm = root.model.vlm_with_expert.get_vlm_model()
+        tm = getattr(vm, "text_model", None)
+        if tm is not None and hasattr(tm, "layers") and len(tm.layers) > 0:
+            layer0 = tm.layers[0]
+            return tm, type(layer0), type(getattr(layer0, "self_attn", None))
+        candidates.append(("vlm_with_expert.get_vlm_model().text_model", tm))
+    except Exception:
+        pass
+
+    # 备选：直接搜集所有带 .layers 的模块，第一层存在 self_attn 即认为是 decoder
+    for name, mod in root.named_modules():
+        if hasattr(mod, "layers") and isinstance(getattr(mod, "layers"), (list, nn.ModuleList)) and len(mod.layers) > 0:
+            try:
+                l0 = mod.layers[0]
+                attn = getattr(l0, "self_attn", None)
+                if attn is not None:
+                    return mod, type(l0), type(attn)
+            except Exception:
+                continue
+    return None, None, None
+
+
+def _find_vision_stack(root):
+    """
+    找到 vision model（SmolVLMVisionTransformer），推断 ViT block 类与 patch-embed/stem 模块集合。
+    返回 (vision_model, vit_block_cls, patch_like_modules)
+    """
+    vision = None
+    # 常见路径：...get_vlm_model().vision_model 或 root 里名含 vision 的模块
+    try:
+        vm = root.model.vlm_with_expert.get_vlm_model()
+        vision = getattr(vm, "vision_model", None)
+    except Exception:
+        pass
+    if vision is None:
+        for name, mod in root.named_modules():
+            lname = name.lower()
+            if "vision_model" in lname or "vision" in lname:
+                vision = mod
+                break
+
+    vit_block_cls = None
+    patch_like = []
+
+    if vision is not None:
+        # 1) 找 Block 类：扫描 submodules，优先选类名包含 block 且同时具备 attn/mlp/norm 结构的
+        for m in vision.modules():
+            cn = type(m).__name__.lower()
+            if "block" in cn or "encoderlayer" in cn or "transformerblock" in cn or "layer" in cn:
+                has_attn = hasattr(m, "attn") or hasattr(m, "self_attn")
+                has_mlp  = hasattr(m, "mlp")
+                has_norm = hasattr(m, "norm") or (hasattr(m, "norm1") or hasattr(m, "ln1"))
+                if has_attn and has_mlp and has_norm:
+                    vit_block_cls = type(m)
+                    break
+
+        # 2) 找 patch-embed / stem：名称规则 + 类型启发（Conv2d、PatchEmbed样式）
+        for n, sub in vision.named_modules():
+            ln = n.lower()
+            if ("patch" in ln and "embed" in ln) or "patch_embed" in ln or "patch_embedding" in ln or "stem" in ln:
+                patch_like.append(sub)
+        # 再补充：vision 路径下最前几层的 Conv2d（尽量别包）
+        for n, sub in vision.named_modules():
+            if isinstance(sub, nn.Conv2d):
+                ln = n.lower()
+                if "vision" in ln or "stem" in ln or "patch" in ln:
+                    patch_like.append(sub)
+
+    return vision, vit_block_cls, list(set(patch_like))  # 去重
+
+def tag_qkvo(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("self_attn.q_proj", "self_attn.k_proj",
+                          "self_attn.v_proj", "self_attn.o_proj")):
+            setattr(m, "_fsdp_wrap_me", True)
+
+def tag_action(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("state_proj", "action_in_proj", "action_out_proj", 
+                          "action_time_mlp_in", "action_time_mlp_out")):
+            setattr(m, "_fsdp_wrap_me", True)
+            
+def tag_text_embed_tokens(root: nn.Module):
+    # 只给“文本塔”的 embed_tokens 打标记（按你的实际层级路径改条件）
+    for name, m in root.named_modules():
+        if name.endswith("text_model.embed_tokens") or ".text_model." in name and name.endswith("embed_tokens"):
+            if isinstance(m, nn.Embedding):
+                setattr(m, "_fsdp_wrap_me", True)
+                
+# def qkvo_lambda_fn(m: nn.Module) -> bool:
+#     return getattr(m, "_fsdp_wrap_me", False)
+
+def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is_lora: bool = False):
+    """
+    返回 (auto_wrap_policy, ignored_modules)
+    - 只 wrap：语言塔 decoder block、视觉 ViT block、（可选）attention 子模块
+    - 忽略：视觉 patch-embed/stem/早期 Conv2d
+    """
+    # ---------- 语言塔 ----------
+    text_model, dec_layer_cls, attn_cls = _find_text_stack(root_module)
+    tag_qkvo(root_module)
+    policies = []
+    # breakpoint()
+    if dec_layer_cls is not None:
+        # 按 decoder 层作为 FSDP 单元
+        # lm_block_policy = functools.partial(
+        #     transformer_auto_wrap_policy,
+        #     transformer_layer_cls={dec_layer_cls},
+        # )
+        # policies.append(lm_block_policy)
+
+        # 如果你会直接调用 layer.self_attn(...)，把 attention 子模块也单独 wrap 成 FSDP 单元
+        # if attn_cls is not None:
+        #     attn_policy = functools.partial(_module_wrap_policy, module_classes={attn_cls})
+        #     policies.append(attn_policy)
+
+        if wrap_qkv_linears:
+            # def _is_qkv_linear(m: nn.Module, name: str = ""):
+            #     # 只 wrap LlamaAttention 下的四个 Linear，避免全网 over-wrap
+            #     if not isinstance(m, nn.Linear):
+            #         return False
+            #     suffix = name.rsplit(".", 1)[-1]
+            #     return suffix in {"q_proj", "k_proj", "v_proj", "o_proj"}
+            # qkv_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=_is_qkv_linear)
+            def is_tagged_qkvo(m: nn.Module) -> bool:
+                return getattr(m, "_fsdp_wrap_me", False)
+            qkv_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_qkvo)
+            policies.append(qkv_policy)
+    # breakpoint()    
+    from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaAttention, LlamaRMSNorm, LlamaMLP
+    # pol_block = functools.partial(transformer_auto_wrap_policy, transformer_layer_cls={LlamaDecoderLayer})
+    # pol_attn  = functools.partial(_module_wrap_policy, module_classes={LlamaAttention})
+    pol_norm  = functools.partial(_module_wrap_policy, module_classes={LlamaRMSNorm})
+    pol_mlp  = functools.partial(_module_wrap_policy, module_classes={LlamaMLP})
+    policies.append(pol_norm)
+    policies.append(pol_mlp)
+    
+    from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionEmbeddings, SmolVLMEncoderLayer, SmolVLMVisionTransformer, SmolVLMConnector
+    pol_embed = functools.partial(_module_wrap_policy, module_classes={SmolVLMVisionEmbeddings})
+    pol_encoder = functools.partial(_module_wrap_policy, module_classes={SmolVLMEncoderLayer})
+    pol_vit = functools.partial(_module_wrap_policy, module_classes={SmolVLMVisionTransformer})
+    pol_vit_conn = functools.partial(_module_wrap_policy, module_classes={SmolVLMConnector})
+    policies.append(pol_embed)
+    policies.append(pol_vit)
+    policies.append(pol_vit_conn)
+
+    tag_text_embed_tokens(root_module)
+    def is_tagged_embedding(m: nn.Module) -> bool:
+        return isinstance(m, nn.Embedding) and getattr(m, "_fsdp_wrap_me", False)
+    pol_embed = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_embedding)
+    policies.append(pol_embed)
+    
+    tag_action(root_module)
+    def is_tagged_action(m: nn.Module) -> bool:
+        return getattr(m, "_fsdp_wrap_me", False)
+    pol_action = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_action)
+    policies.append(pol_action)
+
+    # ---------- 视觉塔 ----------
+    vision_model, vit_block_cls, patch_like = _find_vision_stack(root_module)
+    ignored_modules = []
+    if patch_like:
+        ignored_modules.extend(patch_like)
+
+    if vit_block_cls is not None:
+        vit_block_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls={vit_block_cls},
+        )
+        policies.append(vit_block_policy)
+
+    # ---------- LoRA（可选，保守） ----------
+    if is_lora:
+        def lambda_fn(m: nn.Module):
+            return (
+                len(list(m.named_children())) == 0 and
+                getattr(m, "weight", None) is not None and
+                m.weight.requires_grad
+            )
+        lora_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_fn)
+        policies.append(lora_policy)
+
+    # 组合策略：命中任一策略即 wrap
+    if not policies:
+        # 兜底：如果一个策略都没推出来，就不要自动 wrap，交给上层判定
+        return None, ignored_modules
+    auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+    return auto_wrap_policy, ignored_modules
 
 
 def offload_fsdp_grad(module):

@@ -206,7 +206,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         # breakpoint()
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk(micro_batch, recompute_log_prob=True)
-            logp_step, logp_outer, logp_joint = return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
+            logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
@@ -233,7 +233,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
                 
 
-            return ent_outer, logp_outer
+            return ent_outer, logp_action
         
     
     def _forward_micro_batch_update(self, input_ids, attention_mask, pixel_values, responses, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -292,6 +292,48 @@ class RobDataParallelPPOActor(BasePPOActor):
                 return entropy, log_probs
                 
 
+    def _forward_micro_batch_update_smolvla(self, micro_batch, return_logprob=False) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        micro_batch:
+        
+        Returns: 
+            entropy: # (bs, response_len)
+            log_probs: # (bs, response_len)
+        """
+        
+        # breakpoint()
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            # breakpoint()
+            actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk_update(micro_batch, recompute_log_prob=True)
+            logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
+            ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
+            # if self.config.vla == "smolvla":
+            #       # prevent model thinks we are generating
+                
+            #     assert self.actor_module.vocab_size == 32000
+            #     start_index = self.actor_module.vocab_size - 256 
+            #     logits = logits[..., -256-64:-64]  # Shape: [batch_size, seq_len, 256]
+            #     responses = responses - start_index
+            #     #assert (0<=responses<=255).all()
+            
+            #     logits = logits.div(temperature) 
+                
+            #     log_probs = logprobs_from_logits(logits, responses)
+            #     entropy = verl_F.entropy_from_logits(logits)  # (bsz, response_length)
+            
+            #     assert len(log_probs.shape)==2 and len(entropy.shape)==2 
+            #     log_probs = log_probs.reshape((batch_size, traj_len*8,7) )
+            #     entropy = entropy.reshape((batch_size, traj_len*8,7) )
+
+            #     mask = self.generate_traj_mask(micro_batch['finish_step'], traj_len*8)
+            #     log_probs, entropy = self.apply_mask_with_grad_control(log_probs, entropy, mask)
+                
+            #     log_probs = log_probs.reshape((batch_size, traj_len*response_length))
+            #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
+                
+
+            return ent_outer, logp_action
+        
     def _forward_micro_batch_entropy(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = micro_batch['responses'].size(0)
         traj_len = micro_batch['responses'].size(1)
@@ -419,14 +461,22 @@ class RobDataParallelPPOActor(BasePPOActor):
         log_probs_lst = []
         for micro_batch in micro_batches:
             with torch.no_grad():
-                if self.config.vla == 'smolvla':
-                    ent_outer, logp_outer = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
-                    log_probs = logp_outer
-                else:
-                    _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
+                # if isinstance(self.actor_module, FSDP):
+                #     # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
+                #     param_ctx = FSDP.summon_full_params(self.actor_module, writeback=False, recurse=False)
+                # with param_ctx:
+                #     with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                #         if self.config.vla == 'smolvla':
+                #             ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                #             log_probs = logp_action
+                #         else:
+                #             _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                    log_probs = logp_action
             log_probs_lst.append(log_probs)
         log_probs = torch.concat(log_probs_lst, dim=0)
-
+        # breakpoint()
         if use_dynamic_bsz:
             indices = list(itertools.chain.from_iterable(indices))
             assert len(indices) == log_probs.size(0), f"{len(indices)} vs. {log_probs.size()}"
@@ -440,10 +490,19 @@ class RobDataParallelPPOActor(BasePPOActor):
         
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
-        temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        # temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
 
-        select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages',"finish_step"]
+        if self.config.vla == 'smolvla':
+            select_keys = ['observation.images.image', 'observation.images.image_is_pad',
+                        #    'observation.images.wrist_image', 'observation.images.wrist_image_is_pad', 
+                           'observation.state', 'observation.state_is_pad', 'action_tensor', 
+                           "x_t", "t", "x_next",
+                           "lang_tokens", "lang_masks", "finish_step",
+                           'old_log_probs', 'advantages',]
+        else:
+            select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
+        
         assert self.config.ppo_micro_batch_size == 1
 
         # Split to make minibatch iterator for updating the actor
@@ -464,39 +523,44 @@ class RobDataParallelPPOActor(BasePPOActor):
 
             for test_idx, data in enumerate(micro_batches):
                 data = data.cuda()  # actor device is cpu when using offload
-                responses = data['responses']
+                # responses = data['responses']
                 
-                response_length = responses.size(1) *  responses.size(2)
-                finish_step = data['finish_step'] * self.config.action_token_len
-                steps = torch.arange(response_length, device=data['responses'].device)  # (traj_len,)
-                steps_expanded = steps.unsqueeze(0).expand(data['responses'].size(0), -1)
-                response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+                # response_length = responses.size(1) *  responses.size(2)
+                # finish_step = data['finish_step'] * self.config.action_token_len
+                # steps = torch.arange(response_length, device=data['responses'].device)  # (traj_len,)
+                # steps_expanded = steps.unsqueeze(0).expand(data['responses'].size(0), -1)
+                # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+                B, S, K, CH, D = data['x_t'].shape
+                finish_step = data['finish_step']
+                response_length = S * CH
+                steps = torch.arange(response_length, device=data['x_t'].device)  # (traj_len,)
+                steps_expanded = steps.unsqueeze(0).expand(data['x_t'].size(0), -1)
+                response_mask = steps_expanded < finish_step.unsqueeze(1)
                 
                 response_mask_sum = response_mask.sum(axis=None)
 
                 old_log_prob = data['old_log_probs']
-                advantages = data['advantages']
+                advantages = data['advantages'].reshape(B, S, CH)
                 
                 #clip_ratio = self.config.clip_ratio
                 clip_ratio_high = self.config.clip_ratio_high
                 clip_ratio_low = self.config.clip_ratio_low
                 entropy_coeff = self.config.entropy_coeff
-
-                batch_size = data['responses'].size(0)
-                traj_len = data['responses'].size(1)
-                tot_pad_len = data['input_ids'].size(2)
+                
+                action_tensor = data['action_tensor']
+                batch_size = action_tensor.size(0)
+                traj_len = action_tensor.size(1)
+                
+                # input_ids = data['input_ids']
+                # attention_mask = data['attention_mask']
+                # pixel_values = data["pixel_values"]
+                # responses = data["responses"]
                 
                 
-                input_ids = data['input_ids']
-                attention_mask = data['attention_mask']
-                pixel_values = data["pixel_values"]
-                responses = data["responses"]
-                
-                
-                input_ids = input_ids.reshape((batch_size * traj_len,) + input_ids.shape[2:])
-                attention_mask = attention_mask.reshape((batch_size * traj_len,) + attention_mask.shape[2:])
-                pixel_values = pixel_values.reshape((batch_size * traj_len,) + pixel_values.shape[2:])
-                responses = responses.reshape((batch_size * traj_len,) + responses.shape[2:])
+                # input_ids = input_ids.reshape((batch_size * traj_len,) + input_ids.shape[2:])
+                # attention_mask = attention_mask.reshape((batch_size * traj_len,) + attention_mask.shape[2:])
+                # pixel_values = pixel_values.reshape((batch_size * traj_len,) + pixel_values.shape[2:])
+                # responses = responses.reshape((batch_size * traj_len,) + responses.shape[2:])
                 
                 loss_info = {
                     #'actor/entropy_loss': entropy_loss.detach().item(),
@@ -507,20 +571,22 @@ class RobDataParallelPPOActor(BasePPOActor):
                 
                 assert traj_len % self.config.traj_mini_batch_size ==0
                 traj_split_num = int(traj_len/self.config.traj_mini_batch_size)
-                
-                # breakpoint()
-    
+                assert traj_split_num == 1    
 
                 for i in range(0, traj_len, int(traj_len/traj_split_num)):
-                   
-                    entropy, log_prob = self._forward_micro_batch_update(input_ids=input_ids[i:i+int(traj_len/traj_split_num)], attention_mask=attention_mask[i:i+int(traj_len/traj_split_num)], pixel_values=pixel_values[i:i+int(traj_len/traj_split_num)], responses=responses[i:i+int(traj_len/traj_split_num)], temperature=temperature)
+                    # entropy, log_prob = self._forward_micro_batch_update(input_ids=input_ids[i:i+int(traj_len/traj_split_num)], attention_mask=attention_mask[i:i+int(traj_len/traj_split_num)], pixel_values=pixel_values[i:i+int(traj_len/traj_split_num)], responses=responses[i:i+int(traj_len/traj_split_num)], temperature=temperature)
+                    entropy, log_prob = self._forward_micro_batch_update_smolvla(data)
                     
-                    slice_id = i*self.config.action_token_len*self.config.action_chunks_len
-                    next_slice_id = (i+int(traj_len/traj_split_num))*self.config.action_token_len*self.config.action_chunks_len
-                    old_log_prob_tmp = old_log_prob[:, slice_id: next_slice_id]
-                    advantages_tmp = advantages[:, slice_id: next_slice_id]
-                    response_mask_tmp = response_mask[:, slice_id: next_slice_id]
-                        
+                    # slice_id = i*self.config.action_token_len*self.config.action_chunks_len
+                    # next_slice_id = (i+int(traj_len/traj_split_num))*self.config.action_token_len*self.config.action_chunks_len
+                    # old_log_prob_tmp = old_log_prob[:, slice_id: next_slice_id]
+                    # advantages_tmp = advantages[:, slice_id: next_slice_id]
+                    # response_mask_tmp = response_mask[:, slice_id: next_slice_id]
+                    old_log_prob_tmp = old_log_prob.mean(dim=-1).reshape(B, -1)
+                    advantages_tmp = advantages.reshape(B, -1)
+                    response_mask_tmp = response_mask
+                    log_prob = log_prob.mean(dim=-1).reshape(B, -1)
+                    
                     pg_loss, pg_clipfrac, ppo_kl = core_algos.compute_policy_loss(old_log_prob=old_log_prob_tmp,
                                                                             log_prob=log_prob,
                                                                             advantages=advantages_tmp,
@@ -536,7 +602,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     policy_loss = pg_loss / response_mask_sum
                     
                     loss = policy_loss / self.gradient_accumulation
-                    
+                    # breakpoint()
                     loss.backward()
                     
                     loss_info['actor/pg_loss'] =  loss_info['actor/pg_loss'] + policy_loss.detach().item()

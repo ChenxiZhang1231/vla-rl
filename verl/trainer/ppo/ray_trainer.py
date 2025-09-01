@@ -36,7 +36,7 @@ from verl.single_controller.ray.base import create_colocated_worker_cls
 from verl import DataProto
 from verl.trainer.ppo import core_algos
 from verl.utils.dataset.rob_dataset import BufferedDataLoader
-
+from verl.workers.rollout.rob_rollout import pad_dataprotos_lang
 WorkerType = Type[Worker]
 
 
@@ -122,7 +122,7 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
 
 
 def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
-
+    # breakpoint()
     responses = data.batch['responses']
     response_length = responses.size(1) *  responses.size(2)
     # attention_mask = data.batch['attention_mask']
@@ -204,6 +204,93 @@ def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
         raise NotImplementedError
     return data
 
+def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config):
+    # responses = data.batch['responses']
+    # response_length = responses.size(1) *  responses.size(2)
+    # # attention_mask = data.batch['attention_mask']
+    # finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+    # steps = torch.arange(response_length, device=data.batch['responses'].device)  # (traj_len,)
+    # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+    # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+    B, S, K, CH, D = data.batch['x_t'].shape
+    finish_step = data.batch['finish_step']
+    response_length = S * CH
+    steps = torch.arange(response_length, device=data.batch['x_t'].device)  # (traj_len,)
+    steps_expanded = steps.unsqueeze(0).expand(data.batch['x_t'].size(0), -1)
+    response_mask = steps_expanded < finish_step.unsqueeze(1)
+    token_level_rewards = data.batch['token_level_rewards'] if 'token_level_rewards' in list(data.batch.keys()) else data.batch['token_level_scores']
+
+    # TODO: add other ways to estimate advantages
+    if adv_estimator == 'rloo':
+        # prompt_ids = data.batch['prompts']
+        # prompt_length = prompt_ids.shape[-1]
+        # valid_response_length = data.batch['attention_mask'][:,prompt_length:].sum(-1)
+        advantages, returns = core_algos.compute_rloo_returns(data=data,
+                                                eos_mask=response_mask,n_samples=config.data.n_samples, config=config)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'gae':
+        values = data.batch['values']
+        responses = data.batch['responses']
+        response_length = responses.size(-1)
+        attention_mask = data.batch['attention_mask']
+        response_mask = attention_mask[:, -response_length:]
+        token_level_rewards = data.batch['token_level_rewards']
+        advantages, returns = core_algos.compute_gae_advantage_return(token_level_rewards=token_level_rewards,
+                                                                      values=values,
+                                                                      eos_mask=response_mask,
+                                                                      gamma=gamma,
+                                                                      lam=lam)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'grpo':
+        # token_level_rewards = data.batch['token_level_rewards']
+        index = data.non_tensor_batch['uid']
+        # responses = data.batch['responses']
+        # response_length = responses.size(1) *  responses.size(2)
+        # finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+        # steps = torch.arange(response_length, device=data.batch['responses'].device)  # (traj_len,)
+        # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+        # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+        advantages, returns = core_algos.compute_grpo_outcome_advantage_smolvla(token_level_rewards=token_level_rewards,
+                                                                                eos_mask=response_mask,
+                                                                                index=index)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'reinforce_plus_plus':
+        token_level_rewards = data.batch['token_level_rewards']
+        responses = data.batch['responses']
+        response_length = responses.size(-1)
+        attention_mask = data.batch['attention_mask']
+        response_mask = attention_mask[:, -response_length:]
+        advantages, returns = core_algos.compute_reinforce_plus_plus_outcome_advantage(
+            token_level_rewards=token_level_rewards, eos_mask=response_mask, gamma=gamma)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'remax':
+        token_level_rewards = data.batch['token_level_rewards']
+        index = data.non_tensor_batch['uid']
+        responses = data.batch['responses']
+        response_length = responses.size(-1)
+        attention_mask = data.batch['attention_mask']
+        response_mask = attention_mask[:, -response_length:]
+
+        reward_baselines = data.batch['reward_baselines']
+
+        advantages, returns = core_algos.compute_remax_outcome_advantage(token_level_rewards=token_level_rewards,
+                                                                         reward_baselines=reward_baselines,
+                                                                         eos_mask=response_mask)
+
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+    else:
+        raise NotImplementedError
+    return data
+
 
 def reduce_metrics(metrics: dict):
     for key, val in metrics.items():
@@ -214,14 +301,21 @@ def reduce_metrics(metrics: dict):
 def compute_data_metrics(batch,config):
     # TODO: add response length
     sequence_score = batch.batch['token_level_scores'].sum(-1)
-    sequence_reward = batch.batch['token_level_rewards'].sum(-1)
+    # sequence_reward = batch.batch['token_level_rewards'].sum(-1)
+    sequence_reward = batch.batch['token_level_scores'].sum(-1)
     advantages = batch.batch['advantages']
     returns = batch.batch['returns']
     #add
-    finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
-    steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
-    steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
-    response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+    # finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+    # steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
+    # steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
+    # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+    B, S, K, CH, D = batch.batch['x_t'].shape
+    finish_step = batch.batch['finish_step']
+    response_length = S * CH
+    steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
+    steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
+    response_mask = steps_expanded < finish_step.unsqueeze(1)
     #
     metrics = {
         # score
@@ -552,7 +646,6 @@ class RayTrainer(object):
                                 'is_train': True,
                             }
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(prompts=gen_batch)
-                        breakpoint()
                         roll_batch = DataProto.concat(batch_lst)
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)
@@ -591,7 +684,9 @@ class RayTrainer(object):
                     if len(valid_batch) == 0:
                         valid_batch = roll_batch_to_add
                     else:
-                        valid_batch = DataProto.concat([valid_batch, roll_batch_to_add])
+                        # breakpoint()
+                        batch = pad_dataprotos_lang([valid_batch, roll_batch_to_add], 2)
+                        valid_batch = DataProto.concat(batch)
                     print(
                         f"collected {len(valid_batch)} / {batch_size * n_samples} rollouts and each prompt has {n_samples} responses")
                     
@@ -631,7 +726,6 @@ class RayTrainer(object):
                         # batch = batch.union(reward_model_tensor)
 
                 metrics['timing/reward_model'] = timer.last
-
                 with Timer(name='adv', text="{name}: {seconds:.1f} seconds") as timer:
                     # directly reuse previously computed rewards; but with reward shaping
                     reward_tensor_dict, reward_metrics = self.reward_fn(batch)
@@ -641,17 +735,18 @@ class RayTrainer(object):
                     # decomposed rewards:
                     for k,v in reward_tensor_dict.items():
                         batch.batch[k]=v
-
+                    # breakpoint()
                     # compute rewards. apply_kl_penalty if available
-                    batch, kl_metrics = apply_kl_penalty(batch,
-                                                         kl_ctrl=self.kl_ctrl,
-                                                         kl_penalty=self.config.algorithm.kl_penalty,
-                                                         action_token_len=self.config.actor_rollout_ref.model.action_token_len, 
-                                                         action_chunks_len=self.config.actor_rollout_ref.model.action_chunks_len,)
-                    metrics.update(kl_metrics)
+                    
+                    # batch, kl_metrics = apply_kl_penalty(batch,
+                    #                                      kl_ctrl=self.kl_ctrl,
+                    #                                      kl_penalty=self.config.algorithm.kl_penalty,
+                    #                                      action_token_len=self.config.actor_rollout_ref.model.action_token_len, 
+                    #                                      action_chunks_len=self.config.actor_rollout_ref.model.action_chunks_len,)
+                    # metrics.update(kl_metrics)
 
                     # compute advantages, executed on the driver process
-                    batch = compute_advantage(batch,
+                    batch = compute_advantage_smolvla(batch,
                                               self.config.algorithm.gamma,
                                               self.config.algorithm.lam,
                                               adv_estimator=self.config.algorithm.adv_estimator,
@@ -666,13 +761,14 @@ class RayTrainer(object):
                     with Timer(name='update_actor', text="{name}: {seconds:.1f} seconds") as timer:
                         batch.meta_info['is_filtered'] = True
                         batch.meta_info['train_mode'] = False
+                        
                         actor_output = self.actor_rollout_wg.update_actor(batch)
-                        entropy_output = self.actor_rollout_wg.compute_entropy(data=batch)
+                        # entropy_output = self.actor_rollout_wg.compute_entropy(data=batch)
                     metrics['timing/update_actor'] = timer.last
                     actor_output_metrics = reduce_metrics(actor_output.meta_info['metrics'])
-                    entropy_output_metrics = reduce_metrics(entropy_output.meta_info['metrics'])
+                    # entropy_output_metrics = reduce_metrics(entropy_output.meta_info['metrics'])
                     metrics.update(actor_output_metrics)
-                    metrics.update(entropy_output_metrics)
+                    # metrics.update(entropy_output_metrics)
                 # validate
                 if self.val_reward_fn is not None and (global_steps + 1) % self.config.trainer.test_freq == 0:
                     with Timer(name='testing', text="{name}: {seconds:.1f} seconds") as timer:

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 
 import torch
 from torch import nn
@@ -76,8 +77,8 @@ class SmolVLMWithExpertModel(nn.Module):
             print(f"Loading  {model_id} weights ...")
             self.vlm = AutoModelForImageTextToText.from_pretrained(
                 model_id,
-                device_map="auto",
-                torch_dtype="bfloat16",
+                # device_map="auto",
+                # torch_dtype="bfloat16",
                 low_cpu_mem_usage=True,
             )
             config = self.vlm.config
@@ -85,7 +86,24 @@ class SmolVLMWithExpertModel(nn.Module):
             config = AutoConfig.from_pretrained(model_id)
             config.text_config._attn_implementation = "flash_attention_2"
             config.vision_config._attn_implementation = "flash_attention_2"
-            self.vlm = SmolVLMForConditionalGeneration(config=config)
+            # self.vlm = SmolVLMForConditionalGeneration(config=config)
+            # self.vlm = SmolVLMForConditionalGeneration.from_pretrained(
+            #     config.name_or_path, 
+            #     config=config,
+            #     device_map={"": "cpu"}, 
+            #     torch_dtype=torch.float32, 
+            #     low_cpu_mem_usage=False,
+            # )
+            
+            with init_empty_weights():
+                vlm = SmolVLMForConditionalGeneration(config=config)
+            vlm = load_checkpoint_and_dispatch(
+                vlm,
+                checkpoint=config.name_or_path,   # 目录（里有 model.safetensors 或 shard）
+                device_map={"": "cpu"},
+                dtype="float32",
+            ) 
+        self.vlm = vlm
         self.processor = AutoProcessor.from_pretrained(model_id)
         if num_vlm_layers > 0:
             print(f"Reducing the number of VLM layers to {num_vlm_layers} ...")
@@ -220,11 +238,11 @@ class SmolVLMWithExpertModel(nn.Module):
             layer = model_layers[i][layer_idx]
             if hidden_states is None or layer is None:
                 continue
+            # breakpoint()
             hidden_states = layer.input_layernorm(hidden_states)
 
             input_shape = hidden_states.shape[:-1]
             hidden_shape = (*input_shape, -1, layer.self_attn.head_dim)
-
             hidden_states = hidden_states.to(dtype=layer.self_attn.q_proj.weight.dtype)
             query_state = layer.self_attn.q_proj(hidden_states).view(hidden_shape)
             key_state = layer.self_attn.k_proj(hidden_states).view(hidden_shape)

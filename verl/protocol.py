@@ -94,6 +94,33 @@ class DataProtoItem:
     non_tensor_batch: Dict = field(default_factory=dict)
     meta_info: Dict = field(default_factory=dict)
 
+LANG_TOKENS = "lang_tokens"
+LANG_MASKS  = "lang_masks"
+
+def pad_dataprotos_lang_dict(dp_list, pad_id: int, pad_to: int | None = None):
+
+    lengths = [dp[LANG_TOKENS].shape[-1] for dp in dp_list]
+    max_L = max(lengths) if pad_to is None else int(pad_to)
+    
+    out = []
+    for dp in dp_list:
+        bt = dp.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
+        tok = bt[LANG_TOKENS]  # [B, L_i]
+        msk = bt[LANG_MASKS]   # [B, L_i]
+        B, N, L = tok.shape
+
+        if L < max_L:
+            pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
+            pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
+            tok = torch.cat([tok, pad_tok], dim=-1)
+            msk = torch.cat([msk, pad_msk], dim=-1)
+
+        bt[LANG_TOKENS] = tok
+        bt[LANG_MASKS]  = msk
+
+        new_dp = bt
+        out.append(new_dp)
+    return out
 
 @dataclass
 class DataProto:
@@ -433,6 +460,8 @@ class DataProto:
         for batch in data:
             batch_lst.append(batch.batch)
         if batch_lst[0] is not None:
+            if 'lang_tokens' in batch_lst[0].keys():
+                batch_lst = pad_dataprotos_lang_dict(batch_lst, 2)
             new_batch = torch.cat(batch_lst, dim=0)
         else:
             new_batch = None
