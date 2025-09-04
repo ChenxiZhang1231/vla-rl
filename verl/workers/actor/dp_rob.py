@@ -567,7 +567,6 @@ class RobDataParallelPPOActor(BasePPOActor):
    
                 old_log_prob_tmp = old_log_prob.reshape(B, -1)
                 advantages_tmp = advantages.reshape(B, -1)
-                advantages_tmp = torch.ones_like(advantages_tmp)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
                 # breakpoint()

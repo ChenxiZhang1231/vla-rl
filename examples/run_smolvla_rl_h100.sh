@@ -8,7 +8,7 @@ export FSDP_CPU_RAM_EFFICIENT_LOADING=true
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='smolvla-rl-exp5-sum_action-h100' 
+EXPERIMENT_NAME='smolvla-rl-exp5-sum_action-h100-fixbug' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
