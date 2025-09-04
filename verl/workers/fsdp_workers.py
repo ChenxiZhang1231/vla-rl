@@ -371,6 +371,7 @@ class RobActorRolloutRefWorker(Worker):
         if self.config.model.vla == "smolvla":
             # auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None))
             auto_wrap_policy, ignored = get_fsdp_wrap_policy_smolvla(actor_module, wrap_qkv_linears=True)
+            # auto_wrap_policy = None
         elif self.config.model.vla == "openvla-oft":
             auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
         else:
@@ -388,8 +389,8 @@ class RobActorRolloutRefWorker(Worker):
         # TODO: add transformer policy
         actor_module_fsdp = FSDP(
             actor_module,
-            param_init_fn=init_fn,
-            use_orig_params=False,
+            # param_init_fn=init_fn,
+            use_orig_params=True,
             auto_wrap_policy=auto_wrap_policy,
             device_id=torch.cuda.current_device(),
             sharding_strategy=sharding_strategy,  # zero3
@@ -407,7 +408,7 @@ class RobActorRolloutRefWorker(Worker):
         #     sync_module_states=True,
         #     limit_all_gathers=True,
         #     device_mesh=self.device_mesh)
-
+        # breakpoint()
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
         # TODO: add more optimizer args into config
@@ -705,10 +706,10 @@ class RobActorRolloutRefWorker(Worker):
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
         from peft import PeftModel
         import transformers
-        # self.checkpoint_manager.save_checkpoint(
-        #     local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
-        # )
-        # return
+        self.checkpoint_manager.save_checkpoint(
+            local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
+        )
+        return
         # breakpoint()
         if self._is_offload_param:
             load_fsdp_param_and_grad(module=self.actor_module_fsdp,

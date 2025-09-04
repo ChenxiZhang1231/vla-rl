@@ -582,7 +582,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                                                                                 clip_ratio_low=clip_ratio_low)
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
                 policy_loss = pg_loss
-                
+                # breakpoint()
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
                     
@@ -724,7 +724,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     loss_info['actor/ppo_kl'] = loss_info['actor/ppo_kl'] +  ppo_kl.detach().item()
 
                 append_to_dict(metrics, loss_info)
-            breakpoint()
+            # breakpoint()
             grad_norm = self._optimizer_step()
             data = {'actor/grad_norm': grad_norm.detach().item()}
             append_to_dict(metrics, data)

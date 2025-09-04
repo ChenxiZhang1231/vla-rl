@@ -8,7 +8,7 @@ export FSDP_CPU_RAM_EFFICIENT_LOADING=true
 export MUJOCO_GL="osmesa"
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='smolvla-rl-exp4-sum_action-h100' 
+EXPERIMENT_NAME='smolvla-rl-exp5-sum_action-h100' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -28,7 +28,7 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     data.accuracy_lower_bound=0.1 \
     data.accuracy_upper_bound=0.9 \
     data.oversample_factor=1 \
-    data.train_batch_size=32 \
+    data.train_batch_size=64 \
     data.val_batch_size=496 \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
@@ -44,7 +44,7 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.actor.fsdp_config.model_dtype=float32 \
+    actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.actor.grad_clip=1 \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \

@@ -9,7 +9,7 @@ export MUJOCO_GL="osmesa"
 # export MUJOCO_GL="glfw"
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='infer-openvla-oft' 
+EXPERIMENT_NAME='infer-openvla-oft-debug' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/huggingface_models/Openvla-oft-SFT-libero10-traj1"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"

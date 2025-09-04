@@ -89,5 +89,5 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
     trainer.val_before_train=False \
-    2>&1 | tee -a "${EXPERIMENT_NAME}.txt"
+    2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 

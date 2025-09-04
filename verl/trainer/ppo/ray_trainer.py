@@ -298,7 +298,7 @@ def reduce_metrics(metrics: dict):
     return metrics
 
 
-def compute_data_metrics(batch,config):
+def compute_data_metrics(batch, config, model_name):
     # TODO: add response length
     sequence_score = batch.batch['token_level_scores'].sum(-1)
     # sequence_reward = batch.batch['token_level_rewards'].sum(-1)
@@ -306,16 +306,19 @@ def compute_data_metrics(batch,config):
     advantages = batch.batch['advantages']
     returns = batch.batch['returns']
     #add
-    # finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
-    # steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
-    # steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
-    # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
-    B, S, K, CH, D = batch.batch['x_t'].shape
-    finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
-    response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
-    steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
-    steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
-    response_mask = steps_expanded < finish_step.unsqueeze(1)
+
+    if model_name == 'smolvla':
+        B, S, K, CH, D = batch.batch['x_t'].shape
+        finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+        response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
+        steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
+        steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
+        response_mask = steps_expanded < finish_step.unsqueeze(1)
+    else:
+        finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+        steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
+        steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
+        response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
     #
     metrics = {
         # score
@@ -816,7 +819,7 @@ class RayTrainer(object):
 
                 # collect metrics
                 with Timer(name='logging1', text="{name}: {seconds:.1f} seconds") as timer:
-                    data_metrics = compute_data_metrics(batch=batch, config = self.config)
+                    data_metrics = compute_data_metrics(batch=batch, config=self.config, model_name=self.config.actor_rollout_ref.model.vla)
                 with Timer(name='logging2', text="{name}: {seconds:.1f} seconds") as timer:
                     metrics.update(data_metrics)
                 with Timer(name='logging3', text="{name}: {seconds:.1f} seconds") as timer:

@@ -312,29 +312,12 @@ def _find_vision_stack(root):
 
     return vision, vit_block_cls, list(set(patch_like))  # 去重
 
-def tag_qkvo(root: nn.Module):
-    for name, m in root.named_modules():
-        if name.endswith(("self_attn.q_proj", "self_attn.k_proj",
-                          "self_attn.v_proj", "self_attn.o_proj")):
-            setattr(m, "_fsdp_wrap_me", True)
 
-def tag_action(root: nn.Module):
-    for name, m in root.named_modules():
-        if name.endswith(("state_proj", "action_in_proj", "action_out_proj", 
-                          "action_time_mlp_in", "action_time_mlp_out")):
-            setattr(m, "_fsdp_wrap_me", True)
-            
-def tag_text_embed_tokens(root: nn.Module):
-    # 只给“文本塔”的 embed_tokens 打标记（按你的实际层级路径改条件）
-    for name, m in root.named_modules():
-        if name.endswith("text_model.embed_tokens") or ".text_model." in name and name.endswith("embed_tokens"):
-            if isinstance(m, nn.Embedding):
-                setattr(m, "_fsdp_wrap_me", True)
                 
 # def qkvo_lambda_fn(m: nn.Module) -> bool:
 #     return getattr(m, "_fsdp_wrap_me", False)
 
-def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is_lora: bool = False):
+def get_fsdp_wrap_policy_smolvla_raw(root_module, wrap_qkv_linears: bool = False, is_lora: bool = False):
     """
     返回 (auto_wrap_policy, ignored_modules)
     - 只 wrap：语言塔 decoder block、视觉 ViT block、（可选）attention 子模块
@@ -390,7 +373,6 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     policies.append(pol_vit)
     policies.append(pol_vit_conn)
 
-
     # def is_tagged_embedding(m: nn.Module) -> bool:
     #     return isinstance(m, nn.Embedding) and getattr(m, "_fsdp_wrap_me", False)
     # pol_embed = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_embedding)
@@ -422,6 +404,71 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
         return None, ignored_modules
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy, ignored_modules
+
+
+def tag_qkvo(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("self_attn.q_proj", "self_attn.k_proj",
+                          "self_attn.v_proj", "self_attn.o_proj")):
+            if "vision_model" not in name:
+                setattr(m, "_fsdp_wrap_me", True)
+
+def tag_action(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("state_proj", "action_in_proj", "action_out_proj", 
+                          "action_time_mlp_in", "action_time_mlp_out")):
+            setattr(m, "_fsdp_wrap_me", True)
+            
+def tag_text_embed_tokens(root: nn.Module):
+    # 只给“文本塔”的 embed_tokens 打标记（按你的实际层级路径改条件）
+    for name, m in root.named_modules():
+        if name.endswith("text_model.embed_tokens") or ".text_model." in name and name.endswith("embed_tokens"):
+            if isinstance(m, nn.Embedding):
+                setattr(m, "_fsdp_wrap_me", True)
+
+
+def tag_laynorm_vit(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("vision_model.post_layernorm")):
+            setattr(m, "_fsdp_wrap_me", True)
+                
+                
+def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is_lora: bool = False):
+    """
+    返回 (auto_wrap_policy, ignored_modules)
+    - 只 wrap：语言塔 decoder block、视觉 ViT block、（可选）attention 子模块
+    - 忽略：视觉 patch-embed/stem/早期 Conv2d
+    """
+    # ---------- 语言塔 ----------
+    tag_qkvo(root_module)
+    tag_text_embed_tokens(root_module)
+    tag_action(root_module)
+    tag_laynorm_vit(root_module)
+    policies = []
+    
+    def is_tagged(m: nn.Module) -> bool:
+        return getattr(m, "_fsdp_wrap_me", False)
+    tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    policies.append(tag_policy)
+    
+    # breakpoint()    
+    from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaAttention, LlamaRMSNorm, LlamaMLP
+    from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionEmbeddings, SmolVLMEncoderLayer, SmolVLMVisionTransformer, SmolVLMConnector
+    module_classes_to_wrap = {
+        LlamaMLP,
+        LlamaRMSNorm,
+        SmolVLMConnector,
+        SmolVLMVisionEmbeddings,
+        SmolVLMEncoderLayer,
+        # SmolVLMVisionTransformer,
+    }
+    
+    module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    policies.append(module_policy)
+
+    auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+    return auto_wrap_policy, None
+
 
 
 def offload_fsdp_grad(module):

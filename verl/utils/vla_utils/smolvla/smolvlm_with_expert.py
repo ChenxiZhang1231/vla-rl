@@ -73,7 +73,8 @@ class SmolVLMWithExpertModel(nn.Module):
         expert_width_multiplier: float = 0.5,
     ):
         super().__init__()
-        if load_vlm_weights:
+        # if load_vlm_weights:
+        if False:
             print(f"Loading  {model_id} weights ...")
             self.vlm = AutoModelForImageTextToText.from_pretrained(
                 model_id,
@@ -99,7 +100,7 @@ class SmolVLMWithExpertModel(nn.Module):
                 vlm = SmolVLMForConditionalGeneration(config=config)
             vlm = load_checkpoint_and_dispatch(
                 vlm,
-                checkpoint=config.name_or_path,   # 目录（里有 model.safetensors 或 shard）
+                checkpoint=config.name_or_path,
                 device_map={"": "cpu"},
                 dtype="float32",
             ) 
