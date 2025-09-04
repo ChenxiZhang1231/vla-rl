@@ -198,9 +198,10 @@ class RobActorRolloutRefWorker(Worker):
         self.tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code, model = self.config.model.vla)
 
         torch_dtype = fsdp_config.get('model_dtype', None)
+        # torch_dtype = None
         if torch_dtype is None:
-            # torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
-            torch_dtype = torch_dtype
+            torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
+            # torch_dtype = torch_dtype
         else:
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
@@ -311,7 +312,7 @@ class RobActorRolloutRefWorker(Worker):
                 )
             # breakpoint()
             actor_module.to(torch_dtype)
-
+            # breakpoint()
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
             # lora add
@@ -351,7 +352,6 @@ class RobActorRolloutRefWorker(Worker):
             print_model_size(actor_module)
         # breakpoint()
         log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
-
         # We wrap FSDP for rollout as well
         mixed_precision_config = fsdp_config.get('mixed_precision', None)
         if mixed_precision_config is not None:
@@ -379,32 +379,34 @@ class RobActorRolloutRefWorker(Worker):
         print(f'wrap_policy: {auto_wrap_policy}')
 
         # # TODO(sgm): support hybrid
-        if auto_wrap_policy is None:
-            sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
-        else:
-            sharding_strategy = ShardingStrategy.FULL_SHARD
+        # if auto_wrap_policy is None:
+        #     sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
+        # else:
+        #     sharding_strategy = ShardingStrategy.FULL_SHARD
+        sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
 
         # TODO: add transformer policy
-        # actor_module_fsdp = FSDP(
-        #     actor_module,
-        #     param_init_fn=init_fn,
-        #     use_orig_params=False,
-        #     auto_wrap_policy=auto_wrap_policy,
-        #     device_id=torch.cuda.current_device(),
-        #     sharding_strategy=sharding_strategy,  # zero3
-        #     mixed_precision=mixed_precision,
-        #     sync_module_states=True,
-        #     device_mesh=self.device_mesh)
         actor_module_fsdp = FSDP(
             actor_module,
-            use_orig_params=True,
+            param_init_fn=init_fn,
+            use_orig_params=False,
             auto_wrap_policy=auto_wrap_policy,
             device_id=torch.cuda.current_device(),
-            sharding_strategy=ShardingStrategy.SHARD_GRAD_OP, 
+            sharding_strategy=sharding_strategy,  # zero3
             mixed_precision=mixed_precision,
             sync_module_states=True,
             limit_all_gathers=True,
             device_mesh=self.device_mesh)
+        # actor_module_fsdp = FSDP(
+        #     actor_module,
+        #     use_orig_params=True,
+        #     auto_wrap_policy=auto_wrap_policy,
+        #     device_id=torch.cuda.current_device(),
+        #     sharding_strategy=ShardingStrategy.SHARD_GRAD_OP, 
+        #     mixed_precision=mixed_precision,
+        #     sync_module_states=True,
+        #     limit_all_gathers=True,
+        #     device_mesh=self.device_mesh)
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
@@ -487,6 +489,8 @@ class RobActorRolloutRefWorker(Worker):
             #     breakpoint()
             # get the original unwrapped module
             self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
+            # self.actor_module = self.actor_module_fsdp
+            
 
             if self._is_offload_param:
                 # param is require during state_dict in sharding manager
@@ -508,11 +512,11 @@ class RobActorRolloutRefWorker(Worker):
                 processing_class=None,
                 checkpoint_config=None,
             )
-            import threading
-            self._save_req  = threading.Event()
-            self._save_done = threading.Event()
-            self._save_args = None
-            self._saving_lock = threading.Lock()  # 防重入/并发
+            # import threading
+            # self._save_req  = threading.Event()
+            # self._save_done = threading.Event()
+            # self._save_args = None
+            # self._saving_lock = threading.Lock()  # 防重入/并发
             # self.checkpoint_manager.save_checkpoint(
             #     local_path='debug', hdfs_path=None, global_step=0, max_ckpt_to_keep=None
             # )
@@ -552,8 +556,10 @@ class RobActorRolloutRefWorker(Worker):
         #data.batch = data.batch.cuda()
 
         log_gpu_memory_usage('Before update policy', logger=logger)
-
-        metrics = self.actor.update_policy(data=data)
+        if self.actor.config.vla == 'smolvla':
+            metrics = self.actor.update_policy_smolvla(data=data)
+        else:
+            metrics = self.actor.update_policy(data=data)
 
         self.actor_lr_scheduler.step()
         lr = self.actor_lr_scheduler.get_last_lr()[0]
@@ -699,12 +705,11 @@ class RobActorRolloutRefWorker(Worker):
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
         from peft import PeftModel
         import transformers
+        # self.checkpoint_manager.save_checkpoint(
+        #     local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
+        # )
         # return
-        self.checkpoint_manager.save_checkpoint(
-            local_path=local_path, hdfs_path=hdfs_path, global_step=global_step, max_ckpt_to_keep=max_ckpt_to_keep
-        )
-        return
-        breakpoint()
+        # breakpoint()
         if self._is_offload_param:
             load_fsdp_param_and_grad(module=self.actor_module_fsdp,
                                      device_id=torch.cuda.current_device(),
@@ -761,29 +766,9 @@ class RobActorRolloutRefWorker(Worker):
             from torch.distributed.checkpoint.state_dict import get_state_dict
             from torch.distributed.checkpoint import save, FileSystemWriter
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-            # cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-            # with FSDP.state_dict_type(self.actor.actor_module, StateDictType.FULL_STATE_DICT, cfg):
-            #     state_dict = self.actor.actor_module.state_dict()
-            
-            # state_dict = _fsdp_get_state_dict(self.actor.actor_module, mode="sharded")
-            if dist.get_rank() == 0:
-                os.makedirs(local_path, exist_ok=True)
-                
-            torch.distributed.barrier()
-            with torch.no_grad():
-                torch.cuda.synchronize()
-
-            # 生成“统一视图”的 sharded state dict（自动适配 FSDP）
-            # 注意：这里不需要你自己调 FSDP.state_dict_type，上层 API 会处理
-            fsdp_model = self.actor_module_fsdp
-            # state = get_state_dict({"model": fsdp_model, "optimizer": []})
-            state = get_state_dict(fsdp_model, optimizers=[])
-
-            # 所有 rank 都要创建同一个 writer（路径相同）
-            save(state, storage_writer=FileSystemWriter(local_path))
-
-            torch.distributed.barrier()
-            breakpoint()
+            cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            with FSDP.state_dict_type(self.actor.actor_module, StateDictType.FULL_STATE_DICT, cfg):
+                state_dict = self.actor.actor_module.state_dict()
             
             if self.rank == 0:
                 print(f'Saving actor checkpoint to {local_path}')

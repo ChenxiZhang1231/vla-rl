@@ -1826,16 +1826,16 @@ class VLAFlowMatching(nn.Module):
             mean=0.0,
             std=1.0,
             size=shape,
-            # dtype=torch.float32,
-            dtype=torch.bfloat16,
+            dtype=torch.float32,
+            # dtype=torch.bfloat16,
             device=device,
         )
         return noise
 
     def sample_time(self, bsize, device):
         beta_dist = torch.distributions.Beta(concentration1=1.5, concentration0=1.0)
-        # time_beta = beta_dist.sample((bsize,)).to(device=device, dtype=torch.float32)
-        time_beta = beta_dist.sample((bsize,)).to(device=device, dtype=torch.bfloat16)
+        time_beta = beta_dist.sample((bsize,)).to(device=device, dtype=torch.float32)
+        # time_beta = beta_dist.sample((bsize,)).to(device=device, dtype=torch.bfloat16)
         time = time_beta * 0.999 + 0.001
         return time
 
@@ -2009,8 +2009,8 @@ class VLAFlowMatching(nn.Module):
         )
         suffix_out = suffix_out[:, -self.config.chunk_size :]
         # Original openpi code, upcast attention output
-        # suffix_out = suffix_out.to(dtype=torch .float32)
-        suffix_out = suffix_out.to(dtype=torch.bfloat16)
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        # suffix_out = suffix_out.to(dtype=torch.bfloat16)
         v_t = self.action_out_proj(suffix_out)
         losses = F.mse_loss(u_t, v_t, reduction="none")
         return losses
@@ -2146,11 +2146,21 @@ class VLAFlowMatching(nn.Module):
                 t_b,
             )  # bs, num_step, action_dim
             # sigma_t = self.config.noise_level * torch.sqrt(t_safe / (1 - t_safe + 1e-6))
-            sigma_t  = (sde_sigma_max * t.pow(sde_sigma_power))  # bs, 1, 1
-
-            drift = v_t + (sigma_t ** 2 / (2 * t + 1e-6)) * (x_t + (1 - t) * v_t)
+            # sigma_t  = (sde_sigma_max * t.pow(sde_sigma_power))  # bs, 1, 1
+            sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
+            index = (self.config.num_steps * (1 - t)).to(torch.long)
+            sigma = sigmas[index]
+            sigma_max = sigmas[1]
+            noise_level = 0.7
+            std_dev_t = torch.sqrt(sigma / (1 - torch.where(sigma == 1, sigma_max, sigma))) * noise_level
+            
+            # sde_sigma_max = 0.07
+            # sde_sigma_power = 1.5
+            # sigma_t = (sde_sigma_max * t_safe.pow(sde_sigma_power))[..., None, None]  # [B,S,K,1,1]
+            
+            drift = v_t + (std_dev_t ** 2 / (2 * t + 1e-6)) * (x_t + (1 - t) * v_t)
             mean = x_t + drift * dt
-            std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)
+            std  = (sqrt_abs_dt * std_dev_t).clamp_min(1e-6)
             eps = torch.randn_like(x_t)
             x_next = mean + std * eps
             
@@ -2208,7 +2218,7 @@ class VLAFlowMatching(nn.Module):
         v_t = self.action_out_proj(suffix_out)
         return v_t
 
-    def recompute_logprob(
+    def recompute_logprob_raw(
         self,
         images,             # [B,S,3,H,W]
         img_masks,          # [B,S,1]
@@ -2303,7 +2313,7 @@ class VLAFlowMatching(nn.Module):
         suffix_att2d = make_att_2d_masks(suffix_pad, suffix_att)
         full_att2d   = torch.cat([prefix_pad2d, suffix_att2d], dim=2)
         pos_ids      = (torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(suffix_pad, dim=1) - 1)
-
+        
         outputs_embeds, _ = self.vlm_with_expert.forward(
             attention_mask=full_att2d,
             position_ids=pos_ids,
@@ -2312,10 +2322,9 @@ class VLAFlowMatching(nn.Module):
             use_cache=self.config.use_cache,
             fill_kv_cache=False,
         )
-        
+        breakpoint()
         # 上面为了避免多次计算，可拆开：先一次 self.embed_suffix(...)，再复用结果
         # 这里做个小优化：实际写法请参考下面“更高效版本”注释
-
         suffix_out = outputs_embeds[1][:, -self.config.chunk_size :]      # [BSK, CH, H]
         v_t_flat   = self.action_out_proj(suffix_out).to(dtype)           # [BSK, CH, D]
         v_t_all    = v_t_flat.view(B, S, K, CH, D)                        # [B,S,K,CH,D]
@@ -2323,13 +2332,24 @@ class VLAFlowMatching(nn.Module):
         # ---------- 构造 sigma(t)、漂移、mean/std ----------
         t_safe = t_f.clamp(1e-4, 1 - 1e-4).view(B, S, K)                  # [B,S,K]
         t3     = t_safe[..., None, None]                                   # [B,S,K,1,1]
-        sde_sigma_max = 0.07
-        sde_sigma_power = 1.5
-        sigma_t = (sde_sigma_max * t_safe.pow(sde_sigma_power))[..., None, None]  # [B,S,K,1,1]
-        drift = v_t_all + (sigma_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
+        # breakpoint()
+        
+        sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t_flat.device, dtype=v_t_flat.dtype)
+        index = (K * (1 - t)).to(torch.long)
+        sigma = sigmas[index]
+        sigma_max = sigmas[1]
+        noise_level = 0.7
+        std_dev_t = torch.sqrt(sigma / (1 - torch.where(sigma == 1, sigma_max, sigma))) * noise_level
+        std_dev_t = std_dev_t[..., None, None]
+        
+        # sde_sigma_max = 0.07
+        # sde_sigma_power = 1.5
+        # sigma_t = (sde_sigma_max * t_safe.pow(sde_sigma_power))[..., None, None]  # [B,S,K,1,1]
+        
+        drift = v_t_all + (std_dev_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
 
         mean = x_t_f + dt * drift                                          # [B,S,K,CH,D]
-        std  = (sqrt_abs_dt * sigma_t).clamp_min(1e-6)                     # [B,S,K,1,1]
+        std  = (sqrt_abs_dt * std_dev_t).clamp_min(1e-6)                     # [B,S,K,1,1]
 
         # ---------- finish_step → 掩码 [B,S,CH] ----------
         # 有效动作：扁平索引 0..finish_step[b]（含）为1，其它0
@@ -2349,12 +2369,17 @@ class VLAFlowMatching(nn.Module):
 
         # ---------- 逐元素 log-prob（各向同性对角高斯） ----------
         # 注意 detach x_next，避免噪声路径入图
+        # log_prob = (
+        #     -((x_next_f.detach() - mean) ** 2) / (2 * ((std)**2))
+        #     - torch.log(std)
+        #     - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
+        # )
         lp_elem = Normal(mean, std).log_prob(x_next_f.detach())            # [B,S,K,CH,D]
         lp_elem = lp_elem * mask_elem   
         original_action_dim = 7
         lp_elem = lp_elem[..., :original_action_dim]
-        
-        logp_action = lp_elem.mean(dim=(-3))     # [B,S,50,7]
+        # logp_action = lp_elem.mean(dim=(-3))     # [B,S,50,7]
+        logp_action = lp_elem.sum(dim=(-3)) 
         # 聚合：先动作维 (CH,D)，得到每步的 logp
         logp_step = lp_elem.sum(dim=(-1, -2))                               # [B,S,K]
         # 外层步联合（对K求和）
@@ -2379,5 +2404,133 @@ class VLAFlowMatching(nn.Module):
         ent_step  = h_per_dim * num_valid_dims                              # [B,S,K]
         ent_outer = ent_step.sum(dim=2)                                     # [B,S]
         ent_joint = ent_outer.sum(dim=1)                                    # [B]
+
+        return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint
+    
+    def recompute_logprob(
+        self,
+        images,             # [B,S,3,H,W]
+        img_masks,          # [B,S,1]
+        lang_tokens,        # [B,S,L]
+        lang_masks,         # [B,S,L]
+        state,              # [B,S,1,Ds]
+        x_t,                # [B,S,K,50,Da]
+        t,                  # [B,S,K]
+        x_next,             # [B,S,K,50,Da]
+        finish_step,        # [B]
+    ):
+        """
+        返回:
+        logp_step  : [B,S,K]   —— 每个外层步、每个流步的 log-prob（已mask）
+        logp_outer : [B,S]     —— 每个外层步联合（对K求和，已mask）
+        logp_joint : [B]       —— 整条有效轨迹联合（对S再求和，已mask）
+        """
+        # ---------- 基本维度 ----------
+        device = lang_tokens.device
+        B, S, K, CH, D = x_t.shape  # CH=50, D=动作维
+        assert t.shape == (B, S, K)
+        assert x_next.shape == (B, S, K, CH, D)
+        dt = -1.0 / float(K)                       # 按你的设定：K个等步，t: 1→0
+        sqrt_abs_dt = math.sqrt(-dt)
+        dtype = torch.float32                      # 计算用 fp32 更稳
+
+        # ---------- 构建 prefix KV（按 [B*S] 批量） ----------
+        BS = B * S
+        # 展平外层时间 S 维
+        def _flat(x, keep_tail=0):
+            # 把 [B,S,...] → [B*S,...]
+            if keep_tail == 0:
+                return x.reshape(BS, *x.shape[2:])
+            elif keep_tail == 1:
+                return x.reshape(BS, x.shape[-1])
+            else:
+                raise ValueError
+
+        images_flat    = _flat(images)
+        img_masks_flat = _flat(img_masks)
+        lang_tokens_f  = _flat(lang_tokens)
+        lang_masks_f   = _flat(lang_masks)
+        state_flat     = _flat(state) if state is not None else None
+
+        x_t_flat    = x_t.reshape(BS * K, CH, D).to(device=device, dtype=dtype)
+        x_next_f    = x_next.to(device=device, dtype=dtype) # 保持原始形状，后面用
+        t_flat      = t.reshape(BS * K).to(device=device, dtype=dtype)
+        # breakpoint()
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            [images_flat], [img_masks_flat.squeeze(-1)], lang_tokens_f, lang_masks_f, state=state_flat
+        )
+        suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(x_t_flat, t_flat)
+        prefix_embs_rep = prefix_embs.repeat_interleave(K, dim=0)
+        prefix_pad_masks_rep = prefix_pad_masks.repeat_interleave(K, dim=0)
+        prefix_att_masks_rep = prefix_att_masks.repeat_interleave(K, dim=0)
+
+        pad_masks = torch.cat([prefix_pad_masks_rep, suffix_pad_masks], dim=1)
+        att_masks = torch.cat([prefix_att_masks_rep, suffix_att_masks], dim=1)
+        att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
+        position_ids = torch.cumsum(pad_masks, dim=1) - 1
+        (_, suffix_out), _ = self.vlm_with_expert.forward(
+            attention_mask=att_2d_masks,
+            position_ids=position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs_rep, suffix_embs],
+            use_cache=False,
+            fill_kv_cache=False,
+        )
+        suffix_out = suffix_out[:, -self.config.chunk_size :]
+        suffix_out = suffix_out.to(dtype=torch.float32)
+        v_t_flat = self.action_out_proj(suffix_out)
+        v_t_all    = v_t_flat.view(B, S, K, CH, D)
+        
+        x_t_f = x_t.to(device=device, dtype=dtype)
+        t_f = t.to(device=device, dtype=dtype)
+
+        t_safe = t_f.clamp(1e-4, 1 - 1e-4).view(B, S, K)
+        t3     = t_safe[..., None, None]
+        
+        sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t_flat.device, dtype=v_t_flat.dtype)
+        index = (K * (1 - t)).to(torch.long)
+        sigma = sigmas[index]
+        sigma_max = sigmas[1]
+        noise_level = 0.7
+        std_dev_t = torch.sqrt(sigma / (1 - torch.where(sigma == 1, sigma_max, sigma))) * noise_level
+        std_dev_t = std_dev_t[..., None, None]
+        
+        drift = v_t_all + (std_dev_t**2 / (2 * t3 + 1e-6)) * (x_t_f + (1 - t3) * v_t_all)
+
+        mean = x_t_f + dt * drift
+        std  = (sqrt_abs_dt * std_dev_t).clamp_min(1e-6)
+
+        CH_idx = torch.arange(CH, device=device)[None, None, :]
+        S_idx  = torch.arange(S,  device=device)[None, :, None]
+        s_fin  = (finish_step.to(device) // CH).view(B, 1, 1)
+        c_fin  = (finish_step.to(device) %  CH).view(B, 1, 1)
+
+        mask_before = (S_idx <  s_fin).float()
+        mask_equal  = (S_idx == s_fin).float() * (CH_idx <= c_fin).float()
+        mask_actions = mask_before.expand(B, S, CH) + mask_equal
+        mask_elem = mask_actions[:, :, None, :, None]
+
+        # lp_elem = Normal(mean, std).log_prob(x_next_f.detach())
+        lp_elem = (
+            -((x_next_f.detach() - mean) ** 2) / (2 * ((std)**2))
+            - torch.log(std)
+            - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
+        )
+        lp_elem = lp_elem * mask_elem
+        original_action_dim = 7
+        lp_elem = lp_elem[..., :original_action_dim]
+        logp_action = lp_elem.sum(dim=(-3))
+        
+        logp_step = lp_elem.sum(dim=(-1, -2))
+        logp_outer = logp_step.sum(dim=2)
+        logp_joint = logp_outer.sum(dim=1)
+        
+        c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
+        h_per_dim = c0 + torch.log(std).squeeze(-1).squeeze(-1)
+        num_valid_actions = mask_actions.sum(dim=-1)
+        num_valid_dims    = (num_valid_actions * D).unsqueeze(-1).to(h_per_dim.dtype)
+        ent_step  = h_per_dim * num_valid_dims
+        ent_outer = ent_step.sum(dim=2)
+        ent_joint = ent_outer.sum(dim=1)
 
         return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint

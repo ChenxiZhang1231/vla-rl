@@ -185,8 +185,102 @@ def _close_workers_with_pipe(processes, parents, grace_s=20):
 
 #     return pil_image.convert("RGB")
 
-
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
+    
+    benchmark_dict = benchmark.get_benchmark_dict()
+    task_suite = benchmark_dict[task_name]()
+    task = task_suite.get_task(task_id)
+    initial_states = task_suite.get_task_init_states(task_id)
+    initial_state = initial_states[trial_id]
+    
+    
+    env = None
+    while True:
+        try:
+            env, task_description = get_libero_env(task, config.model_family, resolution=256)
+            break  
+        except:
+            print(f"*** env initialization failed ***")
+            if env is not None:
+                try:
+                    env.close()  
+                except Exception as e:
+                    print(f"error when close the env: {e}")
+            torch.cuda.empty_cache()
+            gc.collect()
+            print("gc collect finish")
+    
+    env.reset()
+    obs = env.set_init_state(initial_state)
+    
+    
+    t = 0
+    valid_images = []
+    while t < config.num_steps_wait:
+        obs, _, _, _ = env.step(get_libero_dummy_action(config.model_family))
+        t += 1
+        
+    if is_valid:
+        img = obs["agentview_image"][::-1, ::-1]
+        valid_images.append(img)
+    
+    output_queue.put({
+        'type': 'init',
+        'obs': obs,
+        "task_description":task_description,
+        'valid_images': valid_images.copy(),
+        'task_file_name': f"{task_name}_task_{task_id}_trial_{trial_id}",
+        'active': True,
+        'complete': False,
+        'finish_step': 0
+    })
+    
+    active = True
+    complete = False
+    finish_step = 0
+    
+    while True:
+        
+        action = input_queue.get()
+        if action is None:
+            env.close()
+            output_queue.put({'type': 'terminate'})
+            break
+        
+        
+        step_images = []
+        for i in range(len(action)):
+            a = action[i]
+            normalized_action = normalize_gripper_action(a, binarize=True)
+            inverted_action = invert_gripper_action(normalized_action)
+            obs, reward, done, info = env.step(inverted_action.tolist())
+            
+            if is_valid:
+                img = obs["agentview_image"][::-1, ::-1]
+                step_images.append(img)
+            
+            
+            finish_step += 1
+            #if done or finish_step >= config.max_steps[config.task_suite_name]:
+            if done or finish_step >= max_steps:
+                active = False
+                complete = done
+                break
+        
+        
+        output_data = {
+            'type': 'step',
+            'obs': obs,
+            'active': active,
+            'complete': complete,
+            'finish_step': finish_step,
+            'valid_images': step_images.copy() if is_valid else []
+        }
+        output_queue.put(output_data)
+        
+    
+
+def env_worker_smolvla(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
@@ -613,7 +707,6 @@ class RobHFRollout(BaseRollout):
     
         
     def _generate_minibatch(self, prompts):
-        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
         self.module.eval()
         meta_info = prompts.meta_info
         n_samples = meta_info.get('n_samples', 1)
@@ -625,53 +718,25 @@ class RobHFRollout(BaseRollout):
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         
-        # processes = []
-        # input_queues = []
-        # output_queues = []
-        # # breakpoint()
-        # # env_worker(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
-        
-        # for idx in range(batch_size):
-        #     task_name = task_suite_name[idx]
-        #     t_id = task_id[idx][0].item()
-        #     tr_id = trial_id[idx][0].item()
-        #     input_q = Queue()
-        #     output_q = Queue()
-        #     p = Process(
-        #         target=env_worker,
-        #         args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
-        #     )
-        #     p.start()
-        #     processes.append(p)
-        #     input_queues.append(input_q)
-        #     output_queues.append(output_q)
-        
-        ctx = mp.get_context("spawn")  # 用 spawn 上下文
         processes = []
         input_queues = []
         output_queues = []
-
-        num_gpus = int(os.environ.get("NUM_GPUS", "1"))  # 自己按需设定
+        
         for idx in range(batch_size):
             task_name = task_suite_name[idx]
             t_id = task_id[idx][0].item()
             tr_id = trial_id[idx][0].item()
-
-            in_q = ctx.Queue()
-            out_q = ctx.Queue()
-
-            p = ctx.Process(
-                target=env_worker,   # 用 wrapper 作为入口
-                args=(task_name, t_id, tr_id, self.config, in_q, out_q, is_valid, global_steps, max_steps),
-                kwargs=dict(worker_idx=idx, num_gpus=num_gpus),
-                daemon=False,               # 建议 False，便于优雅清理
+            input_q = Queue()
+            output_q = Queue()
+            p = Process(
+                target=env_worker,
+                args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
             )
             p.start()
-
             processes.append(p)
-            input_queues.append(in_q)
-            output_queues.append(out_q)
-            
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+        
         inputs = []
         task_descriptions = []
         task_records = []
@@ -698,10 +763,8 @@ class RobHFRollout(BaseRollout):
             current_inputs = inputs
             current_task_descriptions = task_descriptions
            
-            
             vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
-
             vla_output = self._generate_one_step(vla_input)
             actions = vla_output["action"]
             
@@ -715,7 +778,7 @@ class RobHFRollout(BaseRollout):
                 }
             vla_history.append(step_data)
             
-            for idx in active_indices:
+            for  idx in active_indices:
                 input_queues[idx].put(actions[idx])
             
             new_inputs = inputs.copy()
@@ -780,8 +843,8 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
-        # breakpoint()
         return DataProto(batch=output_batch)
+    
     
     def _generate_minibatch_smolvla(self, prompts):
         # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
@@ -808,7 +871,7 @@ class RobHFRollout(BaseRollout):
             input_q = Queue()
             output_q = Queue()
             p = Process(
-                target=env_worker,
+                target=env_worker_smolvla,
                 args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
             )
             p.start()

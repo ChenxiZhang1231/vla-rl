@@ -343,6 +343,8 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     # ---------- 语言塔 ----------
     text_model, dec_layer_cls, attn_cls = _find_text_stack(root_module)
     tag_qkvo(root_module)
+    tag_text_embed_tokens(root_module)
+    tag_action(root_module)
     policies = []
     # breakpoint()
     if dec_layer_cls is not None:
@@ -388,17 +390,17 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     policies.append(pol_vit)
     policies.append(pol_vit_conn)
 
-    tag_text_embed_tokens(root_module)
-    def is_tagged_embedding(m: nn.Module) -> bool:
-        return isinstance(m, nn.Embedding) and getattr(m, "_fsdp_wrap_me", False)
-    pol_embed = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_embedding)
-    policies.append(pol_embed)
+
+    # def is_tagged_embedding(m: nn.Module) -> bool:
+    #     return isinstance(m, nn.Embedding) and getattr(m, "_fsdp_wrap_me", False)
+    # pol_embed = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_embedding)
+    # policies.append(pol_embed)
     
-    tag_action(root_module)
-    def is_tagged_action(m: nn.Module) -> bool:
-        return getattr(m, "_fsdp_wrap_me", False)
-    pol_action = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_action)
-    policies.append(pol_action)
+    
+    # def is_tagged_action(m: nn.Module) -> bool:
+    #     return getattr(m, "_fsdp_wrap_me", False)
+    # pol_action = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged_action)
+    # policies.append(pol_action)
 
     # ---------- 视觉塔 ----------
     vision_model, vit_block_cls, patch_like = _find_vision_stack(root_module)
@@ -406,23 +408,13 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     if patch_like:
         ignored_modules.extend(patch_like)
 
-    if vit_block_cls is not None:
-        vit_block_policy = functools.partial(
-            transformer_auto_wrap_policy,
-            transformer_layer_cls={vit_block_cls},
-        )
-        policies.append(vit_block_policy)
+    # if vit_block_cls is not None:
+    #     vit_block_policy = functools.partial(
+    #         transformer_auto_wrap_policy,
+    #         transformer_layer_cls={vit_block_cls},
+    #     )
+    #     policies.append(vit_block_policy)
 
-    # ---------- LoRA（可选，保守） ----------
-    if is_lora:
-        def lambda_fn(m: nn.Module):
-            return (
-                len(list(m.named_children())) == 0 and
-                getattr(m, "weight", None) is not None and
-                m.weight.requires_grad
-            )
-        lora_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_fn)
-        policies.append(lora_policy)
 
     # 组合策略：命中任一策略即 wrap
     if not policies:

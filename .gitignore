@@ -129,4 +129,4 @@ hugg_models/
 work_dirs
 work_dirs/
 *.log
-*.txt
+# *.txt

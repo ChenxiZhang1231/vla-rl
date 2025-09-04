@@ -159,7 +159,7 @@ def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
         data.batch['returns'] = returns
         
     elif adv_estimator == 'grpo':
-        token_level_rewards = data.batch['token_level_rewards']
+        # token_level_rewards = data.batch['token_level_rewards']
         index = data.non_tensor_batch['uid']
         responses = data.batch['responses']
         response_length = responses.size(1) *  responses.size(2)
@@ -213,8 +213,8 @@ def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config
     # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
     # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
     B, S, K, CH, D = data.batch['x_t'].shape
-    finish_step = data.batch['finish_step']
-    response_length = S * CH
+    response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
+    finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(response_length, device=data.batch['x_t'].device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(data.batch['x_t'].size(0), -1)
     response_mask = steps_expanded < finish_step.unsqueeze(1)
@@ -311,8 +311,8 @@ def compute_data_metrics(batch,config):
     # steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
     # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
     B, S, K, CH, D = batch.batch['x_t'].shape
-    finish_step = batch.batch['finish_step']
-    response_length = S * CH
+    finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+    response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
     response_mask = steps_expanded < finish_step.unsqueeze(1)
@@ -653,6 +653,7 @@ class RayTrainer(object):
                     metrics['timing/gen'] += timer.last
                     
                     # do accuracy filtering and score logging
+                    # breakpoint()
                     with Timer(name='verify', text="{name}: {seconds:.1f} seconds") as timer:
                         scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify(roll_batch)
                         for k, v in reward_metrics.items():
@@ -749,12 +750,20 @@ class RayTrainer(object):
                     # metrics.update(kl_metrics)
 
                     # compute advantages, executed on the driver process
-                    batch = compute_advantage_smolvla(batch,
-                                              self.config.algorithm.gamma,
-                                              self.config.algorithm.lam,
-                                              adv_estimator=self.config.algorithm.adv_estimator,
-                                              config = self.config)
+                    if self.config.actor_rollout_ref.model.vla == 'smolvla':
+                        batch = compute_advantage_smolvla(batch,
+                                                self.config.algorithm.gamma,
+                                                self.config.algorithm.lam,
+                                                adv_estimator=self.config.algorithm.adv_estimator,
+                                                config = self.config)
+                    else:
+                        batch = compute_advantage(batch,
+                                                self.config.algorithm.gamma,
+                                                self.config.algorithm.lam,
+                                                adv_estimator=self.config.algorithm.adv_estimator,
+                                                config = self.config)
                 metrics['timing/adv'] = timer.last
+                # breakpoint()
 
                 # critic is disabled
 
