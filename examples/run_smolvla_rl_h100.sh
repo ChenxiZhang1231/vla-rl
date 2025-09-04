@@ -78,8 +78,8 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     trainer.default_local_dir=$CKPT_PATH/$PROJECT_NAME/$EXPERIMENT_NAME \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.nnodes=$NUM_NODES \
-    trainer.save_freq=15 \
-    trainer.test_freq=30 \
+    trainer.save_freq=10 \
+    trainer.test_freq=10 \
     trainer.total_epochs=100 \
     trainer.val_only=False \
     ray_init.num_cpus=32 \
@@ -89,5 +89,5 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
     trainer.val_before_train=False \
-    2>&1 | tee -a "${EXPERIMENT_NAME}.txt"
+    2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 

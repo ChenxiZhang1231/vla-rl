@@ -587,9 +587,11 @@ class RobDataParallelPPOActor(BasePPOActor):
                 loss.backward()
                     
                 n_has_grad_after = sum((p.grad is not None) for p in self.actor_module.parameters())
-                if n_has_grad_after == 0:
-                    breakpoint()
                 print(f"[chk] after backward: with_grad={n_has_grad_after}")
+                if n_has_grad_after == 0:
+                    # breakpoint()
+                    assert n_has_grad_after != 0, "n_has_grad_after == 0"
+                
                 
                 
                 loss_info['actor/pg_loss'] =  loss_info['actor/pg_loss'] + policy_loss.detach().item()
