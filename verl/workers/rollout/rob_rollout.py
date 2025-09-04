@@ -349,7 +349,15 @@ def env_worker_smolvla(task_name, task_id, trial_id, config, input_queue, output
             a = action[i]
             normalized_action = normalize_gripper_action(a, binarize=True)
             inverted_action = invert_gripper_action(normalized_action)
-            obs, reward, done, info = env.step(inverted_action.tolist())
+            # obs, reward, done, info = env.step(inverted_action.tolist())
+            try:
+                obs, reward, done, info = env.step(inverted_action.tolist())
+            except Exception as e:
+                print(f"!!!!!! [Worker {os.getpid()}] CRASHED IN ENV.STEP !!!!!!")
+                print(f"Action that caused crash: {inverted_action.tolist()}")
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
             
             if is_valid:
                 # img = obs["agentview_image"][::-1, ::-1]
@@ -912,14 +920,6 @@ class RobHFRollout(BaseRollout):
             vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
             actions = vla_output["action"]
             
-            # step_data = {
-            #         "responses": vla_output["responses"],
-            #         "input_ids": vla_output["input_ids"],
-            #         "attention_mask": vla_output["attention_mask"],
-            #         "pixel_values": vla_output["pixel_values"],
-            #         "action": actions,
-            #         "step": step
-            #     }
             step_data = vla_input.copy()
             step_data["action"] = actions
             step_data["action_tensor"] = vla_output["action_tensor"]
