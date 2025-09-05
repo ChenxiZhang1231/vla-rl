@@ -438,7 +438,7 @@ def compute_value_loss(vpreds, returns, values, eos_mask, cliprange_value):
     return vf_loss, vf_clipfrac
 
 
-def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_penalty) -> torch.FloatTensor:
+def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_penalty, mean=None, std=None, ref_mean=None) -> torch.FloatTensor:
     """Compute KL divergence given logprob and ref_logprob.
     Copied from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1104
 
@@ -461,6 +461,11 @@ def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_pe
     if kl_penalty == "full":
         # so, here logprob and ref_logprob should contain the logits for every token in vocabulary
         raise NotImplementedError
+
+    if kl_penalty == "kl_flow":
+        kl_elem = ((mean - ref_mean) ** 2) / (2.0 * (std ** 2))
+        kl_action = kl_elem.sum(dim=2) 
+        return kl_action
 
     raise NotImplementedError
 

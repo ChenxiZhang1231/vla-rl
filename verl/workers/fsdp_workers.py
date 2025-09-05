@@ -655,8 +655,14 @@ class RobActorRolloutRefWorker(Worker):
             output.meta_info['use_dynamic_bsz'] = self.config.rollout.log_prob_use_dynamic_bsz
             output.meta_info['max_token_len'] = self.config.rollout.log_prob_max_token_len_per_gpu
             output.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
-            old_log_probs = self.actor.compute_log_prob(data=output)
-            output.batch['old_log_probs'] = old_log_probs
+            logp_output = self.actor.compute_log_prob(data=output)
+            if len(logp_output) == 3:
+                old_log_probs, old_mean, old_std = logp_output
+                output.batch['old_log_probs'] = old_log_probs
+                output.batch['old_mean'] = old_mean
+                output.batch['old_std'] = old_std
+            else:
+                output.batch['old_log_probs'] = logp_output
         output = output.to('cpu')
         # breakpoint()
         if self._is_offload_param:
@@ -715,7 +721,13 @@ class RobActorRolloutRefWorker(Worker):
         data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
         data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
         output = self.ref_policy.compute_log_prob(data=data)
-        output = DataProto.from_dict(tensors={'ref_log_prob': output})
+        if len(output) == 3:
+            ref_log_prob, ref_mean, ref_std = output
+            output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
+                                                'ref_mean': ref_mean,
+                                                'ref_std': ref_std})
+        else:
+            output = DataProto.from_dict(tensors={'ref_log_prob': output})
         output = output.to('cpu')
 
         if self._is_offload_param:

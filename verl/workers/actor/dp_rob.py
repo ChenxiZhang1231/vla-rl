@@ -208,6 +208,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk(micro_batch, recompute_log_prob=True)
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
+            mean, std = return_dict["mean"], return_dict["std"]
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
                 
@@ -233,7 +234,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
                 
 
-            return ent_outer, logp_action
+            return ent_outer, logp_action, mean, std
         
     
     def _forward_micro_batch_update(self, input_ids, attention_mask, pixel_values, responses, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -308,6 +309,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk_update(micro_batch, recompute_log_prob=True)
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
+            mean, std = return_dict["mean"], return_dict["std"]
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
                 
@@ -333,7 +335,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
                 
 
-            return ent_outer, logp_action
+            return ent_outer, logp_action, mean, std
         
     def _forward_micro_batch_entropy(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = micro_batch['responses'].size(0)
@@ -461,6 +463,8 @@ class RobDataParallelPPOActor(BasePPOActor):
             micro_batches = batch.split(micro_batch_size)
 
         log_probs_lst = []
+        mean_lst = []
+        std_lst = []
         for micro_batch in micro_batches:
             with torch.no_grad():
                 # if isinstance(self.actor_module, FSDP):
@@ -469,23 +473,33 @@ class RobDataParallelPPOActor(BasePPOActor):
                 # with param_ctx:
                 with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                     if self.config.vla == 'smolvla':
-                        ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                        ent_outer, logp_action, mean, std = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
                         log_probs = logp_action
                     else:
                         _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
+                        mean, std = None, None
                 # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 #     ent_outer, logp_action = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
                 #     log_probs = logp_action
             log_probs_lst.append(log_probs)
+            mean_lst.append(mean)
+            std_lst.append(std)
+            
         log_probs = torch.concat(log_probs_lst, dim=0)
+        if mean is not None:
+            mean = torch.concat(mean_lst, dim=0)
+            std = torch.concat(std_lst, dim=0)
+        else:
+            mean, std = None, None
         # breakpoint()
-        if use_dynamic_bsz:
+        # if use_dynamic_bsz:
+        if False:
             indices = list(itertools.chain.from_iterable(indices))
             assert len(indices) == log_probs.size(0), f"{len(indices)} vs. {log_probs.size()}"
             revert_indices = torch.tensor(get_reverse_idx(indices), dtype=torch.long)
             log_probs = log_probs[revert_indices]
 
-        return log_probs
+        return log_probs, mean, std
 
     def update_policy_smolvla(self, data: DataProto):
         self.actor_module.train()
@@ -502,7 +516,11 @@ class RobDataParallelPPOActor(BasePPOActor):
                            "lang_tokens", "lang_masks", "finish_step",
                            'old_log_probs', 'advantages',]
             if self.config.use_kl_loss:
+                select_keys.append('old_mean')
+                select_keys.append('old_std')
                 select_keys.append('ref_log_prob')
+                select_keys.append('ref_mean')
+                select_keys.append('ref_std')
         else:
             select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
@@ -560,8 +578,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 traj_split_num = int(traj_len/self.config.traj_mini_batch_size)
                 assert traj_split_num == 1    
 
-                # breakpoint()
-                entropy, log_prob = self._forward_micro_batch_update_smolvla(data)
+                entropy, log_prob, mean, std = self._forward_micro_batch_update_smolvla(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
 
@@ -587,8 +604,10 @@ class RobDataParallelPPOActor(BasePPOActor):
                     ref_log_prob = data["ref_log_prob"]
                     ref_log_prob = ref_log_prob.reshape(B, -1)
                     kld = core_algos.kl_penalty(
-                        logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                        logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type, 
+                        mean=mean, std=std, ref_mean=data.get("ref_mean", None),
                     )
+                    kld = kld.reshape(B, -1)
                     # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
                     #     breakpoint()
                     kl_loss = verl_F.masked_mean(kld, response_mask)

@@ -529,7 +529,10 @@ class SmolVLAPolicy(PreTrainedModel):
              logp_joint, 
              ent_step, 
              ent_outer, 
-             ent_joint) = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
+             ent_joint,
+             mean,
+             std_dev_t,
+             ) = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
             return_dict = {
                 "logp_action": logp_action,
                 "logp_step": logp_step, 
@@ -538,6 +541,8 @@ class SmolVLAPolicy(PreTrainedModel):
                 "ent_step": ent_step, 
                 "ent_outer": ent_outer, 
                 "ent_joint": ent_joint,
+                "mean": mean,
+                "std": std_dev_t,
                 }
             return None, lang_tokens, lang_masks, return_dict
         
@@ -1597,5 +1602,6 @@ class VLAFlowMatching(nn.Module):
         ent_step  = h_per_dim * num_valid_dims
         ent_outer = ent_step.sum(dim=2)
         ent_joint = ent_outer.sum(dim=1)
-
-        return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint
+        mean = mean[..., :original_action_dim]
+        std_dev_t = std_dev_t[..., :original_action_dim]
+        return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint, mean, std_dev_t
