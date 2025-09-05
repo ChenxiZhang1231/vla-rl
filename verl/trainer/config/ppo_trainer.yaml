@@ -38,6 +38,7 @@ actor_rollout_ref:
   actor:
     use_kl_loss: False
     kl_loss_coef: 0.0
+    kl_loss_target: 0.0
     kl_loss_type: kl
     vla: ${actor_rollout_ref.model.vla}
     action_token_len: ${actor_rollout_ref.model.action_token_len}

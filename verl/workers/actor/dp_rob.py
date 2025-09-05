@@ -611,9 +611,22 @@ class RobDataParallelPPOActor(BasePPOActor):
                     # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
                     #     breakpoint()
                     kl_loss = verl_F.masked_mean(kld, response_mask)
-                    policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                    target_kl = self.config.get('kl_loss_target', 0.0)
+                    if target_kl == 0.0:
+                        beta = self.config.kl_loss_coef
+                    else:
+                        kl_now = kl_loss.detach().item() / self.gradient_accumulation
+                        hi, lo = 1.5, 0.5
+                        beta = self.config.kl_loss_coef
+                        if kl_now > hi * target_kl:
+                            beta *= 1.5
+                        elif kl_now < lo * target_kl:
+                            beta /= 1.5
+                        beta = float(max(1e-8, min(beta, 1e4)))
+                        
+                    policy_loss = policy_loss + kl_loss * beta
                     loss_info["actor/kl_loss"] = kl_loss.detach().item() / self.gradient_accumulation
-                    loss_info["actor/kl_coef"] = self.config.kl_loss_coef
+                    loss_info["actor/kl_coef"] = beta
                     
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
