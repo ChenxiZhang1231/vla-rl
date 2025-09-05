@@ -36,6 +36,9 @@ actor_rollout_ref:
     lora_alpha: 32  # LoRA scaling factor
     target_modules: all-linear  
   actor:
+    use_kl_loss: False
+    kl_loss_coef: 0.0
+    kl_loss_type: kl
     vla: ${actor_rollout_ref.model.vla}
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
@@ -71,6 +74,8 @@ actor_rollout_ref:
       model_dtype: None
       
   ref:
+    # model:
+    vla: openvla-oft
     fsdp_config:
       param_offload: False
       wrap_policy:

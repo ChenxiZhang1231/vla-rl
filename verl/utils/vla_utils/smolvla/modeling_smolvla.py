@@ -1387,7 +1387,7 @@ class VLAFlowMatching(nn.Module):
             use_cache=self.config.use_cache,
             fill_kv_cache=False,
         )
-        breakpoint()
+        # breakpoint()
         # 上面为了避免多次计算，可拆开：先一次 self.embed_suffix(...)，再复用结果
         # 这里做个小优化：实际写法请参考下面“更高效版本”注释
         suffix_out = outputs_embeds[1][:, -self.config.chunk_size :]      # [BSK, CH, H]

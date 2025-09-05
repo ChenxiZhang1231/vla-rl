@@ -679,7 +679,7 @@ class RobActorRolloutRefWorker(Worker):
             load_fsdp_param_and_grad(module=self.ref_module_fsdp,
                                      device_id=torch.cuda.current_device(),
                                      load_grad=self._is_offload_grad)
-
+            
         micro_batch_size = self.config.ref.log_prob_micro_batch_size
         data.meta_info['micro_batch_size'] = micro_batch_size
         data.meta_info['temperature'] = self.config.rollout.temperature
@@ -689,6 +689,33 @@ class RobActorRolloutRefWorker(Worker):
         output = self.ref_policy.compute_log_prob(data=data)
         output = DataProto.from_dict(tensors={'ref_log_prob': output})
 
+        output = output.to('cpu')
+
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.ref_module_fsdp, offload_grad=self._is_offload_grad)
+        torch.cuda.synchronize()
+        torch.distributed.barrier()
+        torch.cuda.empty_cache()
+        return output
+    
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_ref_log_prob_smolvla(self, data: DataProto):
+        assert self._is_ref
+
+        data = data.to('cuda')
+
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.ref_module_fsdp,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        micro_batch_size = self.config.ref.log_prob_micro_batch_size
+        data.meta_info['micro_batch_size'] = micro_batch_size
+        data.meta_info['temperature'] = self.config.rollout.temperature
+        data.meta_info['max_token_len'] = self.config.ref.log_prob_max_token_len_per_gpu
+        data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
+        data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        output = self.ref_policy.compute_log_prob(data=data)
+        output = DataProto.from_dict(tensors={'ref_log_prob': output})
         output = output.to('cpu')
 
         if self._is_offload_param:

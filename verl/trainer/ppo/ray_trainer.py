@@ -713,11 +713,14 @@ class RayTrainer(object):
                 
                 batch = valid_batch
                 print(f'rollout batch size: {len(batch)}')
-                
+                # breakpoint()
                 if self.use_reference_policy:
                     # compute reference log_prob
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
-                        ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
+                        if self.config.actor_rollout_ref.model.vla == 'smolvla':
+                            ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_smolvla(batch)
+                        else:
+                            ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
                         batch = batch.union(ref_log_prob)
                     metrics['timing/ref'] = timer.last
 

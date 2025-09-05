@@ -501,6 +501,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                            "x_t", "t", "x_next",
                            "lang_tokens", "lang_masks", "finish_step",
                            'old_log_probs', 'advantages',]
+            if self.config.use_kl_loss:
+                select_keys.append('ref_log_prob')
         else:
             select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
@@ -559,7 +561,6 @@ class RobDataParallelPPOActor(BasePPOActor):
                 assert traj_split_num == 1    
 
                 # breakpoint()
-                # entropy, log_prob = self._forward_micro_batch_update(input_ids=input_ids[i:i+int(traj_len/traj_split_num)], attention_mask=attention_mask[i:i+int(traj_len/traj_split_num)], pixel_values=pixel_values[i:i+int(traj_len/traj_split_num)], responses=responses[i:i+int(traj_len/traj_split_num)], temperature=temperature)
                 entropy, log_prob = self._forward_micro_batch_update_smolvla(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
@@ -580,8 +581,21 @@ class RobDataParallelPPOActor(BasePPOActor):
                                                                                 clip_ratio_high=clip_ratio_high,
                                                                                 clip_ratio_low=clip_ratio_low)
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
-                policy_loss = pg_loss
                 # breakpoint()
+                policy_loss = pg_loss
+                if self.config.use_kl_loss:
+                    ref_log_prob = data["ref_log_prob"]
+                    ref_log_prob = ref_log_prob.reshape(B, -1)
+                    kld = core_algos.kl_penalty(
+                        logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type
+                    )
+                    # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
+                    #     breakpoint()
+                    kl_loss = verl_F.masked_mean(kld, response_mask)
+                    policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
+                    loss_info["actor/kl_loss"] = kl_loss.detach().item() / self.gradient_accumulation
+                    loss_info["actor/kl_coef"] = self.config.kl_loss_coef
+                    
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
                     
