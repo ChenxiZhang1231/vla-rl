@@ -393,6 +393,7 @@ class RayTrainer(object):
         from verl.utils.dataset.rob_dataset import LIBERO_Dataset, collate_fn
         self.train_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
                                             num_trials_per_task=self.config.data.num_trials_per_task,
+                                            libero_raw_data_dir=self.config.data.libero_raw_data_dir,
                                             train_val ="train")
         self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
                                            batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
@@ -448,7 +449,6 @@ class RayTrainer(object):
                     'validate': True,
                     "global_steps":global_steps
                 }
-
             test_output_gen_batch = self.actor_rollout_wg.generate_sequences(test_batch)
             print('validation generation end')
             test_batch = test_batch.union(test_output_gen_batch)
@@ -623,8 +623,7 @@ class RayTrainer(object):
                         if len(buffer_batch) > 0:
                             newbatch = DataProto.concat([buffer_batch, newbatch])
                             buffer_batch = []
-
-                        gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id'],
+                        gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id', 'init_state'],
                                                     non_tensor_batch_keys={"task_suite_name"},
                                                     meta_info_keys={})
  

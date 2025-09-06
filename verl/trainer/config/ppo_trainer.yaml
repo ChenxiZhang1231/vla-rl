@@ -1,6 +1,7 @@
 data:
   tokenizer: null
   task_suite_name: libero_10
+  libero_raw_data_dir: ""
   num_trials_per_task: 50
   filter_warmup: False
   prompt_key: prompt

@@ -15,7 +15,7 @@
 from omegaconf import ListConfig
 import os
 from typing import List, Union
-
+import h5py
 import pandas as pd
 
 import torch
@@ -61,13 +61,15 @@ def collate_fn(data_list: list[dict]) -> dict:
 class LIBERO_Dataset(Dataset):
     def __init__(self,
                  task_suite_name,
-                 num_trials_per_task=50,
-                 train_val ="train",
+                 num_trials_per_task = 50,
+                 train_val = "train",
+                 libero_raw_data_dir = "",
                  ):
         
         self.task_suite_name = task_suite_name  
         self.num_trials_per_task = num_trials_per_task  
         self.train_val = train_val
+        self.libero_raw_data_dir = libero_raw_data_dir
         self._read_files_and_tokenize()
 
     def _read_files_and_tokenize(self):
@@ -79,20 +81,46 @@ class LIBERO_Dataset(Dataset):
         if self.task_suite_name in ["libero_10", "libero_90", "libero_goal",  "libero_object",  "libero_spatial"]:
             for task_id in range(num_tasks_in_suite):
                 if self.train_val == "train":
-                    trials_range = list(range(0, int(self.num_trials_per_task)))
+                    if self.libero_raw_data_dir == "":
+                        trials_range = list(range(0, int(self.num_trials_per_task))) 
+                        init_state_list = []
+                        initial_states = task_suite.get_task_init_states(task_id)
+                        for i in trials_range:
+                            initial_state = initial_states[i]
+                            init_state_list.append(initial_state) 
+                    else:
+                        task = task_suite.get_task(task_id)
+                        orig_data_path = os.path.join(self.libero_raw_data_dir, self.task_suite_name, f"{task.name}_demo.hdf5")
+                        orig_data_file = h5py.File(orig_data_path, "r")
+                        orig_data = orig_data_file["data"]
+                        init_state_list = []
+                        for i in range(len(orig_data.keys())):
+                            demo_data = orig_data[f"demo_{i}"]
+                            orig_states = demo_data["states"][()]
+                            init_state = orig_states[0]
+                            init_state_list.append(init_state)
+                        trials_range = list(range(0, len(orig_data.keys())))
+                    
                 elif self.train_val == "valid":
-                    trials_range = list(range(0, int(self.num_trials_per_task)))  
+                    trials_range = list(range(0, int(self.num_trials_per_task))) 
+                    init_state_list = []
+                    for i in trials_range:
+                        initial_states = task_suite.get_task_init_states(task_id)
+                        initial_state = initial_states[i]
+                        init_state_list.append(initial_state)   
                 else:
                     raise ValueError
                 for i in trials_range:
                     data = {
                         "task_suite_name": self.task_suite_name,
                         "task_id": torch.tensor(task_id, dtype=torch.int64).unsqueeze(0),
-                        "trial_id": torch.tensor(i, dtype=torch.int64).unsqueeze(0)
+                        "trial_id": torch.tensor(i, dtype=torch.int64).unsqueeze(0),
+                        "init_state": torch.from_numpy(init_state_list[i])
                     }
                     dataframes.append(data)
             self.dataframe = dataframes
             print(f'dataset len: {len(self.dataframe)}')
+            
         else:
             raise ValueError
      

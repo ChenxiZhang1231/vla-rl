@@ -280,12 +280,12 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         
     
 
-def env_worker_smolvla(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
+def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
-    initial_states = task_suite.get_task_init_states(task_id)
-    initial_state = initial_states[trial_id]
+    # initial_states = task_suite.get_task_init_states(task_id)
+    # initial_state = initial_states[trial_id]
     
     
     env = None
@@ -307,7 +307,7 @@ def env_worker_smolvla(task_name, task_id, trial_id, config, input_queue, output
             print("gc collect finish")
     
     env.reset()
-    obs = env.set_init_state(initial_state)
+    obs = env.set_init_state(init_state)
     
     
     t = 0
@@ -861,13 +861,13 @@ class RobHFRollout(BaseRollout):
         n_samples = meta_info.get('n_samples', 1)
         task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
         trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
         task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
         max_steps = self.max_steps[self.config.task_suite_name]
         batch_size = task_id.size(0)
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         is_train = meta_info.get('is_train', False)
-        
         processes = []
         input_queues = []
         output_queues = []
@@ -876,11 +876,12 @@ class RobHFRollout(BaseRollout):
             task_name = task_suite_name[idx]
             t_id = task_id[idx][0].item()
             tr_id = trial_id[idx][0].item()
+            in_state = init_state[idx].cpu().numpy()
             input_q = Queue()
             output_q = Queue()
             p = Process(
                 target=env_worker_smolvla,
-                args=(task_name, t_id, tr_id, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps)
             )
             p.start()
             processes.append(p)
