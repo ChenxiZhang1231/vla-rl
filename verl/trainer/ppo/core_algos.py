@@ -103,6 +103,8 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
 
         returns = advantages + values
         advantages = verl_F.masked_whiten(advantages, eos_mask)
+        advantages = advantages * eos_mask
+        returns = returns * eos_mask
     return advantages, returns
 
 def compute_reinforce_plus_plus_outcome_advantage(token_level_rewards: torch.Tensor, eos_mask: torch.Tensor,

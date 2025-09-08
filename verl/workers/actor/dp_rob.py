@@ -591,12 +591,20 @@ class RobDataParallelPPOActor(BasePPOActor):
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
                 assert response_mask_tmp.sum().item() > 0, "mask 全 0：这一轮没有任何有效 token"
+                if self.config.algo == "grpo":
+                    pass
+                elif self.config.algo == "ppo":
+                    advantages_tmp = advantages_tmp.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, CH, self.config.action_token_len)
+                    advantages_tmp = advantages_tmp.reshape(B, -1)
+                else:
+                    raise
                 pg_loss, pg_clipfrac, ppo_kl = core_algos.compute_policy_loss(old_log_prob=old_log_prob_tmp,
                                                                                 log_prob=log_prob,
                                                                                 advantages=advantages_tmp,
                                                                                 eos_mask=response_mask_tmp,
                                                                                 clip_ratio_high=clip_ratio_high,
                                                                                 clip_ratio_low=clip_ratio_low)
+                    
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
                 # breakpoint()
                 policy_loss = pg_loss

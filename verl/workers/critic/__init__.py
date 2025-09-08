@@ -14,5 +14,6 @@
 
 from .base import BasePPOCritic
 from .dp_critic import DataParallelPPOCritic
+from .dp_critic_rob import RobDataParallelPPOCritic
 
-__all__ = ["BasePPOCritic", "DataParallelPPOCritic"]
+__all__ = ["BasePPOCritic", "DataParallelPPOCritic", "RobDataParallelPPOCritic"]

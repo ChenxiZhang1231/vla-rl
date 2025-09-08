@@ -12,6 +12,26 @@
             "console": "integratedTerminal"
         },
         {
+          "name": "Regenerate LIBERO",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
+          "program": "libero_utils/regenerate_libero_dataset.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--libero_task_suite=libero_spatial",
+            "--libero_raw_data_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets/libero_spatial",
+            "--libero_target_dir=debug"
+          ],
+          "env": {
+            // "MUJOCO_GL": "egl",
+            // "MUJOCO_GL": "glx",
+            "MUJOCO_GL": "osmesa",
+            // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+            
+          }
+        },
+        {
             "name": "Debug Lerobot Train",
             "type": "python",
             "request": "launch",

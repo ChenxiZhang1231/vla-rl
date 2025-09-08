@@ -232,14 +232,17 @@ def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config
         
     elif adv_estimator == 'gae':
         values = data.batch['values']
-        responses = data.batch['responses']
-        response_length = responses.size(-1)
-        attention_mask = data.batch['attention_mask']
-        response_mask = attention_mask[:, -response_length:]
-        token_level_rewards = data.batch['token_level_rewards']
+        # responses = data.batch['responses']
+        # response_length = responses.size(-1)
+        # attention_mask = data.batch['attention_mask']
+        # response_mask = attention_mask[:, -response_length:]
+        # token_level_rewards = data.batch['token_level_rewards']
+        token_level_rewards = token_level_rewards.reshape(B, S, CH, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        response_mask = response_mask.reshape(B, S, CH, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        macro_mask = (response_mask > 0).float()
         advantages, returns = core_algos.compute_gae_advantage_return(token_level_rewards=token_level_rewards,
                                                                       values=values,
-                                                                      eos_mask=response_mask,
+                                                                      eos_mask=macro_mask,
                                                                       gamma=gamma,
                                                                       lam=lam)
         data.batch['advantages'] = advantages
@@ -314,6 +317,11 @@ def compute_data_metrics(batch, config, model_name):
         steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
         steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
         response_mask = steps_expanded < finish_step.unsqueeze(1)
+        if config.algorithm.adv_estimator == "gae":
+            response_mask = response_mask.reshape(B, S, CH, 7).sum(dim=(-1,-2))
+            response_mask = (response_mask > 0).float()
+            
+        
     else:
         finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
         steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
@@ -712,7 +720,6 @@ class RayTrainer(object):
                 
                 batch = valid_batch
                 print(f'rollout batch size: {len(batch)}')
-                # breakpoint()
                 if self.use_reference_policy:
                     # compute reference log_prob
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
@@ -734,6 +741,12 @@ class RayTrainer(object):
                         #     metrics.update(reward_model_metrics)
                         # batch = batch.union(reward_model_tensor)
 
+
+                if self.use_critic:
+                    with Timer(name='critic', text="{name}: {seconds:.1f} seconds") as timer:
+                        values = self.critic_wg.compute_values(batch)
+                        batch = batch.union(values)
+                        
                 metrics['timing/reward_model'] = timer.last
                 with Timer(name='adv', text="{name}: {seconds:.1f} seconds") as timer:
                     # directly reuse previously computed rewards; but with reward shaping
@@ -768,14 +781,7 @@ class RayTrainer(object):
                                                 adv_estimator=self.config.algorithm.adv_estimator,
                                                 config = self.config)
                 metrics['timing/adv'] = timer.last
-                # breakpoint()
 
-                # critic is disabled
-
-                
-                # self.actor_rollout_wg.save_checkpoint(
-                #     local_path="debug", hdfs_path=None, global_step=0, max_ckpt_to_keep=None
-                # )
                 if self.config.trainer.save_freq > 0 and (global_steps + 1) % self.config.trainer.save_freq == 0:
                     actor_local_path = os.path.join(self.config.trainer.default_local_dir, 'actor',
                                                     f'global_step_{global_steps}')
@@ -783,12 +789,12 @@ class RayTrainer(object):
                         # self.config.trainer.default_hdfs_dir, 'actor')
                     self.actor_rollout_wg.save_checkpoint(actor_local_path, actor_remote_path, global_steps, max_ckpt_to_keep=None)
 
-                    if self.use_critic:
-                        critic_local_path = os.path.join(self.config.trainer.default_local_dir, 'critic',
-                                                         f'global_step_{global_steps}')
-                        critic_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
-                            # self.config.trainer.default_hdfs_dir, 'critic')
-                        self.critic_wg.save_checkpoint(critic_local_path, critic_remote_path)
+                    # if self.use_critic:
+                    #     critic_local_path = os.path.join(self.config.trainer.default_local_dir, 'critic',
+                    #                                      f'global_step_{global_steps}')
+                    #     critic_remote_path = None #if self.config.trainer.default_hdfs_dir is None else os.path.join(
+                    #         # self.config.trainer.default_hdfs_dir, 'critic')
+                    #     self.critic_wg.save_checkpoint(critic_local_path, critic_remote_path)
                     if self.use_rm:
                         prm_local_path = os.path.join(self.config.trainer.default_local_dir, 'prm',
                                                          f'global_step_{global_steps}')
@@ -796,6 +802,16 @@ class RayTrainer(object):
                             # self.config.trainer.default_hdfs_dir, 'critic')
                         self.rm_wg.save_checkpoint(prm_local_path, prm_remote_path)
                         
+                        
+                if self.use_critic:
+                    with Timer(name='update_critic', text="{name}: {seconds:.1f} seconds") as timer:
+                        critic_output = self.critic_wg.update_critic(batch)
+                    critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
+                    metrics.update(critic_output_metrics)
+                # self.actor_rollout_wg.save_checkpoint(
+                #     local_path="debug", hdfs_path=None, global_step=0, max_ckpt_to_keep=None
+                # )
+                
                 # implement critic warmup
                 if self.config.trainer.critic_warmup <= global_steps:
                     # update actor

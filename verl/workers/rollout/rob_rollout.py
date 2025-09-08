@@ -538,7 +538,7 @@ class RobHFRollout(BaseRollout):
         super().__init__()
         self.config = config
         self.module = module
-        self.max_steps = {   "libero_spatial": 512,   # max step length 193
+        self.max_steps = {   "libero_spatial": 256,   # max step length 193
                                     "libero_object": 512,    # max step length 254
                                     "libero_goal": 512,      # max step length 270
                                     "libero_10": 512,        # max step length 505
@@ -577,8 +577,8 @@ class RobHFRollout(BaseRollout):
 
     def generate_sequences(self, prompts):
         batch_size = prompts.batch.batch_size[0]
-        
-        if prompts.meta_info.get('n_samples') is None:
+        is_train = prompts.meta_info.get('is_train', False)
+        if not is_train:
             micro_batch_size = self.config.val_micro_batch_size if self.config.val_micro_batch_size is not None else 1
         else:
             micro_batch_size = self.config.get('micro_batch_size', batch_size)

@@ -210,6 +210,8 @@ def main(args):
                 ep_data_grp.create_dataset("dones", data=dones)
 
                 num_success += 1
+            else:
+                print()
 
             num_replays += 1
 

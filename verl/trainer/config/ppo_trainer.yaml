@@ -41,6 +41,7 @@ actor_rollout_ref:
     kl_loss_coef: 0.0
     kl_loss_target: 0.0
     kl_loss_type: kl
+    algo: grpo
     vla: ${actor_rollout_ref.model.vla}
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
@@ -135,6 +136,7 @@ critic:
     warmup_style: constant  # select from constant/cosine
     total_training_steps: -1  # must be override by program
   model:
+    vla: smolvla
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     path: ~/models/deepseek-llm-7b-chat
@@ -144,6 +146,7 @@ critic:
     use_remove_padding: ${actor_rollout_ref.model.use_remove_padding}
     enable_gradient_checkpointing: ${actor_rollout_ref.model.enable_gradient_checkpointing}
     fsdp_config:
+      model_dtype: float32
       param_offload: ${actor_rollout_ref.actor.fsdp_config.param_offload}
       grad_offload: ${actor_rollout_ref.actor.fsdp_config.grad_offload}
       optimizer_offload: ${actor_rollout_ref.actor.fsdp_config.optimizer_offload}

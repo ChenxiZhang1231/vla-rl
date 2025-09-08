@@ -618,7 +618,64 @@ class SmolVLAPolicy(PreTrainedModel):
             recompute_log_prob=recompute_log_prob
         )
         return actions, lang_tokens, lang_masks, return_dict
+    
+    def compute_values(
+        self, 
+        batch: dict[str, Tensor], 
+        noise: Tensor | None = None, 
+        use_sde: bool = False, 
+        return_logprob: bool = False,
+        recompute_log_prob: bool = False
+    ) -> Tensor:
 
+        batch = self._prepare_batch(batch)
+        self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
+
+        return_dict = self._get_compute_values(
+            batch,
+            noise,
+            use_sde=use_sde,
+            return_logprob=return_logprob,
+            recompute_log_prob=recompute_log_prob
+        )
+        return return_dict
+
+
+    def _get_compute_values(
+        self, 
+        batch: dict[str, Tensor], 
+        noise: Tensor | None = None, 
+        use_sde: bool = False, 
+        return_logprob: bool = False,
+        recompute_log_prob: bool = False,
+    ) -> Tensor:
+        for k in batch:
+            if k in self._queues and k != ACTION:
+                batch[k] = torch.stack(list(self._queues[k]), dim=1)
+                
+        if batch.get("lang_tokens", None) is None:
+            lang_tokens, lang_masks = self.prepare_language(batch)
+            is_train = True
+        else:
+            lang_tokens, lang_masks = batch["lang_tokens"], batch["lang_masks"]
+            # is_train = False
+            is_train = True
+            
+        images, img_masks = self.prepare_images(batch, is_train=is_train)
+        # state = self.prepare_state(batch)
+        state = None
+        x_t = batch['x_t']
+        t = batch['t']
+        x_next = batch['x_next']
+        finish_step = batch['finish_step']
+        images = images[0]
+        img_masks = img_masks[0]
+        B, S, _, H, W = images.shape
+        img_masks = img_masks.unsqueeze(-1).unsqueeze(-1).repeat(1, S, 1)
+        values = self.model.compute_values(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
+        return {"values": values}
+        
+    
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor], noise: Tensor | None = None) -> Tensor:
         """Select a single action given environment observations.
@@ -1605,3 +1662,69 @@ class VLAFlowMatching(nn.Module):
         mean = mean[..., :original_action_dim]
         std_dev_t = std_dev_t[..., :original_action_dim]
         return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint, mean, std_dev_t
+    
+    def compute_values(
+        self,
+        images,             # [B,S,3,H,W]
+        img_masks,          # [B,S,1]
+        lang_tokens,        # [B,S,L]
+        lang_masks,         # [B,S,L]
+        state,              # [B,S,1,Ds]
+        x_t,                # [B,S,K,50,Da]
+        t,                  # [B,S,K]
+        x_next,             # [B,S,K,50,Da]
+        finish_step,        # [B]
+    ):
+        """
+        返回:
+        logp_step  : [B,S,K]   —— 每个外层步、每个流步的 log-prob（已mask）
+        logp_outer : [B,S]     —— 每个外层步联合（对K求和，已mask）
+        logp_joint : [B]       —— 整条有效轨迹联合（对S再求和，已mask）
+        """
+        # ---------- 基本维度 ----------
+        device = lang_tokens.device
+        B, S, K, CH, D = x_t.shape  # CH=50, D=动作维
+        assert t.shape == (B, S, K)
+        assert x_next.shape == (B, S, K, CH, D)
+        dt = -1.0 / float(K)                       # 按你的设定：K个等步，t: 1→0
+        sqrt_abs_dt = math.sqrt(-dt)
+        dtype = torch.float32                      # 计算用 fp32 更稳
+
+        # ---------- 构建 prefix KV（按 [B*S] 批量） ----------
+        BS = B * S
+        # 展平外层时间 S 维
+        def _flat(x, keep_tail=0):
+            # 把 [B,S,...] → [B*S,...]
+            if keep_tail == 0:
+                return x.reshape(BS, *x.shape[2:])
+            elif keep_tail == 1:
+                return x.reshape(BS, x.shape[-1])
+            else:
+                raise ValueError
+
+        images_flat    = _flat(images)
+        img_masks_flat = _flat(img_masks)
+        lang_tokens_f  = _flat(lang_tokens)
+        lang_masks_f   = _flat(lang_masks)
+        state_flat     = _flat(state) if state is not None else None
+
+        x_t_flat    = x_t.reshape(BS * K, CH, D).to(device=device, dtype=dtype)
+        x_next_f    = x_next.to(device=device, dtype=dtype) # 保持原始形状，后面用
+        t_flat      = t.reshape(BS * K).to(device=device, dtype=dtype)
+        # breakpoint()
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            [images_flat], [img_masks_flat.squeeze(-1)], lang_tokens_f, lang_masks_f, state=state_flat
+        )
+        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+        outputs_embeds, past_key_values = self.vlm_with_expert.forward(
+            attention_mask=prefix_att_2d_masks,
+            position_ids=prefix_position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, None],
+            use_cache=self.config.use_cache,
+            fill_kv_cache=True,
+        )
+        state_vector = outputs_embeds[0][:, -1, :]
+        value = self.value_head(state_vector).squeeze(-1)
+        return value

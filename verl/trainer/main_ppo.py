@@ -128,7 +128,7 @@ class RobRewardManager():
         # valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len
         # s_fin  = (data.batch['finish_step'] // CH).view(B)
         # c_fin  = (data.batch['finish_step'] %  CH).view(B)
-        valid_response_length = data.batch['finish_step']
+        # valid_response_length = data.batch['finish_step']
        
         if 'acc' in data.batch:
             # the separated rewards have been logged; now we add format correctness back for reward shaping
@@ -199,7 +199,7 @@ def main_task(config):
     # define worker classes
     if config.actor_rollout_ref.actor.strategy == 'fsdp':
         assert config.actor_rollout_ref.actor.strategy == config.critic.strategy
-        from verl.workers.fsdp_workers import ActorRolloutRefWorker, CriticWorker, RobActorRolloutRefWorker
+        from verl.workers.fsdp_workers import ActorRolloutRefWorker, RobCriticWorker, RobActorRolloutRefWorker
         from verl.single_controller.ray import RayWorkerGroup
         ray_worker_group_cls = RayWorkerGroup
 
@@ -216,7 +216,7 @@ def main_task(config):
 
     role_worker_mapping = {
         Role.ActorRollout: ray.remote(RobActorRolloutRefWorker),
-        Role.Critic: ray.remote(CriticWorker),
+        Role.Critic: ray.remote(RobCriticWorker),
         Role.RefPolicy: ray.remote(RobActorRolloutRefWorker)
     }
 

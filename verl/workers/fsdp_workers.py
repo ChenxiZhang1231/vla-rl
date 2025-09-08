@@ -1270,6 +1270,259 @@ class ActorRolloutRefWorker(Worker):
 
 
 
+# from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
+
+# def dummy_reset_parameters(self):
+#     pass
+
+# LlamaRotaryEmbedding.reset_parameters = dummy_reset_parameters
+
+class RobCriticWorker(Worker):
+
+    def __init__(self, config):
+        super().__init__()
+        import torch.distributed
+        if not torch.distributed.is_initialized():
+            torch.distributed.init_process_group(backend="nccl")
+        self.config = config
+        self._is_offload_param = self.config.model.fsdp_config.param_offload
+        self._is_offload_grad = self.config.model.fsdp_config.grad_offload
+        self._is_offload_optimizer = self.config.model.fsdp_config.optimizer_offload
+
+        # normalize config
+        self.config.ppo_mini_batch_size //= torch.distributed.get_world_size()
+        self.config.ppo_micro_batch_size //= torch.distributed.get_world_size()
+
+    def _build_critic_model_optimizer(self, config):
+        # the following line is necessary
+        from verl.utils.model import LambdaLayer, print_model_size, squeeze
+        from verl.utils.torch_dtypes import PrecisionType
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, MixedPrecision, \
+            CPUOffload
+        from torch import optim
+
+        local_path = copy_local_path_from_hdfs(config.model.path)
+        # note that the tokenizer between actor and critic may be different. So override tokenizer info with actor info
+        # using random initialized model from any architecture. May not be the same as Actor.
+        # TODO: support loading critic weights from RM. Support using AutoModelForTokenClassification
+        from transformers import AutoTokenizer
+
+
+        # from omegaconf import OmegaConf
+        # override_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
+        # override_config_kwargs = {
+        #     'bos_token_id': self.tokenizer.bos_token_id,
+        #     'eos_token_id': self.tokenizer.eos_token_id,
+        #     'pad_token_id': self.tokenizer.pad_token_id,
+        # }
+        # override_config_kwargs.update(override_config)
+        # if self.rank == 0:
+        #     print(f'Critic overriding config {override_config_kwargs}')
+
+        torch_dtype = self.config.model.fsdp_config.get('model_dtype', 'fp32')
+        torch_dtype = PrecisionType.to_dtype(torch_dtype)
+
+        from transformers import AutoConfig, AutoModelForCausalLM
+        from torch import nn
+
+        trust_remote_code = False
+
+        init_context = get_init_weight_context_manager()
+        with init_context(), warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            from verl.utils.vla_utils.smolvla.configuration_smolvla import SmolVLAConfig
+            from verl.utils.vla_utils.smolvla.modeling_smolvla import SmolVLAPolicy
+            from lerobot.datasets.lerobot_dataset import LeRobotDatasetMetadata
+            from lerobot.datasets.utils import dataset_to_policy_features
+            from lerobot.configs.types import FeatureType
+            policy_cfg = SmolVLAConfig()
+            ds_meta = LeRobotDatasetMetadata(
+                "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+            )
+
+            logger.info('Loading SmolVLA...')
+            kwargs = {}
+            features = dataset_to_policy_features(ds_meta.features)
+            kwargs["dataset_stats"] = ds_meta.stats
+            policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
+            policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
+            kwargs["config"] = policy_cfg
+            # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
+            kwargs["pretrained_model_name_or_path"] = local_path
+            kwargs["device_map"] = {"": "cpu"}, 
+            kwargs["low_cpu_mem_usage"] = False
+            # actor_module = SmolVLAPolicy.from_pretrained(**kwargs)                    
+            # ckpt = safe_load_file(os.path.join(local_path, "model.safetensors"))
+            # missing, unexpected = actor_module.load_state_dict(ckpt, strict=False)
+            
+            # breakpoint()
+            # from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+            # with init_empty_weights():
+            #     actor_module = SmolVLAPolicy(policy_cfg, ds_meta.stats)
+            from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+            with init_empty_weights():
+                critic_module = SmolVLAPolicy(policy_cfg, ds_meta. stats)
+            critic_module = load_checkpoint_and_dispatch(
+                critic_module,
+                checkpoint=local_path,   # 目录（里有 model.safetensors 或 shard）
+                device_map={"": "cpu"},
+                dtype="float32",
+            )
+            
+            critic_module.model.value_head = nn.Linear(critic_module.model.vlm_with_expert.vlm.lm_head.in_features, 1, dtype=torch_dtype)
+
+            # some parameters may not in torch_dtype
+            critic_module.to(torch_dtype)
+
+            if config.model.get('enable_gradient_checkpointing', False):
+                critic_module.gradient_checkpointing_enable()
+        if self.rank == 0:
+            print_model_size(critic_module)
+
+        fsdp_config = self.config.model.fsdp_config
+        mixed_precision_config = fsdp_config.get('mixed_precision', None)
+        if mixed_precision_config is not None:
+            param_dtype = PrecisionType.to_dtype(mixed_precision_config.get('param_dtype', 'bf16'))
+            reduce_dtype = PrecisionType.to_dtype(mixed_precision_config.get('reduce_dtype', 'fp32'))
+            buffer_dtype = PrecisionType.to_dtype(mixed_precision_config.get('buffer_dtype', 'fp32'))
+        else:
+            param_dtype = torch.bfloat16
+            reduce_dtype = torch.float32
+            buffer_dtype = torch.float32
+
+        mixed_precision = MixedPrecision(param_dtype=param_dtype, reduce_dtype=reduce_dtype, buffer_dtype=buffer_dtype)
+
+        # auto_wrap_policy = get_fsdp_wrap_policy(module=critic_module, config=self.config.model.fsdp_config.wrap_policy)
+        if self.config.model.vla == "smolvla":
+            # auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None))
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_smolvla(critic_module, wrap_qkv_linears=True, is_critic=True)
+            # auto_wrap_policy = None
+        elif self.config.model.vla == "openvla-oft":
+            auto_wrap_policy = get_fsdp_wrap_policy_vla(module=critic_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
+        else:
+            raise ValueError()
+        
+        log_gpu_memory_usage('Before critic FSDP', logger=None)
+
+        critic_module = FSDP(critic_module,
+                            #  param_init_fn=init_fn,
+                             use_orig_params=True,
+                             auto_wrap_policy=auto_wrap_policy,
+                             device_id=torch.cuda.current_device(),
+                             sharding_strategy=ShardingStrategy.SHARD_GRAD_OP,
+                             mixed_precision=mixed_precision,
+                             limit_all_gathers=True,
+                             sync_module_states=True)
+
+        log_gpu_memory_usage('After critic FSDP', logger=None)
+
+        critic_optimizer = optim.AdamW(critic_module.parameters(),
+                                       lr=config.optim.lr,
+                                       betas=config.optim.get('betas', (0.9, 0.999)),
+                                       weight_decay=config.optim.get('weight_decay', 1e-2))
+
+        total_steps = config.optim.get('total_training_steps', 0)
+        num_warmup_steps_ratio = config.optim.get('lr_warmup_steps_ratio', 0.)
+        num_warmup_steps = int(num_warmup_steps_ratio * total_steps)
+
+        print(f'Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}')
+
+        from verl.utils.torch_functional import get_constant_schedule_with_warmup
+        critic_lr_scheduler = get_constant_schedule_with_warmup(optimizer=critic_optimizer,
+                                                                num_warmup_steps=num_warmup_steps)
+
+        return critic_module, critic_optimizer, critic_lr_scheduler
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def init_model(self):
+        # This is used to import external_lib into the huggingface systems
+        import_external_libs(self.config.model.get('external_lib', None))
+
+        from verl.workers.critic import RobDataParallelPPOCritic
+        self.critic_module_fsdp, self.critic_optimizer, self.critic_lr_scheduler = self._build_critic_model_optimizer(
+            self.config)
+        self.critic_module = self.critic_module_fsdp._fsdp_wrapped_module
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.critic_module_fsdp, offload_grad=self._is_offload_grad)
+        if self._is_offload_optimizer:
+            offload_fsdp_optimizer(optimizer=self.critic_optimizer)
+
+        self.critic = RobDataParallelPPOCritic(config=self.config,
+                                            critic_module=self.critic_module,
+                                            critic_optimizer=self.critic_optimizer)
+        torch.cuda.empty_cache()
+
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_values(self, data: DataProto):
+        data = data.to('cuda')
+
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.critic_module,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        micro_batch_size = self.config.ppo_micro_batch_size
+        data.meta_info['micro_batch_size'] = micro_batch_size
+        # data.meta_info['max_token_len'] = self.config.forward_max_token_len_per_gpu
+        # data.meta_info['use_dynamic_bsz'] = self.config.use_dynamic_bsz
+        values = self.critic.compute_values(data=data)
+        output = DataProto.from_dict(tensors={'values': values})
+        output = output.to('cpu')
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.critic_module, offload_grad=self._is_offload_grad)
+        torch.cuda.empty_cache()
+        return output
+
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def update_critic(self, data: DataProto):
+        data = data.to('cuda')
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.critic_module,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        if self._is_offload_optimizer:
+            load_fsdp_optimizer(optimizer=self.critic_optimizer, device_id=torch.cuda.current_device())
+        metrics = self.critic.update_critic(data=data)
+
+        self.critic_lr_scheduler.step()
+        lr = self.critic_lr_scheduler.get_last_lr()[0]
+        metrics['critic/lr(1e-4)'] = lr * 1e4
+
+        output = DataProto(batch=None, meta_info={'metrics': metrics})
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.critic_module, offload_grad=self._is_offload_grad)
+        if self._is_offload_optimizer:
+            offload_fsdp_optimizer(optimizer=self.critic_optimizer)
+        torch.cuda.empty_cache()
+        output = output.to('cpu')
+        return output
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def save_checkpoint(self, local_path, hdfs_path=None):
+        import torch
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.critic_module,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+
+        # TODO: support DCP and save sharded checkpoints
+        import torch.distributed
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
+        cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        with FSDP.state_dict_type(self.critic_module, StateDictType.SHARDED_STATE_DICT, cfg):
+            state_dict = self.critic_module.state_dict()
+        if self.rank == 0:
+            print(f'Saving critic checkpoint to {local_path}')
+            os.makedirs(local_path, exist_ok=True)
+            self.critic_module._fsdp_wrapped_module.save_pretrained(local_path, state_dict=state_dict)
+            self.tokenizer.save_pretrained(local_path)
+            if hdfs_path is not None:
+                print(f'Uploading critic checkpoint to {hdfs_path}')
+                hdfs_io.makedirs(hdfs_path, exist_ok=True)
+                hdfs_io.copy(src=local_path, dst=hdfs_path)
+
+        torch.distributed.barrier()
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.critic_module, offload_grad=self._is_offload_grad)
 
 class CriticWorker(Worker):
 
@@ -1478,7 +1731,6 @@ class CriticWorker(Worker):
         torch.distributed.barrier()
         if self._is_offload_param:
             offload_fsdp_param_and_grad(module=self.critic_module, offload_grad=self._is_offload_grad)
-
 
 class RewardModelWorker(Worker):
     """

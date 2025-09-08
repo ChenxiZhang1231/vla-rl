@@ -431,9 +431,17 @@ def tag_laynorm_vit(root: nn.Module):
     for name, m in root.named_modules():
         if name.endswith(("vision_model.post_layernorm")):
             setattr(m, "_fsdp_wrap_me", True)
+
+def tag_value_head(root: nn.Module):
+    name_list = []
+    for name, m in root.named_modules():
+        if name.endswith(("value_head")):
+            setattr(m, "_fsdp_wrap_me", True)
+            name_list.append(name)
+    print(name_list)
                 
                 
-def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is_lora: bool = False):
+def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is_critic: bool = False, is_lora: bool = False):
     """
     返回 (auto_wrap_policy, ignored_modules)
     - 只 wrap：语言塔 decoder block、视觉 ViT block、（可选）attention 子模块
@@ -444,6 +452,8 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     tag_text_embed_tokens(root_module)
     tag_action(root_module)
     tag_laynorm_vit(root_module)
+    if is_critic:
+        tag_value_head(root_module)
     policies = []
     
     def is_tagged(m: nn.Module) -> bool:
