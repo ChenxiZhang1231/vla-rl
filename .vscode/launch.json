@@ -32,6 +32,20 @@
           }
         },
         {
+          "name": "Debug Process AgiBots",
+          "type": "debugpy",
+          "request": "launch",
+          // "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
+          "program": "world_model/data_process/agibots_to_json.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--output_dir=/inspire/ssd/project/robotsimulation/public/data/debug",
+            "--jobs=1"
+          ],
+          "env": {
+          }
+        },
+        {
             "name": "Debug Lerobot Train",
             "type": "python",
             "request": "launch",
