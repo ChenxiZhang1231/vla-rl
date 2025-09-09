@@ -32,7 +32,7 @@
           }
         },
         {
-          "name": "Debug Process AgiBots",
+          "name": "Debug Process AgiBots 2 Json",
           "type": "debugpy",
           "request": "launch",
           // "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
@@ -43,6 +43,28 @@
             "--jobs=1"
           ],
           "env": {
+          }
+        },
+        {
+          "name": "Debug Process LIBERO 2 Json",
+          "type": "debugpy",
+          "request": "launch",
+          // "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
+          "program": "world_model/data_process/libero_to_json.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--dataset_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed/libero_10_no_noops",
+            "--libero_task_suite=libero_10",
+            "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/debug_data",
+            // "--output_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo",
+            "--jobs=1"
+          ],
+          "env": {
+            // "MUJOCO_GL": "egl",
+            // "MUJOCO_GL": "glx",
+            "MUJOCO_GL": "osmesa",
+            // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+            
           }
         },
         {
