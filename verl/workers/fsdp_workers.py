@@ -21,6 +21,7 @@ import warnings
 import ray
 import torch
 import torch.distributed
+import numpy as np
 from omegaconf import DictConfig, open_dict
 from transformers import AutoModelForCausalLM
 from safetensors.torch import load_file as safe_load_file
@@ -32,13 +33,14 @@ from verl import DataProto
 from verl.utils.model import compute_position_id_with_mask
 from verl.utils.fs import copy_local_path_from_hdfs
 from verl.utils.fsdp_utils import (
-    get_fsdp_wrap_policy, 
+    get_fsdp_wrap_policy,
     load_fsdp_grad, 
     offload_fsdp_grad, 
     init_fn, 
     get_init_weight_context_manager, 
     get_fsdp_wrap_policy_vla,
     get_fsdp_wrap_policy_smolvla,
+    get_fsdp_wrap_policy_wm,
 )
 from verl.utils.fsdp_utils import offload_fsdp_optimizer, offload_fsdp_param_and_grad, load_fsdp_optimizer, load_fsdp_param_and_grad
 from verl.utils.import_utils import import_external_libs
@@ -138,6 +140,8 @@ class RobActorRolloutRefWorker(Worker):
             self.config.rollout.log_prob_micro_batch_size //= self.device_mesh.shape[0]
         if self._is_ref:
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.shape[0]
+        
+        self.use_world_model = self.config.world_model.model_path != ""
 
     def _build_model_optimizer(self,
                                model_path,
@@ -434,6 +438,113 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('After actor optimizer init', logger=logger)
 
         return actor_module_fsdp, actor_optimizer, actor_lr_scheduler, actor_model_config
+    
+    
+    def _build_model_optimizer_wm(self,
+                               model_path,
+                               fsdp_config,
+                               optim_config,
+                               override_model_config,
+                               enable_gradient_checkpointing=False,
+                               trust_remote_code=False):
+        from verl.utils.model import print_model_size, update_model_config
+        from verl.utils.torch_dtypes import PrecisionType
+        from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, MixedPrecision, \
+            CPUOffload
+        from torch import optim
+        log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
+        local_path = copy_local_path_from_hdfs(model_path)
+
+        torch_dtype = fsdp_config.get('model_dtype', None)
+        # torch_dtype = None
+        if torch_dtype is None:
+            torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
+            # torch_dtype = torch_dtype
+        else:
+            torch_dtype = PrecisionType.to_dtype(torch_dtype)
+        
+        # init world model here
+        # from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+        # with init_empty_weights():
+        #     actor_module = SmolVLAPolicy(policy_cfg, ds_meta. stats)
+        # actor_module = load_checkpoint_and_dispatch(
+        #     actor_module,
+        #     checkpoint=local_path,   # 目录（里有 model.safetensors 或 shard）
+        #     device_map={"": "cpu"},
+        #     dtype="float32",
+        # )
+        # actor_module.to(torch_dtype)
+        from verl.utils.wm_utils import DummyWorldModel
+        from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+        wm_module = DummyWorldModel({"debug": True})
+        wm_module.to(torch_dtype)
+
+        if self._is_lora:
+            raise
+                
+                
+        torch.distributed.barrier()
+        def _find_meta_or_zero_storage(mod):
+            bad = []
+            for n, p in mod.named_parameters():
+                if getattr(p, "is_meta", False):
+                    bad.append(("META", n, tuple(p.shape)))
+                    continue
+                try:  # 2.1+ 才有 untyped_storage
+                    if p.numel() > 0 and p.untyped_storage().nbytes() == 0:
+                        bad.append(("ZERO", n, tuple(p.shape)))
+                except Exception:
+                    pass
+            return bad
+        bad = _find_meta_or_zero_storage(wm_module)
+        assert not bad, f"Found meta/zero-storage params before FSDP: {bad[:5]} (total={len(bad)})"
+
+        if self.rank == 0:
+            print_model_size(wm_module)
+        # breakpoint()
+        log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
+        # We wrap FSDP for rollout as well
+        mixed_precision_config = fsdp_config.get('mixed_precision', None)
+        if mixed_precision_config is not None:
+            param_dtype = PrecisionType.to_dtype(mixed_precision_config.get('param_dtype', 'bf16'))
+            reduce_dtype = PrecisionType.to_dtype(mixed_precision_config.get('reduce_dtype', 'fp32'))
+            buffer_dtype = PrecisionType.to_dtype(mixed_precision_config.get('buffer_dtype', 'fp32'))
+        else:
+            param_dtype = torch.bfloat16
+            reduce_dtype = torch.float32
+            buffer_dtype = torch.float32
+
+        mixed_precision = MixedPrecision(param_dtype=param_dtype, reduce_dtype=reduce_dtype, buffer_dtype=buffer_dtype)
+
+        if self._is_ref:
+            mixed_precision = None
+        
+        auto_wrap_policy = get_fsdp_wrap_policy_wm(wm_module)
+
+        print(f'wrap_policy: {auto_wrap_policy}')
+
+        sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
+
+        # TODO: add transformer policy
+        wm_module_fsdp = FSDP(
+            wm_module,
+            use_orig_params=True,
+            auto_wrap_policy=auto_wrap_policy,
+            device_id=torch.cuda.current_device(),
+            sharding_strategy=sharding_strategy,  # zero3
+            mixed_precision=mixed_precision,
+            sync_module_states=True,
+            limit_all_gathers=True,
+            device_mesh=self.device_mesh)
+
+        log_gpu_memory_usage('After Actor FSDP init', logger=logger)
+
+        wm_optimizer = None
+        wm_lr_scheduler = None
+
+        log_gpu_memory_usage('After actor optimizer init', logger=logger)
+        return wm_module_fsdp
 
     def _build_rollout(self):
         if self.config.rollout.name == 'hf':
@@ -537,7 +648,20 @@ class RobActorRolloutRefWorker(Worker):
 
             OmegaConf.set_struct(self.config.ref, True)
             self.ref_policy = RobDataParallelPPOActor(config=self.config.ref, actor_module=self.ref_module_fsdp)
-
+        
+        if self._is_rollout:
+            if self.use_world_model:
+                self.world_model_fsdp = self._build_model_optimizer_wm(model_path=self.config.world_model.model_path,
+                                                                fsdp_config=self.config.world_model.fsdp_config,
+                                                                optim_config=None,
+                                                                override_model_config=override_model_config,
+                                                                trust_remote_code=True) #self.config.model.get('trust_remote_code', False)
+                self.world_model = self.world_model_fsdp
+                self.rollout.world_model = self.world_model
+                self.rollout.use_world_model = True
+            else:
+                self.rollout.use_world_model = False
+        
         torch.cuda.synchronize()
         torch.distributed.barrier()
         torch.cuda.empty_cache()
@@ -638,7 +762,6 @@ class RobActorRolloutRefWorker(Worker):
         with self.sharding_manager:
             log_gpu_memory_usage('After entering sharding manager', logger=logger)    
             prompts = self.sharding_manager.preprocess_data(prompts)
-            # breakpoint()
             output = self.rollout.generate_sequences(prompts=prompts)
             log_gpu_memory_usage('After rollout generation', logger=logger)
 
@@ -825,6 +948,7 @@ class RobActorRolloutRefWorker(Worker):
         if self._is_offload_param:
             offload_fsdp_param_and_grad(module=self.actor_module_fsdp, offload_grad=self._is_offload_grad)
 
+        
 
 class ActorRolloutRefWorker(Worker):
     """
@@ -2160,3 +2284,4 @@ class PRIMERewardModelWorker(Worker):
         torch.distributed.barrier()
         if self._is_offload_param:
             offload_fsdp_param_and_grad(module=self.reward_module, offload_grad=self._is_offload_grad)
+

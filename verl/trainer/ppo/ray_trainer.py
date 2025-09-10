@@ -377,6 +377,7 @@ class RayTrainer(object):
         self.resource_pool_manager = resource_pool_manager
         self.use_reference_policy = Role.RefPolicy in role_worker_mapping and config.algorithm.kl_ctrl.kl_coef > 0
         self.use_rm = Role.RewardModel in role_worker_mapping
+        self.use_world_model = config.actor_rollout_ref.world_model.model_path != ""
         self.ray_worker_group_cls = ray_worker_group_cls
 
         # define KL control
@@ -402,6 +403,7 @@ class RayTrainer(object):
         self.train_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
                                             num_trials_per_task=self.config.data.num_trials_per_task,
                                             libero_raw_data_dir=self.config.data.libero_raw_data_dir,
+                                            use_world_model=self.use_world_model,
                                             train_val ="train")
         self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
                                            batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
@@ -533,7 +535,7 @@ class RayTrainer(object):
                                                   config=self.config.actor_rollout_ref,
                                                   role='ref')
             self.resource_pool_to_cls[resource_pool]['ref'] = ref_policy_cls
-
+    
         # create a reward model if reward_fn is None
         if self.use_rm:
             # we create a RM here
@@ -632,7 +634,7 @@ class RayTrainer(object):
                             newbatch = DataProto.concat([buffer_batch, newbatch])
                             buffer_batch = []
                         gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id', 'init_state'],
-                                                    non_tensor_batch_keys={"task_suite_name"},
+                                                    non_tensor_batch_keys={"task_suite_name", "task_lang"},
                                                     meta_info_keys={})
  
                         newbatch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(newbatch.batch))],

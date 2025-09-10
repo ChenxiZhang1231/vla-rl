@@ -17,6 +17,7 @@ SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vl
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
+DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
 NUM_GPUS=4
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
@@ -25,6 +26,7 @@ ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 
 HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
+    data.libero_raw_data_dir=$DATASET_PATH \
     data.num_trials_per_task=50 \
     data.n_samples=4 \
     data.filter_accuracy=True \
@@ -80,6 +82,7 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size=4 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     actor_rollout_ref.ref.vla=$VLA_NAME \
+    actor_rollout_ref.world_model.model_path="debugwm" \
     trainer.logger=['console','tensorboard'] \
     trainer.project_name=$PROJECT_NAME \
     trainer.experiment_name=$EXPERIMENT_NAME \

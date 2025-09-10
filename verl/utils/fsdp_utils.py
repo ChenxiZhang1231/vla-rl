@@ -106,6 +106,9 @@ def get_init_weight_context_manager(use_meta_tensor=True):
     return init_context
 
 
+def get_fsdp_wrap_policy_wm(module):
+    return None
+
 # Copyright 2020-present the HuggingFace Inc. team.
 # Adapted from https://github.com/huggingface/transformers/src/transformers/trainer.py
 def get_fsdp_wrap_policy(module, config=None):

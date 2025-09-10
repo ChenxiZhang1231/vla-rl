@@ -32,7 +32,7 @@ import verl.utils.torch_functional as verl_F
 from codetiming import Timer
 from flash_attn.bert_padding import pad_input, unpad_input, rearrange, index_first_axis
 
-__all__ = ['RobDataParallelPPOActor']
+__all__ = ['RobDataParallelPPOActor', 'RobDataParallelPPOActorWM']
 
 
 
@@ -54,7 +54,10 @@ class RobDataParallelPPOActor(BasePPOActor):
         self.ulysses_sequence_parallel_size = self.config.ulysses_sequence_parallel_size
         self.use_ulysses_sp = False #self.ulysses_sequence_parallel_size > 1
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
-       
+
+        self.use_world_model = False
+        
+        
     def process_tensor(self, tensor, pad_id):
         mask = tensor != pad_id
         if not torch.all(mask == mask[0:1], dim=1).all():
@@ -414,7 +417,6 @@ class RobDataParallelPPOActor(BasePPOActor):
             grad_norm = self.actor_module.clip_grad_norm_(max_norm=self.config.grad_clip)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.actor_module.parameters(), max_norm=self.config.grad_clip)
-        # breakpoint()
         self.actor_optimizer.step()
         return grad_norm
 
@@ -447,7 +449,8 @@ class RobDataParallelPPOActor(BasePPOActor):
         if self.config.vla == 'smolvla':
             select_keys = ['observation.images.image', 'observation.images.image_is_pad',
                         #    'observation.images.wrist_image', 'observation.images.wrist_image_is_pad', 
-                           'observation.state', 'observation.state_is_pad', 'action_tensor', 
+                        #    'observation.state', 'observation.state_is_pad', 
+                           'action_tensor', 
                            "x_t", "t", "x_next",
                            "lang_tokens", "lang_masks", "finish_step"]
         else:
@@ -511,7 +514,8 @@ class RobDataParallelPPOActor(BasePPOActor):
         if self.config.vla == 'smolvla':
             select_keys = ['observation.images.image', 'observation.images.image_is_pad',
                         #    'observation.images.wrist_image', 'observation.images.wrist_image_is_pad', 
-                           'observation.state', 'observation.state_is_pad', 'action_tensor', 
+                        #    'observation.state', 'observation.state_is_pad', 
+                           'action_tensor', 
                            "x_t", "t", "x_next",
                            "lang_tokens", "lang_masks", "finish_step",
                            'old_log_probs', 'advantages',]
@@ -863,3 +867,47 @@ class RobDataParallelPPOActor(BasePPOActor):
         torch.distributed.barrier()
         torch.cuda.empty_cache()
         return metrics
+    
+    
+    
+class RobDataParallelPPOActorWM(BasePPOActor):
+
+    def __init__(
+        self,
+        config,
+        wm_module: nn.Module,
+        wm_optimizer: torch.optim.Optimizer = None,
+    ):
+        """When optimizer is None, it is Reference Policy"""
+        super().__init__(config)
+        self.wm_module = wm_module
+        self.wm_optimizer = wm_optimizer
+        self.use_remove_padding = self.config.get('use_remove_padding', False)
+
+    def compute_log_prob(self, data: DataProto):
+        """Compute logits given a batch of data.
+
+        Args:
+            data (DataProto): a batch of data represented by DataProto. It must contain key ```input_ids```,
+                ```attention_mask``` and ```position_ids```.
+
+        Returns:
+            DataProto: a DataProto containing the key ```log_probs```
+
+
+        """
+        pass
+
+    def update_policy(self, data: DataProto):
+        """Update the policy with an iterator of DataProto
+
+        Args:
+            data (DataProto): an iterator over the DataProto that returns by
+                ```make_minibatch_iterator```
+
+        Returns:
+            Dict: a dictionary contains anything. Typically, it contains the statistics during updating the model
+            such as ```loss```, ```grad_norm```, etc,.
+
+        """
+        pass

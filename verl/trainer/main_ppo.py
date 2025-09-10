@@ -217,7 +217,7 @@ def main_task(config):
     role_worker_mapping = {
         Role.ActorRollout: ray.remote(RobActorRolloutRefWorker),
         Role.Critic: ray.remote(RobCriticWorker),
-        Role.RefPolicy: ray.remote(RobActorRolloutRefWorker)
+        Role.RefPolicy: ray.remote(RobActorRolloutRefWorker),
     }
 
     global_pool_id = 'global_pool'

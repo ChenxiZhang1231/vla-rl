@@ -62,12 +62,14 @@ class LIBERO_Dataset(Dataset):
     def __init__(self,
                  task_suite_name,
                  num_trials_per_task = 50,
+                 use_world_model = False,
                  train_val = "train",
                  libero_raw_data_dir = "",
                  ):
         
         self.task_suite_name = task_suite_name  
         self.num_trials_per_task = num_trials_per_task  
+        self.use_world_model = use_world_model
         self.train_val = train_val
         self.libero_raw_data_dir = libero_raw_data_dir
         self._read_files_and_tokenize()
@@ -82,23 +84,36 @@ class LIBERO_Dataset(Dataset):
             for task_id in range(num_tasks_in_suite):
                 if self.train_val == "train":
                     if self.libero_raw_data_dir == "":
+                        task = task_suite.get_task(task_id)
                         trials_range = list(range(0, int(self.num_trials_per_task))) 
                         init_state_list = []
                         initial_states = task_suite.get_task_init_states(task_id)
+                        task_name_list = []
                         for i in trials_range:
                             initial_state = initial_states[i]
                             init_state_list.append(initial_state) 
+                            task_name_list.append(task.language)
                     else:
                         task = task_suite.get_task(task_id)
                         orig_data_path = os.path.join(self.libero_raw_data_dir, self.task_suite_name, f"{task.name}_demo.hdf5")
                         orig_data_file = h5py.File(orig_data_path, "r")
                         orig_data = orig_data_file["data"]
-                        init_state_list = []
-                        for i in range(len(orig_data.keys())):
-                            demo_data = orig_data[f"demo_{i}"]
-                            orig_states = demo_data["states"][()]
-                            init_state = orig_states[0]
-                            init_state_list.append(init_state)
+                        init_state_list, task_name_list = [], []
+                        if not self.use_world_model:
+                            for i in range(len(orig_data.keys())):
+                                demo_data = orig_data[f"demo_{i}"]
+                                orig_states = demo_data["states"][()]
+                                init_state = orig_states[0]
+                                init_state_list.append(init_state)
+                                task_name_list.append(task.language)
+                        else:
+                            for i in range(len(orig_data.keys())):
+                                demo_data = orig_data[f"demo_{i}"]
+                                orig_states = demo_data["states"][()]
+                                init_state = demo_data['obs']['agentview_rgb'][0]
+                                init_state_list.append(init_state)
+                                task_name_list.append(task.language)
+                        
                         trials_range = list(range(0, len(orig_data.keys())))
                     
                 elif self.train_val == "valid":
@@ -115,8 +130,10 @@ class LIBERO_Dataset(Dataset):
                         "task_suite_name": self.task_suite_name,
                         "task_id": torch.tensor(task_id, dtype=torch.int64).unsqueeze(0),
                         "trial_id": torch.tensor(i, dtype=torch.int64).unsqueeze(0),
-                        "init_state": torch.from_numpy(init_state_list[i])
+                        "init_state": torch.from_numpy(init_state_list[i]),
                     }
+                    if self.train_val == "train":
+                        data.update({"task_lang": task_name_list[i]})
                     dataframes.append(data)
             self.dataframe = dataframes
             print(f'dataset len: {len(self.dataframe)}')

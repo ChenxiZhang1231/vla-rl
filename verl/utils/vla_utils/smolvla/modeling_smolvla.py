@@ -785,13 +785,13 @@ class SmolVLAPolicy(PreTrainedModel):
 
     def prepare_language(self, batch) -> tuple[Tensor, Tensor]:
         """Tokenize the text input"""
-        device = batch[OBS_STATE].device
+        device = batch['observation.images.image'].device
         tasks = batch["task"]
         if isinstance(tasks, str):
             tasks = [tasks]
 
         if len(tasks) == 1:
-            tasks = [tasks[0] for _ in range(batch[OBS_STATE].shape[0])]
+            tasks = [tasks[0] for _ in range(batch['observation.images.image'].shape[0])]
 
         tasks = [task if task.endswith("\n") else f"{task}\n" for task in tasks]
 

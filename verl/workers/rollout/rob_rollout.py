@@ -284,10 +284,7 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
-    # initial_states = task_suite.get_task_init_states(task_id)
-    # initial_state = initial_states[trial_id]
-    
-    
+
     env = None
     while True:
         os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
@@ -313,7 +310,7 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
     t = 0
     valid_images = []
     while t < config.num_steps_wait:
-        obs, _, _, _ = env.step(get_libero_dummy_action(config.model_family))
+        obs, _, done, _ = env.step(get_libero_dummy_action(config.model_family))
         t += 1
         
     if is_valid:
@@ -331,7 +328,8 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
         'complete': False,
         'finish_step': 0
     })
-    
+    obs_global = obs
+    done_global = done
     active = True
     complete = False
     finish_step = 0
@@ -352,6 +350,8 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
             # obs, reward, done, info = env.step(inverted_action.tolist())
             try:
                 obs, reward, done, info = env.step(inverted_action.tolist())
+                # obs = obs_global
+                # done = done_global
             except Exception as e:
                 print(f"!!!!!! [Worker {os.getpid()}] CRASHED IN ENV.STEP !!!!!!")
                 print(f"Action that caused crash: {inverted_action.tolist()}")
@@ -549,7 +549,6 @@ class RobHFRollout(BaseRollout):
         else:
             self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
         self.vla_preprocess()
-        
         #oft add
         # unnorm_key=config.unnorm_key
         # if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
@@ -585,7 +584,10 @@ class RobHFRollout(BaseRollout):
         num_chunks = max(batch_size // micro_batch_size, 1)
         batch_prompts = prompts.chunk(chunks=num_chunks)
         if self.config.vla == "smolvla":
-            output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+            if self.use_world_model and is_train:
+                output = [self._generate_minibatch_smolvla_wm(p) for p in batch_prompts]
+            else:
+                output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
             output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
@@ -664,9 +666,10 @@ class RobHFRollout(BaseRollout):
         
         batchdata = {"observation.images.image":[], 
                      "observation.images.image_is_pad": [],
-                     "observation.state":[], 
-                     "observation.state_is_pad": [],
                      "task": []}  
+        if "state" in inputs[0].keys():
+            batchdata["observation.state"] = []
+            batchdata["observation.state_is_pad"] = []
         if "wrist_image" in inputs[0].keys():
             batchdata["observation.images.wrist_image"] = []
             batchdata["observation.images.wrist_image_is_pad"] = []
@@ -696,16 +699,18 @@ class RobHFRollout(BaseRollout):
                 batchdata["observation.images.wrist_image"].append(wrist_image_tensor) 
                 batchdata["observation.images.wrist_image_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
             
-            state_tensor = torch.tensor(input['state']).unsqueeze(0).to(torch.bfloat16)
-            batchdata["observation.state"].append(state_tensor)
-            batchdata["observation.state_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
+            if "state" in input.keys():
+                state_tensor = torch.tensor(input['state']).unsqueeze(0).to(torch.bfloat16)
+                batchdata["observation.state"].append(state_tensor)
+                batchdata["observation.state_is_pad"].append(torch.tensor([0.]).to(torch.bfloat16))
         
         device = torch.device('cuda') 
         
         batchdata["observation.images.image"] = torch.stack([x for x in batchdata["observation.images.image"]]).to(device)
         batchdata["observation.images.image_is_pad"] = torch.stack([x for x in batchdata["observation.images.image_is_pad"]]).to(device)
-        batchdata["observation.state"] = torch.stack([x for x in batchdata["observation.state"]]).to(device)
-        batchdata["observation.state_is_pad"] = torch.stack([x for x in batchdata["observation.state_is_pad"]]).to(device)
+        if "state" in input.keys():
+            batchdata["observation.state"] = torch.stack([x for x in batchdata["observation.state"]]).to(device)
+            batchdata["observation.state_is_pad"] = torch.stack([x for x in batchdata["observation.state_is_pad"]]).to(device)
         if "wrist_image" in input.keys():
             batchdata["observation.images.wrist_image"] = torch.stack([x for x in batchdata["observation.images.wrist_image"]]).to(device)
             batchdata["observation.images.wrist_image_is_pad"] = torch.stack([x for x in batchdata["observation.images.wrist_image_is_pad"]]).to(device)
@@ -1184,6 +1189,124 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(batch, batch_size=batch_size)
         return DataProto(batch=output_batch)
     
+    def _generate_minibatch_smolvla_wm(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        task_lang = np.repeat(prompts.non_tensor_batch['task_lang'], n_samples)
+        task_descriptions = [name for name in task_lang]
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_train = meta_info.get('is_train', False)
+        current_obs_batch_np = init_state.cpu().numpy()
+        
+
+        task_records = []
+        for idx in range(batch_size):
+            task_records.append({
+                "active": True,
+                "complete": False,  # 在World Model中，'complete'通常只在达到max_steps时为True
+                "finish_step": 0,
+                "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}"
+            })
+            
+        valid_video = defaultdict(list)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            
+            if not active_indices:
+                break
+            
+            inputs = [self._obs_to_input(obs) for obs in current_obs_batch_np]
+            
+            vla_input = self.process_input_smolvla(inputs, task_descriptions)
+            vla_input.update(meta_info)
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions_batch = vla_output["action"]
+            
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions_batch
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            if self.world_model is None:
+                raise ValueError("World Model Worker Group has not been set!")
+            next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)
+            
+            # breakpoint()
+            current_obs_batch_np = next_obs_batch_np
+            step += self.config.action_chunks_len
+            
+            for r in task_records:
+                if r['active']:
+                    r['finish_step'] = step
+                    if r['finish_step'] >= max_steps:
+                        r['active'] = False
+                        r['complete'] = True 
+                                
+        torch.cuda.empty_cache()
+        if is_valid:
+            pass 
+        
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                # "observation.state":[], 
+                # "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": []
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                #   "observation.state", "observation.state_is_pad", 
+                  "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete"] = []
+        batch["finish_step"] = []
+        
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
     @torch.no_grad()
     def _generate_one_step(self, prompts: dict):
         if self.config.vla == "openvla-oft":
@@ -1368,23 +1491,27 @@ class RobHFRollout(BaseRollout):
         return batch
 
     def _obs_to_input(self, obs):
-        
-        if self.config.num_images_in_input > 1:
+        if self.use_world_model:
             return {
-                "full_image": get_libero_image(obs, 224),
-                "wrist_image": get_libero_wrist_image(obs, 224),
-                "state": np.concatenate([
-                    obs["robot0_eef_pos"],
-                    quat2axisangle(obs["robot0_eef_quat"]),
-                    obs["robot0_gripper_qpos"]
-                ])
+                "full_image": obs,
             }
         else:
-            return {
-                "full_image": get_libero_image(obs, 224),
-                "state": np.concatenate([
-                    obs["robot0_eef_pos"],
-                    quat2axisangle(obs["robot0_eef_quat"]),
-                    obs["robot0_gripper_qpos"]
-                ])
-            }
+            if self.config.num_images_in_input > 1:
+                return {
+                    "full_image": get_libero_image(obs, 224),
+                    "wrist_image": get_libero_wrist_image(obs, 224),
+                    "state": np.concatenate([
+                        obs["robot0_eef_pos"],
+                        quat2axisangle(obs["robot0_eef_quat"]),
+                        obs["robot0_gripper_qpos"]
+                    ])
+                }
+            else:
+                return {
+                    "full_image": get_libero_image(obs, 224),
+                    "state": np.concatenate([
+                        obs["robot0_eef_pos"],
+                        quat2axisangle(obs["robot0_eef_quat"]),
+                        obs["robot0_gripper_qpos"]
+                    ])
+                }

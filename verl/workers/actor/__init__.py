@@ -15,6 +15,10 @@
 from .base import BasePPOActor
 from .dp_actor import DataParallelPPOActor
 from .dp_prime import DataParallelPRIME
-from .dp_rob import RobDataParallelPPOActor
+from .dp_rob import RobDataParallelPPOActor, RobDataParallelPPOActorWM
 
-__all__ = ["BasePPOActor", "DataParallelPPOActor", "DataParallelPRIME","RobDataParallelPPOActor"]
+__all__ = ["BasePPOActor", 
+           "DataParallelPPOActor", 
+           "DataParallelPRIME", 
+           "RobDataParallelPPOActor",
+           "RobDataParallelPPOActorWM"]
