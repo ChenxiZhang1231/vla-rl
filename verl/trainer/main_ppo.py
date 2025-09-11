@@ -20,6 +20,9 @@ import os
 import statistics
 from functools import partial
 
+
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from verl import DataProto
 import torch
 from verl.utils.reward_score import gsm8k, math, countdown, multiply, logic

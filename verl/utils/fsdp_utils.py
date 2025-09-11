@@ -20,6 +20,7 @@ from torch.distributed.fsdp.wrap import (
     lambda_auto_wrap_policy,
 )
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import CheckpointWrapper
 from contextlib import contextmanager, nullcontext
 from packaging import version
 import torch
@@ -104,10 +105,6 @@ def get_init_weight_context_manager(use_meta_tensor=True):
     else:
         init_context = cpu_init_weights
     return init_context
-
-
-def get_fsdp_wrap_policy_wm(module):
-    return None
 
 # Copyright 2020-present the HuggingFace Inc. team.
 # Adapted from https://github.com/huggingface/transformers/src/transformers/trainer.py
@@ -482,7 +479,43 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy, None
 
+def tag_action_embedder(root: nn.Module):
+    name_list = []
+    for name, m in root.named_modules():
+        if ("action_embedder_B_D_agi" in name) \
+            or ("action_embedder_B_3D_agi" in name) \
+            or ("x_embedder" in name) \
+            or ("t_embedder" in name) \
+            or ("t_embedding_norm" in name):
+            # or ("blocks" in name):
+            setattr(m, "_fsdp_wrap_me", True)
+            name_list.append(name)
+        else:
+            if isinstance(m, CheckpointWrapper):
+                setattr(m, "_fsdp_wrap_me", True)
+            name_list.append(name)
+            
+    # print(name_list)
+    
+def get_fsdp_wrap_policy_wm(root_module):
+    
+    tag_action_embedder(root_module)
+    policies = []
+    
+    def is_tagged(m: nn.Module) -> bool:
+        return getattr(m, "_fsdp_wrap_me", False)
+    tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    policies.append(tag_policy)
 
+    # from world_model.ActionWorldModel.cosmos_predict2.models.text2image_dit import Block
+    # module_classes_to_wrap = {
+    #     Block
+    # }
+    # module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    # policies.append(module_policy)
+    
+    auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+    return auto_wrap_policy
 
 def offload_fsdp_grad(module):
     for _, param in module.named_parameters():

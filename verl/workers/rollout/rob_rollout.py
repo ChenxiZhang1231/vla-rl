@@ -1189,6 +1189,13 @@ class RobHFRollout(BaseRollout):
         output_batch = TensorDict(batch, batch_size=batch_size)
         return DataProto(batch=output_batch)
     
+    def save_obs_png(self, current_obs_batch_np, save_path = "stitched_observations_grid.png"):
+        row1 = np.concatenate((current_obs_batch_np[0], current_obs_batch_np[1]), axis=1)
+        row2 = np.concatenate((current_obs_batch_np[2], current_obs_batch_np[3]), axis=1)
+        grid_image_np = np.concatenate((row1, row2), axis=0)
+        grid_image_pil = Image.fromarray(grid_image_np)
+        grid_image_pil.save(save_path)
+
     def _generate_minibatch_smolvla_wm(self, prompts):
         # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
         self.module.eval()
@@ -1219,10 +1226,18 @@ class RobHFRollout(BaseRollout):
         valid_video = defaultdict(list)
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
-        
+        if is_valid:
+            # current_obs_batch_np 的形状是 [B, H, W, 3]
+            # 我们需要把它拆开，存到每个任务对应的视频列表中
+            for idx in range(batch_size):
+                task_file = task_records[idx]['task_file_name']
+                # 从批次中取出第 idx 帧图像，并进行上下翻转（如果需要的话，这模仿了原函数的行为）
+                img = current_obs_batch_np[idx]  # [::-1, :, :] 
+                valid_video[task_file].append(img)
         
         step = 0
         vla_history = []
+        trajectory_video_batch = [current_obs_batch_np]
         while step < max_steps:
             active_indices = [i for i, r in enumerate(task_records) if r['active']]
             
@@ -1235,7 +1250,7 @@ class RobHFRollout(BaseRollout):
             vla_input.update(meta_info)
             vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
             actions_batch = vla_output["action"]
-            
+            breakpoint()
             
             step_data = vla_input.copy()
             step_data["action"] = actions_batch
@@ -1250,11 +1265,23 @@ class RobHFRollout(BaseRollout):
             vla_history.append(step_data)
             if self.world_model is None:
                 raise ValueError("World Model Worker Group has not been set!")
-            next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)
-            
+            next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)  # B, chunk_size, H, W, C
             # breakpoint()
-            current_obs_batch_np = next_obs_batch_np
+            # current_obs_batch_np = next_obs_batch_np
+            current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
+
             step += self.config.action_chunks_len
+            trajectory_video_batch.append(next_obs_batch_np)
+
+            if is_valid:
+                num_frames_in_chunk = next_obs_batch_np.shape[1]
+                
+                for idx in range(batch_size):
+                    task_file = task_records[idx]['task_file_name']
+                    for f_idx in range(num_frames_in_chunk):
+                        # 从批次中取出对应的单帧图像，并进行上下翻转
+                        img = next_obs_batch_np[idx, f_idx, :, :, :]  #[::-1, :, :]
+                        valid_video[task_file].append(img)
             
             for r in task_records:
                 if r['active']:
@@ -1265,7 +1292,25 @@ class RobHFRollout(BaseRollout):
                                 
         torch.cuda.empty_cache()
         if is_valid:
-            pass 
+            for task_file, images in valid_video.items():
+                complete_flags = [r['complete'] for r in task_records if r['task_file_name'] == task_file]
+                complete = complete_flags[0] if complete_flags else False
+                
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete
+                )
+            initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
+            video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
+            full_trajectory_video = np.concatenate(video_chunks, axis=1)
+            
+            self.world_model.save_trajectory_grid_image(
+                full_trajectory_video, 
+                f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
+            )
         
         self.module.train()
         batch = {"observation.images.image":[], 

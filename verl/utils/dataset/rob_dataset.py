@@ -28,6 +28,8 @@ from verl.utils.fs import copy_local_path_from_hdfs
 
 from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from libero.libero import benchmark
 
 
@@ -110,7 +112,7 @@ class LIBERO_Dataset(Dataset):
                             for i in range(len(orig_data.keys())):
                                 demo_data = orig_data[f"demo_{i}"]
                                 orig_states = demo_data["states"][()]
-                                init_state = demo_data['obs']['agentview_rgb'][0]
+                                init_state = demo_data['obs']['agentview_rgb'][0][::-1, :, :]
                                 init_state_list.append(init_state)
                                 task_name_list.append(task.language)
                         
@@ -130,7 +132,7 @@ class LIBERO_Dataset(Dataset):
                         "task_suite_name": self.task_suite_name,
                         "task_id": torch.tensor(task_id, dtype=torch.int64).unsqueeze(0),
                         "trial_id": torch.tensor(i, dtype=torch.int64).unsqueeze(0),
-                        "init_state": torch.from_numpy(init_state_list[i]),
+                        "init_state": torch.from_numpy(init_state_list[i].copy()),
                     }
                     if self.train_val == "train":
                         data.update({"task_lang": task_name_list[i]})

@@ -6,6 +6,8 @@ import os
 import imageio
 import numpy as np
 # import tensorflow as tf
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 import random

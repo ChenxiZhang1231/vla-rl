@@ -588,14 +588,14 @@ class SmolVLAPolicy(PreTrainedModel):
 
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
-
-        actions, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+        actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
             batch,
             noise,
             use_sde=use_sde,
             return_logprob=return_logprob,
             recompute_log_prob=recompute_log_prob
         )
+        actions = actions_pred[:, :self.config.n_action_steps]
         return actions, lang_tokens, lang_masks, return_dict
     
     def predict_action_chunk_update(
@@ -610,13 +610,14 @@ class SmolVLAPolicy(PreTrainedModel):
         batch = self._prepare_batch(batch)
         self._queues = populate_queues(self._queues, batch, exclude_keys=[ACTION])
 
-        actions, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+        actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
             batch,
             noise,
             use_sde=use_sde,
             return_logprob=return_logprob,
             recompute_log_prob=recompute_log_prob
         )
+        actions = actions_pred[:, :self.config.n_action_steps]
         return actions, lang_tokens, lang_masks, return_dict
     
     def compute_values(

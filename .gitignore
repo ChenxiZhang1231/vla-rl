@@ -130,3 +130,5 @@ work_dirs
 work_dirs/
 *.log
 # *.txt
+*.png
+*.mp4

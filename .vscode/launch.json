@@ -12,6 +12,43 @@
             "console": "integratedTerminal"
         },
         {
+          "name": "Run Action Generate tutorial",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/world_model/",
+          "program": "utils/action_cond_gen_tutorial.py",
+          "console": "integratedTerminal",
+          "args":[
+
+          ]
+        },
+        {
+          "name": "Debug video2world_action",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/world_model/ActionWorldModel",
+          "program": "examples/video2world_action.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+              "--model_size", "2B",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
+              "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
+              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
+              "--num_conditional_frames", "1",
+              "--chunk_size", "20",
+              "--save_path", "output_debug/generated_video_action.mp4",
+              "--guidance", "0",
+              "--seed", "0",
+              "--disable_guardrail",
+              "--disable_prompt_refiner",
+              // "--autoregressive",
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Regenerate LIBERO",
           "type": "debugpy",
           "request": "launch",
@@ -232,6 +269,25 @@
               "--report_to", "tensorboard"
             ],
           },
+          {
+            "name": "torchrun: val cosmos_predict2",
+            "type": "python",
+            "request": "launch",
+            "module": "torch.distributed.run",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--nproc_per_node=2",
+                "--master_port=12341",
+                "-m",
+                "scripts.train",
+                "--config=cosmos_predict2/configs/base/config_agibot_val.py",
+                "--experiment=predict2_video2world_2b_action_conditioned_evaling"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "6,7"
+            }
+          }
         
     ]
 }

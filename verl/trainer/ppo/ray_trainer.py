@@ -377,7 +377,7 @@ class RayTrainer(object):
         self.resource_pool_manager = resource_pool_manager
         self.use_reference_policy = Role.RefPolicy in role_worker_mapping and config.algorithm.kl_ctrl.kl_coef > 0
         self.use_rm = Role.RewardModel in role_worker_mapping
-        self.use_world_model = config.actor_rollout_ref.world_model.model_path != ""
+        self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
         self.ray_worker_group_cls = ray_worker_group_cls
 
         # define KL control

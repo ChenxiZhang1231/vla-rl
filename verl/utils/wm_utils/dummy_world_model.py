@@ -56,3 +56,4 @@ class DummyWorldModel(nn.Module):
         print(f"--- Input action shape: {action_batch.shape}, dtype: {action_batch.dtype} ---")
 
         return current_obs_batch.copy() # 使用 .copy() 是一个好习惯，可以避免潜在的内存视图问题
+    

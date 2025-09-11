@@ -141,7 +141,7 @@ class RobActorRolloutRefWorker(Worker):
         if self._is_ref:
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.shape[0]
         
-        self.use_world_model = self.config.world_model.model_path != ""
+        self.use_world_model = self.config.world_model.dit_path != ""
 
     def _build_model_optimizer(self,
                                model_path,
@@ -292,6 +292,7 @@ class RobActorRolloutRefWorker(Worker):
                 kwargs["dataset_stats"] = ds_meta.stats
                 policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
                 policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
+                policy_cfg.n_action_steps = self.config.model.action_chunks_len
                 kwargs["config"] = policy_cfg
                 # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
                 kwargs["pretrained_model_name_or_path"] = local_path
@@ -454,7 +455,6 @@ class RobActorRolloutRefWorker(Worker):
             CPUOffload
         from torch import optim
         log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
-        local_path = copy_local_path_from_hdfs(model_path)
 
         torch_dtype = fsdp_config.get('model_dtype', None)
         # torch_dtype = None
@@ -475,9 +475,12 @@ class RobActorRolloutRefWorker(Worker):
         #     dtype="float32",
         # )
         # actor_module.to(torch_dtype)
-        from verl.utils.wm_utils import DummyWorldModel
+        from verl.utils.wm_utils import DummyWorldModel, CosMosWorldModel
         from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-        wm_module = DummyWorldModel({"debug": True})
+        # wm_module = DummyWorldModel({"debug": True})
+
+        wm_config = self.config.world_model
+        wm_module = CosMosWorldModel(wm_config)
         wm_module.to(torch_dtype)
 
         if self._is_lora:
@@ -651,7 +654,7 @@ class RobActorRolloutRefWorker(Worker):
         
         if self._is_rollout:
             if self.use_world_model:
-                self.world_model_fsdp = self._build_model_optimizer_wm(model_path=self.config.world_model.model_path,
+                self.world_model_fsdp = self._build_model_optimizer_wm(model_path=self.config.world_model.dit_path,
                                                                 fsdp_config=self.config.world_model.fsdp_config,
                                                                 optim_config=None,
                                                                 override_model_config=override_model_config,

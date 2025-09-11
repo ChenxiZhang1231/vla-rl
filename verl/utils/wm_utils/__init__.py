@@ -5,6 +5,7 @@
 # --------------------------------------------------------
 
 from .dummy_world_model import DummyWorldModel
+from .cosmos_world_model import CosMosWorldModel
 
 
-__all__ = ['DummyWorldModel']
+__all__ = ['DummyWorldModel', 'CosMosWorldModel']

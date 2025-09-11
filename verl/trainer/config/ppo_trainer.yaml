@@ -76,8 +76,16 @@ actor_rollout_ref:
       fsdp_size: -1
       model_dtype: None
   world_model:
-    model_path: "" 
+    model_size: 2B
+    dit_path: ""
+    vae_folder: ""
+    num_conditional_frames: 1
+    chunk_size: 20
+    guidance: 0
+    num_sampling_step: 35
+    
     fsdp_config:
+      model_dtype: bfloat16
       param_offload: False
       wrap_policy:
         # transformer_layer_cls_to_wrap: None
