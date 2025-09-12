@@ -49,7 +49,7 @@
               // "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
               // "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
               // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
-              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-11_15-08-48/checkpoints/model/iter_000022000.pt",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-12_05-24-21/checkpoints/model/iter_000024000.pt",
               "--input_video", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo/clips/agentview_ff9e13fe-33f1-41c2-bc8b-3e3f146bc719_clip_00000.mp4",
               "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo/metadata/agentview_ff9e13fe-33f1-41c2-bc8b-3e3f146bc719_clip_00000.npz",
               "--num_conditional_frames", "1",

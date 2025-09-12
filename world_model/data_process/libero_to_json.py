@@ -15,8 +15,8 @@ from tqdm import tqdm
 
 import robosuite.utils.transform_utils as T
 import robosuite.utils.camera_utils as CU
-# import sys
-# sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from libero.libero import benchmark
 from robosuite.utils.camera_utils import (get_camera_extrinsic_matrix, 
                                           get_camera_intrinsic_matrix,
@@ -309,7 +309,7 @@ def fovy_to_intrinsics(fovy_degrees: float, image_width: int, image_height: int)
 
 def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, stride: int, crf: int, preset: str,
                   e_params_orig: np.ndarray, k_params: np.ndarray, end_pos_orig: np.ndarray,
-                  end_quat_orig: np.ndarray, eff_pos_orig: np.ndarray) -> Tuple[Path, List[Tuple[Path, int]]]:
+                  end_quat_orig: np.ndarray, eff_pos_orig: np.ndarray, actions_orig: np.ndarray) -> Tuple[Path, List[Tuple[Path, int]]]:
     stem = make_video_stem(video_path)
     resampled_path = out_root / "resampled" / f"{stem}_resampled.mp4"
     ensure_dir(resampled_path.parent)
@@ -322,6 +322,7 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
     N = e_params_orig.shape[0]
     idx_map = indices_for_resampled(total_frames_est, orig_fps=orig_fps if orig_fps > 0 else fps, new_fps=fps, n_orig=N)
     e_res, pos_res, quat_res, eff_res = e_params_orig[idx_map], end_pos_orig[idx_map], end_quat_orig[idx_map], eff_pos_orig[idx_map]
+    actions = actions_orig[idx_map]
     clip_dir, meta_dir, overlay_dir, black_dir = out_root / "clips", out_root / "metadata", out_root / "overlays", out_root / "blacks"
     ensure_dir(clip_dir); ensure_dir(meta_dir); ensure_dir(overlay_dir)
     products, f0, i = [], 0, 0
@@ -337,10 +338,12 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
         pos_clip = pos_res[f0:f0+clip_len]
         quat_clip = quat_res[f0:f0+clip_len]
         eff_clip = eff_res[f0:f0+clip_len]
+        actions_clip = actions[f0:f0+clip_len]
+        
 
         # Save sidecar npz
         npz_path = meta_dir / f"{stem}_clip_{i:05d}.npz"
-        np.savez_compressed(npz_path, extrinsics=e_clip, intrinsics=k_params, end_position=pos_clip, end_orientation=quat_clip, effector_position=eff_clip, start_frame=f0, clip_len=clip_len, fps=fps)
+        np.savez_compressed(npz_path, extrinsics=e_clip, intrinsics=k_params, end_position=pos_clip, end_orientation=quat_clip, effector_position=eff_clip, actions=actions_clip, start_frame=f0, clip_len=clip_len, fps=fps)
 
         # Create overlay visualization
         overlay_path = overlay_dir / f"{stem}_clip_{i:05d}_overlay.mp4"
@@ -392,7 +395,7 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
 def process_video_task(task: Dict[str, Any]) -> Dict[str, Any]:
     vp: Path = task["video_path"]
     try:
-        _, clip_infos = process_video(video_path=vp, out_root=task["out_root"], fps=task["fps"], clip_len=task["clip_len"], stride=task["stride"], crf=task["crf"], preset=task["preset"], e_params_orig=task["e_params"], k_params=task["k_params"], end_pos_orig=task["end_position"], end_quat_orig=task["end_orientation"], eff_pos_orig=task["effector_position"])
+        _, clip_infos = process_video(video_path=vp, out_root=task["out_root"], fps=task["fps"], clip_len=task["clip_len"], stride=task["stride"], crf=task["crf"], preset=task["preset"], e_params_orig=task["e_params"], k_params=task["k_params"], end_pos_orig=task["end_position"], end_quat_orig=task["end_orientation"], eff_pos_orig=task["effector_position"], actions_orig=task["actions"])
         items = [{"caption": task["description"], "media_path": str(p)} for (p, _) in clip_infos]
         return {"ok": True, "items": items, "video": str(vp)}
     except Exception as e:
@@ -479,6 +482,7 @@ def extract_libero_data_and_create_video(
     ee_pos = episode_data["obs"][f"ee_pos"][()]
     ee_ori = episode_data["obs"][f"ee_ori"][()]
     ee_quat = batch_axisangle2quat(ee_ori)
+    actions = episode_data["actions"][()]
     gripper_states = episode_data["obs"][f"gripper_states"][()]
     agentview = episode_data["obs"][f"agentview_rgb"][()]
     agentview = agentview[:, :, ::-1, :]
@@ -531,6 +535,7 @@ def extract_libero_data_and_create_video(
     gripper_qpos = gripper_states
     effector_position = np.stack([gripper_qpos, np.zeros_like(gripper_qpos)], axis=1) # (N, 2, 2)
     
+    actions = np.stack([actions, np.zeros_like(actions)], axis=1)
     # --- Create tasks for each camera view ---
     tasks = []
     for cam_name in camera_names:
@@ -566,6 +571,7 @@ def extract_libero_data_and_create_video(
             "end_position": end_position,
             "end_orientation": end_orientation,
             "effector_position": effector_position,
+            "actions": actions,
         })
         
     # h5_file.close()
@@ -659,7 +665,7 @@ def main():
         json.dump(data, f, ensure_ascii=False, indent=2)
 
     print("\nStep 4: Cleaning up temporary video files...")
-    shutil.rmtree(temp_video_dir)
+    # shutil.rmtree(temp_video_dir)
     
     print(f"\nDone. Processed data saved to {args.output_dir}")
     print(f"Dataset index file saved to {meta_path}")

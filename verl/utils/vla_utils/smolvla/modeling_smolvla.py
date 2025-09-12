@@ -595,7 +595,10 @@ class SmolVLAPolicy(PreTrainedModel):
             return_logprob=return_logprob,
             recompute_log_prob=recompute_log_prob
         )
-        actions = actions_pred[:, :self.config.n_action_steps]
+        if actions_pred is not None:
+            actions = actions_pred[:, :self.config.n_action_steps]
+        else:
+            actions = None
         return actions, lang_tokens, lang_masks, return_dict
     
     def predict_action_chunk_update(
@@ -617,7 +620,10 @@ class SmolVLAPolicy(PreTrainedModel):
             return_logprob=return_logprob,
             recompute_log_prob=recompute_log_prob
         )
-        actions = actions_pred[:, :self.config.n_action_steps]
+        if actions_pred is not None:
+            actions = actions_pred[:, :self.config.n_action_steps]
+        else:
+            actions = None
         return actions, lang_tokens, lang_masks, return_dict
     
     def compute_values(
