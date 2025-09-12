@@ -23,6 +23,20 @@
           ]
         },
         {
+          "name": "Debug wm dataset",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/world_model/ActionWorldModel",
+          "program": "cosmos_predict2/data/action_conditioned/action_conditioned_libero_dataset.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Debug video2world_action",
           "type": "python",
           "request": "launch",
@@ -32,9 +46,12 @@
           "justMyCode": true,
           "args": [
               "--model_size", "2B",
-              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
-              "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
-              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
+              // "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-11_15-08-48/checkpoints/model/iter_000022000.pt",
+              "--input_video", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo/clips/agentview_ff9e13fe-33f1-41c2-bc8b-3e3f146bc719_clip_00000.mp4",
+              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo/metadata/agentview_ff9e13fe-33f1-41c2-bc8b-3e3f146bc719_clip_00000.npz",
               "--num_conditional_frames", "1",
               "--chunk_size", "20",
               "--save_path", "output_debug/generated_video_action.mp4",
@@ -42,7 +59,7 @@
               "--seed", "0",
               "--disable_guardrail",
               "--disable_prompt_refiner",
-              // "--autoregressive",
+              "--autoregressive",
           ],
           "env": {
               // "CUDA_VISIBLE_DEVICES": "0" 

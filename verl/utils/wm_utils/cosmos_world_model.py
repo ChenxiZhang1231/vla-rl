@@ -18,6 +18,12 @@ from imaginaire.constants import (
     CosmosPredict2ActionConditionedModelSize,
     get_cosmos_predict2_action_conditioned_checkpoint,
 )
+from cosmos_predict2.data.action_conditioned.dataset_utils import (
+    Resize_Preprocess,
+    ToTensorVideo,
+    euler2rotm,
+    rotm2euler,
+)
 from imaginaire.utils import distributed, log, misc
 
 
@@ -118,12 +124,10 @@ class CosMosWorldModel(nn.Module):
         #    `action_sequences` 将是一个包含 B 个 (1, action_dim) numpy数组的列表
         #    `action_batch[:, np.newaxis, :]` 的形状是 [B, 1, action_dim]
         dummy_action_batch = np.zeros_like(action_batch)
-        action_batch = np.concatenate([action_batch, dummy_action_batch], axis=-1)
+        action_batch_dual = np.concatenate([action_batch, dummy_action_batch], axis=-1)
+        action_sequences: List[np.ndarray] = [seq[:self.chunk_size] for seq in action_batch_dual]
+        # action_sequences = self.process_action(action_sequences)
         
-        action_sequences: List[np.ndarray] = [seq[:self.chunk_size] for seq in action_batch]
-        
-        # 2. 一次性调用pipeline进行批量推理
-        #    `predicted_videos` 应该是一个包含 B 个 (1, C, F, H, W) tensor的列表
         predicted_videos = self.pipe(
             first_frames=first_frames,  # H W 3
             actions_list=action_sequences,  # 50 7
@@ -135,10 +139,7 @@ class CosMosWorldModel(nn.Module):
             # use_cuda_graphs=True,
         )
         
-        # 3. 后处理：将输出的视频列表批量转换回RL环境期望的格式
         
-        # a. 从每个视频中提取第一帧，并收集到一个列表中
-        #    predicted_videos[i] shape: (1, C, F, H, W), 我们需要 F=0 的帧
         video_tensors = [video[0] for video in predicted_videos]
         predicted_videos_batch_tensor = torch.stack(video_tensors, dim=0)
         videos_batch_normalized = (predicted_videos_batch_tensor / 2 + 0.5).clamp(0, 1)
@@ -212,3 +213,35 @@ class CosMosWorldModel(nn.Module):
         print(f"正在将形状为 {grid_image.shape} 的网格图片保存到: {save_path}")
         mp.write_image(save_path, grid_image)
         print(f"网格图片成功保存。")
+        
+    def process_action(self, action_sequences):
+        action_processed_list = []
+        for old_action in action_sequences:
+            old_action = old_action.reshape(-1, 2, 7)
+            end_position = old_action[..., 0:3]
+            end_rotation = old_action[..., 3:6]
+            effector_position = old_action[..., -1]
+            frame_num = end_position.shape[0]
+            action = np.zeros((frame_num - 1, 14))
+            for i in range(end_position.shape[1]):
+                for k in range(1, frame_num):
+                    prev_xyz = end_position[k - 1, i, 0:3]
+                    prev_rpy = end_rotation[k - 1, i, 0:3]
+                    prev_rotm = euler2rotm(prev_rpy)
+                    curr_xyz = end_position[k, i, 0:3]
+                    curr_rpy = end_rotation[k, i, 0:3]
+                    curr_gripper = effector_position[k, i]
+                    curr_rotm = euler2rotm(curr_rpy)
+                    rel_xyz = np.dot(prev_rotm.T, curr_xyz - prev_xyz)
+                    rel_rotm = prev_rotm.T @ curr_rotm
+                    rel_rpy = rotm2euler(rel_rotm)
+                    action[k - 1, i*7: i*7 + 3] = rel_xyz
+                    action[k - 1, i*7 + 3: i*7 + 6] = rel_rpy
+                    action[k - 1, i*7 + 6] = curr_gripper * 0.03
+            # action = np.concatenate([end_position[:, 0], end_rotation[:, 0], effector_position[..., None][:, 0], end_position[:, 1], end_rotation[:, 1], effector_position[..., None][:, 1]], -1)
+            # import pdb; pdb.set_trace()
+            action = action * np.array([20, 20, 20, 20, 20, 20, 1e-5, 20, 20, 20, 20, 20, 20, 1e-5])
+            action = np.concatenate([action, action[-2:-1]], axis=0)
+            action_processed_list.append(action)
+        return action_processed_list
+            

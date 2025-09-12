@@ -24,9 +24,6 @@ NUM_GPUS=4
 NUM_NODES=1 
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/align.json"
 
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-11_15-08-48/checkpoints/model/iter_000022000.pt"
-VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
-
 HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
     data.libero_raw_data_dir=$DATASET_PATH \
@@ -77,14 +74,14 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=hf \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
-    actor_rollout_ref.ref.log_prob_micro_batch_size=4 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size=8 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
+    reward_model.enable=True \
+    reward_model.model.path=/inspire/ssd/project/robotsimulation/public/huggingface_models/Qwen2-7B-Instruct \
+    reward_model.model.use_remove_padding=True \
+    reward_model.model.fsdp_config.param_offload=True \
+    reward_model.micro_batch_size_per_gpu=2 \
     algorithm.kl_ctrl.kl_coef=0.00 \
-    actor_rollout_ref.ref.vla=$VLA_NAME \
-    actor_rollout_ref.world_model.dit_path=$DIT_PATH \
-    actor_rollout_ref.world_model.vae_folder=$VAE_FOLDER \
-    actor_rollout_ref.world_model.num_sampling_step=10 \
-    actor_rollout_ref.world_model.fsdp_config.model_dtype=bfloat16 \
     trainer.logger=['console','tensorboard'] \
     trainer.project_name=$PROJECT_NAME \
     trainer.experiment_name=$EXPERIMENT_NAME \
@@ -102,5 +99,5 @@ HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
     trainer.val_before_train=False \
-    2>&1 | tee -a "${EXPERIMENT_NAME}.log"
+    # 2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 

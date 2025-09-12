@@ -1238,6 +1238,8 @@ class RobHFRollout(BaseRollout):
         step = 0
         vla_history = []
         trajectory_video_batch = [current_obs_batch_np]
+        vla_timings = []
+        wm_timings = []
         while step < max_steps:
             active_indices = [i for i, r in enumerate(task_records) if r['active']]
             
@@ -1248,9 +1250,12 @@ class RobHFRollout(BaseRollout):
             
             vla_input = self.process_input_smolvla(inputs, task_descriptions)
             vla_input.update(meta_info)
-            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            
+            with Timer(name="VLA_Inference", text="{name} mean: {:.4f}s") as timer:
+                vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            vla_timings.append(timer.last)
+            
             actions_batch = vla_output["action"]
-            breakpoint()
             
             step_data = vla_input.copy()
             step_data["action"] = actions_batch
@@ -1265,7 +1270,11 @@ class RobHFRollout(BaseRollout):
             vla_history.append(step_data)
             if self.world_model is None:
                 raise ValueError("World Model Worker Group has not been set!")
-            next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)  # B, chunk_size, H, W, C
+            
+            with Timer(name="World_Model_Step", text="{name} mean: {:.4f}s") as timer:
+                next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)  # B, chunk_size, H, W, C
+            wm_timings.append(timer.last)
+            
             # breakpoint()
             # current_obs_batch_np = next_obs_batch_np
             current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
@@ -1279,7 +1288,6 @@ class RobHFRollout(BaseRollout):
                 for idx in range(batch_size):
                     task_file = task_records[idx]['task_file_name']
                     for f_idx in range(num_frames_in_chunk):
-                        # 从批次中取出对应的单帧图像，并进行上下翻转
                         img = next_obs_batch_np[idx, f_idx, :, :, :]  #[::-1, :, :]
                         valid_video[task_file].append(img)
             
@@ -1311,7 +1319,37 @@ class RobHFRollout(BaseRollout):
                 full_trajectory_video, 
                 f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
             )
+            
+        print("\n" + "="*50)
+        print(" Performance Measurement Report")
+        print("="*50)
         
+        if vla_timings:
+            print("\n--- VLA Inference (`_generate_one_step_smolvla`) ---")
+            print(f"  Total steps measured: {len(vla_timings)}")
+            print(f"  Total time spent:     {np.sum(vla_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(vla_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(vla_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(vla_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(vla_timings):.4f} seconds")
+
+        if wm_timings:
+            print("\n--- World Model Step (`world_model.step`) ---")
+            print(f"  Total steps measured: {len(wm_timings)}")
+            print(f"  Total time spent:     {np.sum(wm_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(wm_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(wm_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(wm_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(wm_timings):.4f} seconds (首次调用可能因CUDA Graph录制而较慢)")
+
+        if vla_timings and wm_timings:
+            total_mean_per_step = np.mean(vla_timings) + np.mean(wm_timings)
+            print("\n--- Combined ---")
+            print(f"  Average total processing time per step: {total_mean_per_step:.4f} seconds")
+
+        print("="*50 + "\n")
+
+            
         self.module.train()
         batch = {"observation.images.image":[], 
                 "observation.images.image_is_pad": [],

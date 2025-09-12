@@ -15,6 +15,8 @@ from tqdm import tqdm
 
 import robosuite.utils.transform_utils as T
 import robosuite.utils.camera_utils as CU
+# import sys
+# sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from libero.libero import benchmark
 from robosuite.utils.camera_utils import (get_camera_extrinsic_matrix, 
                                           get_camera_intrinsic_matrix,
