@@ -120,7 +120,7 @@ Principles
 Required Output Format
 - **Step 1: Critical Fact Check.** Answer the following question based on direct visual evidence: In any frame, is the target object (e.g., the black bowl) ever seen clearly and entirely separated from its starting surface, held by the gripper? Answer with "Yes, in frame(s) [X]" or "No, this is never clearly visible."
 - **Step 2: Reasoning.** Based on your answer above and a full review of the video, explain your reasoning.
-- **Step 3: Final Answer.** Output the final answer strictly as one of: \box{Success} or \box{Failure}.
+- **Step 3: Final Answer.** Output the final answer strictly as one of: \\box{Success} or \\box{Failure}.
 - Do not output anything after the boxed answer.
 """
     else:

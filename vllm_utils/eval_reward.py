@@ -40,7 +40,7 @@ def fetch_one_reward_sync(client, task: RewardTask, task_index: int) -> tuple[in
         return task_index, 0.0, "Empty"
 
     n_frames = len(task.frames)
-    system_prompt = build_system_prompt(mode="v4") 
+    system_prompt = build_system_prompt(mode="v5") 
 
     # === User文本头：任务与输入说明 ===
     user_header = (
@@ -308,7 +308,7 @@ def main():
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/debug",
                         help="存放评测视频的目录")
     parser.add_argument("--output_dir", type=str, default="output", help="结果保存目录（CSV、JSON）")
-    parser.add_argument("--tag", type=str, default="v4-72b", help="")
+    parser.add_argument("--tag", type=str, default="v5-72b", help="")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")
     parser.add_argument("--threshold", type=float, default=0.5, help="连续分数二值化阈值")
