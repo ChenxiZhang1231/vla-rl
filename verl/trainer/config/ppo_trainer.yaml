@@ -106,6 +106,7 @@ actor_rollout_ref:
     log_prob_max_token_len_per_gpu: ${actor_rollout_ref.actor.ppo_max_token_len_per_gpu}
     ulysses_sequence_parallel_size: ${actor_rollout_ref.actor.ulysses_sequence_parallel_size} # sp size
   rollout:
+    reward_type: env
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     experiment_name: None
@@ -194,8 +195,11 @@ verifier:
   reward_coef: 5
 
 reward_model:
-  enable: False
+  enable: True
+  type: rule
   strategy: fsdp
+  vlm_input_num_frames: 10
+  return_env_score: True
   model:
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}

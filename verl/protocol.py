@@ -122,6 +122,48 @@ def pad_dataprotos_lang_dict(dp_list, pad_id: int, pad_to: int | None = None):
         out.append(new_dp)
     return out
 
+def pad_dataprotos_step_images(
+    dp_list, 
+    padding_value: int = 0
+):
+    true_lengths = []
+    total_batch_size = 0
+    for dp in dp_list:
+        mask_batch = dp['step_images_mask']
+        sub_batch_lengths = torch.sum(mask_batch, dim=1)
+        true_lengths.extend(sub_batch_lengths.tolist())
+        total_batch_size += mask_batch.shape[0]
+    max_len = int(max(true_lengths)) if true_lengths else 0
+    sample_batch = dp_list[0]['step_images']
+    _, _, h, w, c = sample_batch.shape
+    dtype = sample_batch.dtype
+    device = sample_batch.device
+    
+    out = []
+    for dp in dp_list:
+        bt = dp.clone()
+        video_batch = dp['step_images']
+        mask_batch = dp['step_images_mask']
+        sub_batch_size = video_batch.shape[0]
+        pad_videos = torch.full(
+            (sub_batch_size, max_len, h, w, c), 
+            fill_value=padding_value, 
+            dtype=dtype,
+            device=device
+        )
+        pad_mask = torch.zeros((sub_batch_size, max_len), dtype=torch.long, device=device)
+        for i in range(sub_batch_size):
+            true_len = int(torch.sum(mask_batch[i]).item())
+            pad_videos[i, :true_len, ...] = video_batch[i, :true_len, ...]
+            pad_mask[i, :true_len] = 1
+            
+        bt["step_images"] = pad_videos
+        bt["step_images_mask"]  = pad_mask
+
+        new_dp = bt
+        out.append(new_dp)
+    return out
+
 @dataclass
 class DataProto:
     """
@@ -462,6 +504,8 @@ class DataProto:
         if batch_lst[0] is not None:
             if 'lang_tokens' in batch_lst[0].keys():
                 batch_lst = pad_dataprotos_lang_dict(batch_lst, 2)
+            if 'step_images' in batch_lst[0].keys():
+                batch_lst = pad_dataprotos_step_images(batch_lst)
             new_batch = torch.cat(batch_lst, dim=0)
         else:
             new_batch = None

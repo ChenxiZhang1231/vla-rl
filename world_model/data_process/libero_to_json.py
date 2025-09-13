@@ -375,9 +375,10 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
             pos_clip = pos_res[final_f0:final_f0+clip_len]
             quat_clip = quat_res[final_f0:final_f0+clip_len]
             eff_clip = eff_res[final_f0:final_f0+clip_len]
+            actions_clip = actions[final_f0:final_f0+clip_len]
 
             npz_path = meta_dir / f"{stem}_clip_{i:05d}.npz"
-            np.savez_compressed(npz_path, extrinsics=e_clip, intrinsics=k_params, end_position=pos_clip, end_orientation=quat_clip, effector_position=eff_clip, start_frame=final_f0, clip_len=clip_len, fps=fps)
+            np.savez_compressed(npz_path, extrinsics=e_clip, intrinsics=k_params, end_position=pos_clip, end_orientation=quat_clip, effector_position=eff_clip, actions=actions_clip, start_frame=final_f0, clip_len=clip_len, fps=fps)
 
             overlay_path = overlay_dir / f"{stem}_clip_{i:05d}_overlay.mp4"
             try:

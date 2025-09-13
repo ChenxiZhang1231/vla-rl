@@ -124,6 +124,7 @@ tests/e2e/toy_examples/deepspeed/synchronous/output.txt
 logs
 log
 outputs
+output
 hugg_models
 hugg_models/
 work_dirs

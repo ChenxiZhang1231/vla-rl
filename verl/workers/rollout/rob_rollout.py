@@ -29,6 +29,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torchvision import transforms
 # import torch.multiprocessing as mp
 import torchvision.transforms.functional as F
+from typing import List, Tuple
 
 from verl import DataProto
 from verl.utils.torch_functional import get_eos_mask
@@ -359,10 +360,12 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
                 import traceback
                 traceback.print_exc()
             
-            if is_valid:
-                # img = obs["agentview_image"][::-1, ::-1]
-                img = obs["agentview_image"][::-1, :]  # flip up down,
-                step_images.append(img)
+            # if is_valid:
+            #     # img = obs["agentview_image"][::-1, ::-1]
+            #     img = obs["agentview_image"][::-1, :]  # flip up down,
+            #     step_images.append(img)
+            img = obs["agentview_image"][::-1, :]  # flip up down,
+            step_images.append(img)
             
             
             finish_step += 1
@@ -379,7 +382,115 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
             'active': active,
             'complete': complete,
             'finish_step': finish_step,
-            'valid_images': step_images.copy() if is_valid else []
+            # 'valid_images': step_images.copy() if is_valid else []
+            'valid_images': step_images.copy()
+        }
+        output_queue.put(output_data)
+        
+def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
+    benchmark_dict = benchmark.get_benchmark_dict()
+    task_suite = benchmark_dict[task_name]()
+    task = task_suite.get_task(task_id)
+
+    env = None
+    while True:
+        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
+        # env, task_description = get_libero_env(task, config.model_family, resolution=256)
+        try:
+            env, task_description = get_libero_env(task, config.model_family, resolution=256)
+            break  
+        except:
+            print(f"*** env initialization failed ***")
+            if env is not None:
+                try:
+                    env.close()  
+                except Exception as e:
+                    print(f"error when close the env: {e}")
+            torch.cuda.empty_cache()
+            gc.collect()
+            print("gc collect finish")
+    
+    env.reset()
+    obs = env.set_init_state(init_state)
+    
+    
+    t = 0
+    valid_images = []
+    while t < config.num_steps_wait:
+        obs, _, done, _ = env.step(get_libero_dummy_action(config.model_family))
+        t += 1
+        
+    if is_valid:
+        # img = obs["agentview_image"][::-1, ::-1]
+        img = obs["agentview_image"][::-1, :]
+        valid_images.append(img)
+    
+    output_queue.put({
+        'type': 'init',
+        'obs': obs,
+        "task_description":task_description,
+        'valid_images': valid_images.copy(),
+        'task_file_name': f"{task_name}_task_{task_id}_trial_{trial_id}",
+        'active': True,
+        'complete': False,
+        'finish_step': 0
+    })
+    obs_global = obs
+    done_global = done
+    active = True
+    complete = False
+    finish_step = 0
+    while True:
+        
+        action = input_queue.get()
+        if action is None:
+            env.close()
+            output_queue.put({'type': 'terminate'})
+            break
+        
+        
+        step_images = []
+        for i in range(len(action)):
+            a = action[i]
+            normalized_action = normalize_gripper_action(a, binarize=True)
+            inverted_action = invert_gripper_action(normalized_action)
+            # obs, reward, done, info = env.step(inverted_action.tolist())
+            try:
+                obs, reward, done, info = env.step(inverted_action.tolist())
+                # obs = obs_global
+                # done = done_global
+            except Exception as e:
+                print(f"!!!!!! [Worker {os.getpid()}] CRASHED IN ENV.STEP !!!!!!")
+                print(f"Action that caused crash: {inverted_action.tolist()}")
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # if is_valid:
+            #     # img = obs["agentview_image"][::-1, ::-1]
+            #     img = obs["agentview_image"][::-1, :]  # flip up down,
+            #     step_images.append(img)
+            img = obs["agentview_image"][::-1, :]  # flip up down,
+            step_images.append(img)
+            
+            
+            finish_step += 1
+            #if done or finish_step >= config.max_steps[config.task_suite_name]:
+            if done or finish_step >= max_steps:
+                active = False
+                complete = done
+                if finish_step >= max_steps:
+                    break
+        
+        
+        output_data = {
+            'type': 'step',
+            'obs': obs,
+            'active': active,
+            'complete': complete,
+            'finish_step': finish_step,
+            # 'valid_images': step_images.copy() if is_valid else []
+            'valid_images': step_images.copy()
         }
         output_queue.put(output_data)
         
@@ -530,7 +641,71 @@ def pad_dataprotos_lang(dp_list, pad_id: int, pad_to: int | None = None):
         out.append(new_dp)
     return out
 
+def pad_dataprotos_step_images(
+    videos: List[np.ndarray], 
+    padding_value: int = 0
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    将一个批次的、长度不一的视频序列填充到相同的长度。
 
+    Args:
+        videos (List[np.ndarray]): 视频列表。
+            列表中的每个元素都是一个视频，其形状为 (T, H, W, C)，
+            其中 T 是帧数 (可变)，H, W, C 是高、宽、通道数 (固定)。
+        padding_value (int): 用于填充的数值，通常为0。
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]:
+        - padded_videos (torch.Tensor): 填充后的视频张量。
+          形状为 (B, T_max, H, W, C)，其中 B 是批次大小，
+          T_max 是这个批次中最长的视频的帧数。
+        - attention_mask (torch.Tensor): 注意力遮罩张量。
+          形状为 (B, T_max)，其中真实帧的位置为1，填充帧的位置为0。
+    """
+    if not videos:
+        # 处理空输入的情况
+        return torch.empty(0), torch.empty(0)
+
+    # --- 1. 获取每个视频的形状信息 ---
+    # 获取每个视频的帧数
+    lengths = [video.shape[0] for video in videos]
+    # 获取批次大小
+    batch_size = len(videos)
+    # 获取这个批次中的最大帧数
+    max_len = max(lengths)
+    
+    # 假设所有视频的 H, W, C 维度是相同的，我们从第一个视频中获取
+    h, w, c = videos[0].shape[1:]
+    dtype = videos[0].dtype
+
+    # --- 2. 创建用于填充的目标张量和遮罩张量 ---
+    # 创建一个全零（或指定padding_value）的目标张量
+    padded_videos = torch.full(
+        (batch_size, max_len, h, w, c), 
+        fill_value=padding_value, 
+        dtype=torch.from_numpy(np.array(0, dtype=dtype)).dtype # 保持与输入 NumPy 数组相同的数据类型
+    )
+    
+    # 创建一个全零的遮罩张量，稍后我们会将真实帧的位置设为1
+    attention_mask = torch.zeros((batch_size, max_len), dtype=torch.long)
+
+    # --- 3. 循环遍历，将原始数据复制到目标张量中 ---
+    for i, video in enumerate(videos):
+        # 获取当前视频的实际长度
+        current_len = lengths[i]
+        
+        # 将视频数据从 NumPy 数组转换为 PyTorch 张量
+        video_tensor = torch.from_numpy(video)
+        
+        # 将原始视频数据复制到 padded_videos 张量的相应位置
+        # 例如，对于第一个视频，我们填充 padded_videos[0, :125, :, :, :]
+        padded_videos[i, :current_len, ...] = video_tensor
+        
+        # 在 attention_mask 中，将真实帧的位置标记为1
+        # 例如，对于第一个视频，我们将 attention_mask[0, :125] 设为1
+        attention_mask[i, :current_len] = 1
+        
+    return padded_videos, attention_mask
 
 class RobHFRollout(BaseRollout):
 
@@ -586,12 +761,14 @@ class RobHFRollout(BaseRollout):
         if self.config.vla == "smolvla":
             if self.use_world_model and is_train:
                 output = [self._generate_minibatch_smolvla_wm(p) for p in batch_prompts]
+            elif self.config.reward_type == 'vlm' and is_train:
+                output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             else:
-                output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+                # output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+                output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
-        
         
         output = DataProto.concat(output)
         return output
@@ -858,7 +1035,6 @@ class RobHFRollout(BaseRollout):
             batch_size=batch_size)
         return DataProto(batch=output_batch)
     
-    
     def _generate_minibatch_smolvla(self, prompts):
         # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
         self.module.eval()
@@ -1006,6 +1182,165 @@ class RobHFRollout(BaseRollout):
         batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
         batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
         
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+    def _generate_minibatch_smolvla_vlm_reward(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+        processes = []
+        input_queues = []
+        output_queues = []
+        # mp.set_start_method('spawn')
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+            t_id = task_id[idx][0].item()
+            tr_id = trial_id[idx][0].item()
+            in_state = init_state[idx].cpu().numpy()
+            input_q = Queue()
+            output_q = Queue()
+            p = Process(
+                target=env_worker_smolvla_vlm_reward,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+            )
+            p.start()
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            init_data = output_queues[idx].get(timeout=120)
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs']))
+            task_records.append({
+                "active": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name'],
+                "step_images": [init_data['obs']['agentview_image'][::-1]]
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            # active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            active_indices = [i for i, r in enumerate(task_records)]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                result = output_queues[idx].get(timeout=30)
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'])
+                task_records[idx]['active'] = result['active']
+                task_records[idx]['complete'] = result['complete']
+                task_records[idx]['finish_step'] = result['finish_step']
+                task_records[idx]['step_images'].extend(result['valid_images']) 
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
+        torch.cuda.empty_cache()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete
+                )
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                "observation.state":[], 
+                "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": [],
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete"] = []
+        batch["finish_step"] = []
+        batch["step_images"] = []
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+            batch["step_images"].append(np.stack(k["step_images"]))
+            
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
+        batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
