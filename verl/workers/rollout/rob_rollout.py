@@ -1609,7 +1609,6 @@ class RobHFRollout(BaseRollout):
             with Timer(name="World_Model_Step", text="{name} mean: {:.4f}s") as timer:
                 next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)  # B, chunk_size, H, W, C
             wm_timings.append(timer.last)
-            
             # breakpoint()
             # current_obs_batch_np = next_obs_batch_np
             current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
@@ -1646,14 +1645,19 @@ class RobHFRollout(BaseRollout):
                     global_steps,
                     complete
                 )
-            initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
-            video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
-            full_trajectory_video = np.concatenate(video_chunks, axis=1)
+        initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
+        video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
+        full_trajectory_video = np.concatenate(video_chunks, axis=1)
+        
+        # self.world_model.save_trajectory_grid_image(
+        #     full_trajectory_video, 
+        #     f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
+        # )
+        self.world_model.save_video_grid(
+            full_trajectory_video, 
+            f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.mp4"
+        )
             
-            self.world_model.save_trajectory_grid_image(
-                full_trajectory_video, 
-                f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
-            )
             
         print("\n" + "="*50)
         print(" Performance Measurement Report")
@@ -1710,6 +1714,7 @@ class RobHFRollout(BaseRollout):
         for k,v in batch.items():
             batch[k] = torch.stack(v, dim=1) 
         
+        breakpoint()
         batch["complete"] = []
         batch["finish_step"] = []
         

@@ -123,6 +123,14 @@ class CosMosWorldModel(nn.Module):
         # b. 将批量的单个动作，扩展成批量的、长度为1的动作序列
         #    `action_sequences` 将是一个包含 B 个 (1, action_dim) numpy数组的列表
         #    `action_batch[:, np.newaxis, :]` 的形状是 [B, 1, action_dim]
+
+        # Normalize the last action dimension to [-1,+1]
+        orig_low, orig_high = 0.0, 1.0
+        action_batch[..., -1] = 2 * (action_batch[..., -1] - orig_low) / (orig_high - orig_low) - 1
+        action_batch[..., -1] = np.sign(action_batch[..., -1])
+        action_batch[..., -1] = action_batch[..., -1] *  -1.0
+        
+        
         dummy_action_batch = np.zeros_like(action_batch)
         action_batch_dual = np.concatenate([action_batch, dummy_action_batch], axis=-1)
         action_sequences: List[np.ndarray] = [seq[:self.chunk_size] for seq in action_batch_dual]
@@ -146,7 +154,7 @@ class CosMosWorldModel(nn.Module):
         videos_batch_hwc = rearrange(videos_batch_normalized, 'b c f h w -> b f h w c')
         videos_batch_numpy = videos_batch_hwc.cpu().numpy()
         videos_batch_uint8 = (videos_batch_numpy * 255).astype(np.uint8)
-        breakpoint()
+        # breakpoint()
         # self.save_video_grid(videos_batch_uint8, 'debug.mp4')
         # self.save_trajectory_grid_image(videos_batch_uint8, 'debug.png')
         return videos_batch_uint8[:, 1:]  # B, chunk_size, H, W, C

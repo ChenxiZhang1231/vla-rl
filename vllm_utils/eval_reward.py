@@ -28,7 +28,7 @@ class RewardTask:
     score_vlm: int = 0
     score_text: str = ""
     
-def fetch_one_reward_sync(client, task: RewardTask, task_index: int) -> tuple[int, float, str]:
+def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode) -> tuple[int, float, str]:
     """
     Run a strict VLM judge on a sequence of frames to decide Success/Failure.
     Returns: (task_index, reward_float, raw_response_text)
@@ -40,7 +40,7 @@ def fetch_one_reward_sync(client, task: RewardTask, task_index: int) -> tuple[in
         return task_index, 0.0, "Empty"
 
     n_frames = len(task.frames)
-    system_prompt = build_system_prompt(mode="v5") 
+    system_prompt = build_system_prompt(mode=mode) 
 
     # === User文本头：任务与输入说明 ===
     user_header = (
@@ -148,7 +148,8 @@ def process_video_to_base64_frames(video_path: Path, num_frames: int = 10) -> li
 def get_rewards_from_judge_batch_sync(
     client,
     tasks: List[RewardTask], 
-    max_workers: int = 10
+    max_workers: int = 10,
+    mode: str = "v2",
 ) -> List[float]:
     """
     Args:
@@ -165,7 +166,7 @@ def get_rewards_from_judge_batch_sync(
         # 提交所有任务到线程池
         # future_to_index 映射了每个future对象到它的原始索引
         future_to_index = {
-            executor.submit(fetch_one_reward_sync, client, task, i): i
+            executor.submit(fetch_one_reward_sync, client, task, i, mode): i
             for i, task in enumerate(tasks)
         }
 
@@ -308,7 +309,8 @@ def main():
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/debug",
                         help="存放评测视频的目录")
     parser.add_argument("--output_dir", type=str, default="output", help="结果保存目录（CSV、JSON）")
-    parser.add_argument("--tag", type=str, default="v5-72b", help="")
+    parser.add_argument("--tag", type=str, default="v2-7b", help="")
+    parser.add_argument("--mode", type=str, default="v2", help="")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")
     parser.add_argument("--threshold", type=float, default=0.5, help="连续分数二值化阈值")
@@ -385,7 +387,7 @@ def main():
         return
 
     # 批量评测
-    scores, texts = get_rewards_from_judge_batch_sync(client, tasks, max_workers=args.max_workers)
+    scores, texts = get_rewards_from_judge_batch_sync(client, tasks, max_workers=args.max_workers, mode=args.mode)
     if len(scores) != len(tasks):
         raise RuntimeError(f"返回分数数量与任务数量不一致: {len(scores)} vs {len(tasks)}")
     # 回填
