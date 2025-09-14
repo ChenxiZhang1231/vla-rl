@@ -21,7 +21,7 @@ DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
 NUM_GPUS=8
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
-NUM_NODES=1 
+NUM_NODES=1
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/align.json"
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
