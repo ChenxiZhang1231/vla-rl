@@ -133,3 +133,7 @@ work_dirs/
 # *.txt
 *.png
 *.mp4
+verl/models
+verl/ckpts
+verl/data
+verl/tensorboard_log

@@ -306,10 +306,10 @@ def compute_all_metrics(y_true: List[int], y_score: List[float], threshold: floa
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate reward model on rollout videos.")
-    parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/debug",
+    parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/eval",
                         help="存放评测视频的目录")
     parser.add_argument("--output_dir", type=str, default="output", help="结果保存目录（CSV、JSON）")
-    parser.add_argument("--tag", type=str, default="v2-7b", help="")
+    parser.add_argument("--tag", type=str, default="v2-72b", help="")
     parser.add_argument("--mode", type=str, default="v2", help="")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")

@@ -20,11 +20,13 @@ import os
 
 import datasets
 
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl")
 from verl.utils.hdfs_io import copy, makedirs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--local_dir", default="~/data/geo3k")
+    parser.add_argument("--local_dir", default="/inspire/ssd/project/robotsimulation/public/data/geo3k")
     parser.add_argument("--hdfs_dir", default=None)
 
     args = parser.parse_args()

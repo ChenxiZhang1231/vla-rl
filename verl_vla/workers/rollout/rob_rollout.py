@@ -439,7 +439,10 @@ def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, conf
     done_global = done
     active = True
     complete = False
+    curr_step = 0
     finish_step = 0
+    update_finish = True
+    final_done = False
     while True:
         
         action = input_queue.get()
@@ -474,14 +477,19 @@ def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, conf
             step_images.append(img)
             
             
-            finish_step += 1
+            curr_step += 1
             #if done or finish_step >= config.max_steps[config.task_suite_name]:
-            if done or finish_step >= max_steps:
+            if not done and update_finish:
+                finish_step += 1
+            
+            if done:
+                update_finish = False
+                final_done = True
+                
+            if curr_step >= max_steps:
                 active = False
-                complete = done
-                if finish_step >= max_steps:
-                    break
-        
+                complete = final_done
+                break
         
         output_data = {
             'type': 'step',
@@ -1296,12 +1304,15 @@ class RobHFRollout(BaseRollout):
         if is_valid:
             for task_file, images in valid_video.items():
                 complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                # breakpoint()
+                finish_step = [r['finish_step'] for r in task_records if r['task_file_name'] == task_file][0]
                 save_rollout_video(
                     images,
                     self.config.experiment_name,
                     task_file,
                     global_steps,
-                    complete
+                    complete,
+                    finish_step
                 )
         self.module.train()
         batch = {"observation.images.image":[], 
