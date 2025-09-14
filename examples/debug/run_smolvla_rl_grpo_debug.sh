@@ -19,12 +19,12 @@ CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
-NUM_GPUS=4
+NUM_GPUS=8
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
 NUM_NODES=1 
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/align.json"
 
-HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
+HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
     data.libero_raw_data_dir=$DATASET_PATH \
     data.num_trials_per_task=50 \

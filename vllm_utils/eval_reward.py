@@ -17,7 +17,7 @@ import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev")
 from libero.libero import benchmark
-from verl.utils.prompt_utils.prompt import build_system_prompt
+from verl_vla.utils.prompt_utils.prompt import build_system_prompt
 
 @dataclass
 class RewardTask:
