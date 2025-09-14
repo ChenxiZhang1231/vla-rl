@@ -5,6 +5,7 @@ import torch
 import transformers
 import ujson as json
 from torch.utils.data import Dataset
+from torch.utils.data import ConcatDataset
 
 from src.params import DataArguments
 from src.constants import (
@@ -25,21 +26,30 @@ class SupervisedDataset(Dataset):
 
     def __init__(
         self,
-        data_path: str | list,
+        meta: str | list,
         processor: transformers.ProcessorMixin,
         data_args: DataArguments,
         model_id,
         padding=True,
     ):
         super(SupervisedDataset, self).__init__()
-        if isinstance(data_path, str):
-            list_data_dict = json.load(open(data_path, "r"))
+        # if isinstance(data_path, str):
+        #     list_data_dict = json.load(open(data_path, "r"))
+        # else:
+        #     list_data_dict = data_path
+        with open(meta['annotation'], 'r') as f:
+            self.raw_data = f.readlines()
+        
+        repeat_time = meta['repeat_time']
+        if repeat_time < 1:
+            self.list_data_dict = self.raw_data[:int(len(self.raw_data) * repeat_time)]
         else:
-            list_data_dict = data_path
+            self.list_data_dict = self.raw_data * int(repeat_time)
 
         self.model_id = model_id
         self.processor = processor
-        self.list_data_dict = list_data_dict
+        self.image_folder = meta['root']
+        # self.list_data_dict = list_data_dict
         self.data_args = data_args
         self.padding = padding
         self.image_min_pixel = data_args.image_min_pixels
@@ -58,6 +68,7 @@ class SupervisedDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         sources = self.list_data_dict[i]
+        sources = json.loads(sources)
 
         is_video = False
 
@@ -68,7 +79,7 @@ class SupervisedDataset(Dataset):
             pixel_key = "pixel_values"
 
             image_files = sources["image"]
-            image_folder = self.data_args.image_folder
+            image_folder = self.image_folder
 
             if isinstance(image_files, str):
                 image_files = [image_files]
@@ -261,22 +272,50 @@ class DataCollatorForSupervisedDataset(object):
 
         return data_dict
 
-def make_supervised_data_module(model_id, processor, data_args):
-    """Make dataset and collator for supervised fine-tuning."""
-    sft_dataset = SupervisedDataset(
-        data_path=data_args.data_path, processor=processor, data_args=data_args, model_id=model_id
-    )
-    eval_dataset = None
-    if data_args.eval_path is not None:
-        eval_dataset = SupervisedDataset(
-              data_path=data_args.eval_path,
-              processor=processor,
-              data_args=data_args,
-              model_id=model_id
-          )
+# def make_supervised_data_module(model_id, processor, data_args):
+#     """Make dataset and collator for supervised fine-tuning."""
+#     sft_dataset = SupervisedDataset(
+#         data_path=data_args.data_path, processor=processor, data_args=data_args, model_id=model_id
+#     )
+#     eval_dataset = None
+#     if data_args.eval_path is not None:
+#         eval_dataset = SupervisedDataset(
+#               data_path=data_args.eval_path,
+#               processor=processor,
+#               data_args=data_args,
+#               model_id=model_id
+#           )
         
+#     data_collator = DataCollatorForSupervisedDataset(pad_token_id=processor.tokenizer.pad_token_id)
+
+#     return dict(train_dataset=sft_dataset,
+#                 eval_dataset=eval_dataset,
+#                 data_collator=data_collator)
+    
+    
+def make_supervised_data_module(
+    model_id, 
+    processor, 
+    data_args,
+):
+    datasets = []
+    lengths = []
+    ds_collections = json.loads(open(data_args.data_path).read())
+    for ds_idx, ds_name in enumerate(ds_collections.keys()):
+        repeat_time = ds_collections[ds_name]['repeat_time']
+        dataset = SupervisedDataset(
+            ds_collections[ds_name],
+            processor=processor,
+            data_args=data_args,
+            model_id=model_id,
+        )
+        datasets.append(dataset)
+        lengths.append(len(dataset))
+
+    sft_dataset = ConcatDataset(datasets)
+    
     data_collator = DataCollatorForSupervisedDataset(pad_token_id=processor.tokenizer.pad_token_id)
 
     return dict(train_dataset=sft_dataset,
-                eval_dataset=eval_dataset,
+                eval_dataset=None,
                 data_collator=data_collator)

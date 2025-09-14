@@ -15,6 +15,9 @@ from transformers.trainer import (
 from transformers.pytorch_utils import (
     ALL_LAYERNORM_LAYERS
 )
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/qwenvl_chat")
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/qwenvl_chat/src")
 from train.train_utils import get_peft_state_maybe_zero_3, get_peft_state_non_lora_maybe_zero_3
 
 def maybe_zero_3(param, ignore_status=False, name=None):

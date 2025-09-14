@@ -18,7 +18,8 @@ def replace_image_tokens(input_string, is_video=False):
         pattern = r'\n?' + re.escape(LLAVA_VIDEO_TOKEN) + r'\n?'
         replacement = VISION_START_TOKEN + DEFAULT_VIDEO_TOKEN + VISION_END_TOKEN
     else:
-        pattern = r'\n?' + re.escape(LLAVA_IMAGE_TOKEN) + r'\n?'
+        # pattern = r'\n?' + re.escape(LLAVA_IMAGE_TOKEN) + r'\n?'
+        pattern = re.escape(LLAVA_IMAGE_TOKEN)
         replacement = VISION_START_TOKEN + DEFAULT_IMAGE_TOKEN + VISION_END_TOKEN
 
     return re.sub(pattern, replacement, input_string)

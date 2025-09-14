@@ -67,11 +67,11 @@ if is_peft_available():
 if is_wandb_available():
     import wandb
 
-if is_liger_kernel_available():
-    from liger_kernel.chunked_loss import LigerFusedLinearGRPOLoss
+# if is_liger_kernel_available():
+#     from liger_kernel.chunked_loss import LigerFusedLinearGRPOLoss
 
-if is_deepspeed_available():
-    import deepspeed
+# if is_deepspeed_available():
+#     import deepspeed
 
 
 class RepeatSampler(Sampler):
