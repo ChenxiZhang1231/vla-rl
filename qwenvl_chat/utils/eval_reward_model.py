@@ -1,194 +1,86 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import json
 import os
-import statistics
-import numpy as np
-import cv2
-import base64
 import argparse
-from typing import List, Tuple, Optional, Dict
 import re
 from dataclasses import dataclass
-import openai
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from tqdm import tqdm
+from typing import List, Tuple, Optional, Dict
 
+import base64
+import cv2
+import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
+from functools import partial
+
+
+import openai
 import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev")
 from libero.libero import benchmark
 from verl_vla.utils.prompt_utils.prompt import build_system_prompt
 
+
+# =========================
+# SFT judge prompt（严格 JSON）
+# =========================
+PROMPT = """You are a task-conditioned video rollout success judge.
+
+You are given an ordered sequence of frames from a policy rollout video.
+Your job is to decide (1) whether the task is successfully completed,
+and (2) at which step index (from the provided step_id list) the success is FIRST
+visibly satisfied.
+
+Principles
+- Use only the provided frames. Do not assume off-camera facts.
+- Success requires visible, decisive evidence in-frame.
+- Do NOT infer “about to succeed” (hovering ≠ ON/IN).
+- If a required condition cannot be verified from the frames, choose Failure.
+- The reported finish_step must be one of the provided step_ids; if Failure, use -1.
+
+Required Output (JSON only; no extra text):
+{"success": 0 or 1, "finish_step": <int>}
+"""
+
+
+# =========================
+# Dataclass
+# =========================
 @dataclass
 class RewardTask:
     frames: List[str]
+    frame_indices: List[int]
     description: str
-    score_gt: int
+    score_gt: int            # 0/1
     video_name: str
-    score_vlm: int = 0
+    finish_step_gt_raw: Optional[int] = None
+    finish_step_gt_mapped: Optional[int] = None
+    pred_success: Optional[int] = None
+    pred_finish_step: Optional[int] = None
     score_text: str = ""
-    
-def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode) -> tuple[int, float, str]:
-    """
-    Run a strict VLM judge on a sequence of frames to decide Success/Failure.
-    Returns: (task_index, reward_float, raw_response_text)
-    reward_float is parsed from the model's \\box{{Success}} / \\box{{Failure}} output.
-    """
-    # Guard: empty input
-    if not getattr(task, "frames", None):
-        print(f"Task {task_index}: Input frame list is empty")
-        return task_index, 0.0, "Empty"
-
-    n_frames = len(task.frames)
-    system_prompt = build_system_prompt(mode=mode) 
-
-    # === User文本头：任务与输入说明 ===
-    user_header = (
-        f"BEGIN INPUT\n"
-        f"Task: {task.description}\n\n"
-        f"Frames: {n_frames} frames in chronological order (Frame 1 = earliest … Frame {n_frames} = latest).\n"
-        f"Judge using only the provided frames.\n"
-        f"END INPUT\n"
-    )
-
-    # === 组装多模态内容：文本 + 每帧的编号与图片 ===
-    # 建议把“Frame k:”这行文本放在对应图片前，帮助模型建立时序对齐。
-    user_content = [{"type": "text", "text": user_header}]
-    for i, frame_url in enumerate(task.frames, start=1):
-        user_content.append({"type": "text", "text": f"Frame {i}:"})
-        user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
-
-    try:
-        print(f"Sending request for task {task_index} with {n_frames} frames...")
-        completion = client.chat.completions.create(
-            model="judge",  # 你的72B VLM别名
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            max_tokens=500,
-            temperature=0.0,
-        )
-        response_text = completion.choices[0].message.content or ""
-        print(f"Task {task_index} response: '{response_text}'")
-
-        # 解析 \box{Success} / \box{Failure}
-        reward = parse_reward_from_box(response_text)  # 你已有的解析函数
-        return task_index, reward, response_text
-
-    except Exception as e:
-        print(f"Task {task_index} - Callback API Error: {e}")
-        return task_index, 0.0, "Empty"
-
-def parse_reward_from_box(response: str) -> float:
-    """
-    """
-    match = re.search(r"\\box\{(.*?)\}", response.lower())
-    if match:
-        answer = match.group(1).strip()
-        if answer == "success":
-            return 1.0
-    return 0.0
 
 
-def process_video_to_base64_frames(video_path: Path, num_frames: int = 10) -> list[str]:
-    """
-    读取视频文件，均匀下采样到指定帧数，并返回Base64编码的帧列表。
-
-    Args:
-        video_path (Path): 视频文件的路径。
-        num_frames (int): 要采样的帧数。
-
-    Returns:
-        list[str]: Base64编码的JPEG图像字符串列表。
-    """
-    if not video_path.exists():
-        raise FileNotFoundError(f"视频文件未找到: {video_path}")
-
-    cap = cv2.VideoCapture(str(video_path))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    if total_frames <= 0:
-        return []
-
-    frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
-    
-    base64_frames = []
-    for idx in frame_indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if ret:
-            # resized_frame = cv2.resize(frame, (128, 128))
-            # _, buffer = cv2.imencode('.jpg', resized_frame)
-            _, buffer = cv2.imencode('.jpg', frame)
-            base64_str = base64.b64encode(buffer).decode('utf-8')
-            base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
-
-    cap.release()
-    return base64_frames
-
-def get_rewards_from_judge_batch_sync(
-    client,
-    tasks: List[RewardTask], 
-    max_workers: int = 10,
-    mode: str = "v2",
-) -> List[float]:
-    """
-    Args:
-        tasks: 一个RewardTask对象的列表。
-        max_workers: 同时执行任务的最大线程数。
-
-    Returns:
-        一个浮点数列表，包含了与输入tasks顺序对应的奖励分数。
-    """
-    results = [0.0] * len(tasks) # 初始化一个与tasks等长的结果列表
-    results_text = ['a'] * len(tasks) 
-    # 使用线程池来管理并发请求
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有任务到线程池
-        # future_to_index 映射了每个future对象到它的原始索引
-        future_to_index = {
-            executor.submit(fetch_one_reward_sync, client, task, i, mode): i
-            for i, task in enumerate(tasks)
-        }
-
-        # 当每个任务完成时，处理它的结果
-        for future in as_completed(future_to_index):
-            original_index = future_to_index[future]
-            try:
-                # 获取任务的结果 (index, reward)
-                _, reward, response_text = future.result()
-                # 将奖励值放入结果列表中正确的位置
-                results[original_index] = reward
-                results_text[original_index] = response_text
-            except Exception as e:
-                print(f"Task {original_index} generated an exception: {e}")
-                # 在结果列表中保留默认值0.0
-
-    return results, results_text
-
-    
+# =========================
+# Utilities
+# =========================
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 
 def is_video_file(name: str) -> bool:
     return Path(name).suffix.lower() in VIDEO_EXTS
 
 def parse_task_id_from_name(name: str) -> Optional[int]:
-    """
-    支持多种命名：...task_12... 或者 ..._12_...（你原先 split('_')[3] 的做法容易出错）
-    """
-    m = re.search(r"task[_\-]?(\d+)", name)
-    if m: 
+    m = re.search(r"task[_\-]?(\d+)", name, flags=re.I)
+    if m:
         return int(m.group(1))
-    # 退路：尝试抓最后一个纯数字片段
     parts = re.split(r"[^\d]+", name)
     nums = [p for p in parts if p.isdigit()]
     return int(nums[-1]) if nums else None
 
 def parse_success_from_name(name: str) -> int:
-    """
-    文件名中包含 success=True / success=False
-    """
     lower = name.lower()
     if "success=true" in lower:
         return 1
@@ -196,11 +88,31 @@ def parse_success_from_name(name: str) -> int:
         return 0
     raise ValueError(f"文件名未包含 success=True/False: {name}")
 
+def parse_finish_step_from_name(name: str) -> Optional[int]:
+    """
+    尝试从文件名中解析完成步。如: ...finish_step=123..., ...finish_step-123..., ...finish123...
+    若未找到则返回 None（表示没有‘完成步’标签）。
+    """
+    lower = name.lower()
+    
+    # 修改后的模式，增加了对等号 '=' 的支持
+    # [_\-=]? 匹配一个可选的下划线、连字符 或 等号
+    for pat in [r"finish[_\-]?step[_\-=]?(\d+)",  # 匹配 finish_step=256, finish-step-256, finish_step_256
+                r"finished[_\-=]?(\d+)",         # 匹配 finished=123
+                r"finish[_\-=]?(\d+)"]:           # 匹配 finish=123
+        
+        m = re.search(pat, lower)
+        if m:
+            # group(1) 捕获的是括号内的数字部分
+            return int(m.group(1))
+            
+    return None
+
+
 def safe_makedirs(p: Path):
     p.mkdir(parents=True, exist_ok=True)
 
-def is_binary_like(scores: List[float]) -> bool:
-    # 全是 0/1 则视为二值
+def is_binary_like(scores: List[int | float]) -> bool:
     uniq = set(float(x) for x in scores)
     return uniq.issubset({0.0, 1.0})
 
@@ -219,41 +131,27 @@ def compute_basic_metrics(cm: Dict[str, int]) -> Dict[str, float]:
     n = TP + FP + TN + FN
     acc = (TP + TN) / n if n > 0 else 0.0
     precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0  # 也叫 TPR / Sensitivity
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
     f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
     fpr = FP / (FP + TN) if (FP + TN) > 0 else 0.0
-    tnr = TN / (TN + FP) if (TN + FP) > 0 else 0.0     # Specificity
+    tnr = TN / (TN + FP) if (TN + FP) > 0 else 0.0
     fnr = FN / (FN + TP) if (FN + TP) > 0 else 0.0
     bal_acc = (recall + tnr) / 2.0
-    # Matthews Correlation Coefficient
     import math
     denom = math.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
     mcc = ((TP * TN) - (FP * FN)) / denom if denom > 0 else 0.0
-
     return {
-        "accuracy": acc,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "fpr": fpr,
-        "tnr_specificity": tnr,
-        "fnr": fnr,
-        "balanced_accuracy": bal_acc,
-        "mcc": mcc,
+        "accuracy": acc, "precision": precision, "recall": recall, "f1": f1,
+        "fpr": fpr, "tnr_specificity": tnr, "fnr": fnr,
+        "balanced_accuracy": bal_acc, "mcc": mcc,
     }
 
 def auc_mann_whitney(y_true: List[int], y_score: List[float]) -> Optional[float]:
-    """
-    AUROC 的一种等价计算：MW 统计量 / (pos * neg)
-    对分数的相同值使用平均秩（tie-aware）。无 sklearn 依赖。
-    """
     pos_idx = [i for i, y in enumerate(y_true) if y == 1]
     neg_idx = [i for i, y in enumerate(y_true) if y == 0]
     n_pos, n_neg = len(pos_idx), len(neg_idx)
     if n_pos == 0 or n_neg == 0:
         return None
-
-    # 排名（从小到大），相同分数取平均秩
     pairs = sorted([(s, i) for i, s in enumerate(y_score)], key=lambda x: x[0])
     ranks = [0.0] * len(y_score)
     i = 0
@@ -261,42 +159,341 @@ def auc_mann_whitney(y_true: List[int], y_score: List[float]) -> Optional[float]
         j = i
         while j < len(pairs) and pairs[j][0] == pairs[i][0]:
             j += 1
-        avg_rank = (i + j - 1) / 2.0 + 1.0  # rank 从 1 开始
+        avg_rank = (i + j - 1) / 2.0 + 1.0
         for k in range(i, j):
             _, idx = pairs[k]
             ranks[idx] = avg_rank
         i = j
-
     sum_ranks_pos = sum(ranks[i] for i in pos_idx)
-    # MW 统计：U = sum_ranks_pos - n_pos*(n_pos+1)/2
     U = sum_ranks_pos - n_pos * (n_pos + 1) / 2.0
     auc = U / (n_pos * n_neg)
     return float(auc)
 
-def compute_all_metrics(y_true: List[int], y_score: List[float], threshold: float) -> Dict[str, object]:
-    if is_binary_like(y_score):
-        y_pred = [int(s) for s in y_score]
-        auc = None  # 全 0/1 分数没法产生阈值曲线（只有一个点），AUROC 没意义
-    else:
-        y_pred = to_pred_labels(y_score, threshold)
-        auc = auc_mann_whitney(y_true, y_score)
-
+def compute_all_metrics(y_true: List[int], y_pred: List[int]) -> Dict[str, object]:
     cm = compute_confusion(y_true, y_pred)
     basic = compute_basic_metrics(cm)
-    return {"threshold": threshold, "confusion": cm, "metrics": basic, "auroc": auc}
+    return {"confusion": cm, "metrics": basic}
 
+def process_video_to_base64_frames_with_indices(video_path: Path, num_frames: int = 10) -> Tuple[List[str], List[int]]:
+    """
+    读取视频，均匀下采样到指定帧数，返回 (base64-URL 列表, 采样到的原始帧编号列表)
+    """
+    if not video_path.exists():
+        raise FileNotFoundError(f"视频文件未找到: {video_path}")
+
+    cap = cv2.VideoCapture(str(video_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total_frames <= 0:
+        return [], []
+
+    frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int).tolist()
+    base64_frames = []
+    for idx in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if ret:
+            # 不缩放，保持原图；如需加速可打开 128x128
+            resized_frame = cv2.resize(frame, (128, 128))
+            _, buffer = cv2.imencode('.jpg', resized_frame)
+            base64_str = base64.b64encode(buffer).decode('utf-8')
+            base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
+    cap.release()
+    # 若读帧失败导致数量不一致，截齐
+    L = min(len(base64_frames), len(frame_indices))
+    return base64_frames[:L], frame_indices[:L]
+
+def map_finish_step_to_sampled_idx(finish_step_raw: int, sampled_indices: List[int]) -> int:
+    """
+    将原视频的完成步编号映射到采样后的 step_id（就地 frame index）。
+    若 sampled_indices 为空，或 finish_step_raw 无效，返回 -1。
+    若模型/GT 给了不在集合内的值，映射到最近的 step_id。
+    """
+    if finish_step_raw is None or finish_step_raw < 0 or len(sampled_indices) == 0:
+        return -1
+    # 最近邻
+    arr = np.asarray(sampled_indices)
+    j = int(np.argmin(np.abs(arr - finish_step_raw)))
+    return int(arr[j])
+
+def build_question(task_lang: str, step_ids: list[int]) -> str:
+    """
+    生成与你 SFT 一致的 user 文本：先 PROMPT，然后 Task，再逐行
+    'frame_step{step_id}-<image>'，不使用 system prompt。
+    注意：这里的 step_ids 必须与后续附加的图片顺序一一对应。
+    """
+    # 如果视频解码有丢帧，务必用 len(frames) 截齐 step_ids，以保证一一对应
+    frame_str = "".join([f"frame_step{sid}-<image>\n" for sid in step_ids])
+    return f"{PROMPT}\nTask: {task_lang}\n{frame_str}"
+
+
+def try_parse_json_response(text: str) -> Optional[Dict]:
+    """
+    从模型输出中尽可能提取 JSON（容错）
+    """
+    if not text:
+        return None
+    # 直接尝试整体解析
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # 截取第一个 '{' 到最后一个 '}' 之间
+    try:
+        l = text.find("{")
+        r = text.rfind("}")
+        if 0 <= l < r:
+            return json.loads(text[l:r+1])
+    except Exception:
+        return None
+    return None
+
+
+# =========================
+# VLM 调用（SFT 版）
+# =========================
+def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode: str) -> Tuple[int, int, int, str]:
+    """
+    对单个样本调用 judge。
+    返回: (task_index, pred_success (0/1), pred_finish_step (int or -1), raw_text)
+    """
+    if not task.frames:
+        return task_index, 0, -1, "Empty"
+
+    step_ids = task.frame_indices[:len(task.frames)]
+    question = build_question(task.description, step_ids=step_ids)
+    user_content = [{"type": "text", "text": question}]
+    for frame_url in task.frames:
+        user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
+
+    try:
+        completion = client.chat.completions.create(
+            model="judge",
+            messages=[
+                {"role": "user", "content": user_content},
+            ],
+            max_tokens=200,
+            temperature=0.0,
+        )
+        resp = completion.choices[0].message.content or ""
+    except Exception as e:
+        print(f"[ERR] Task {task_index} API error: {e}")
+        return task_index, 0, -1, f"APIError: {e}"
+
+    data = try_parse_json_response(resp)
+    if data is None:
+        return task_index, 0, -1, resp
+
+    succ = 1 if int(data.get("success", 0)) == 1 else 0
+    fs_raw = int(data.get("finish_step", -1))
+    fs_mapped = map_finish_step_to_sampled_idx(fs_raw, step_ids) if succ == 1 else -1
+    return task_index, succ, fs_mapped, resp
+
+
+def get_rewards_from_judge_batch_sync(
+    client,
+    tasks: List[RewardTask],
+    max_workers: int = 10,
+    mode: str = "v2",
+) -> Tuple[List[int], List[int], List[str]]:
+    """
+    返回:
+      pred_success_list: 与 tasks 对应的 0/1 列表
+      pred_finish_steps: 与 tasks 对应的 int（或 -1）
+      raw_texts:         与 tasks 对应的模型原始输出
+    """
+    pred_success = [0] * len(tasks)
+    pred_finish = [-1] * len(tasks)
+    raw_texts = [""] * len(tasks)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        fut2idx = {
+            ex.submit(fetch_one_reward_sync, client, task, i, mode): i
+            for i, task in enumerate(tasks)
+        }
+        for fut in as_completed(fut2idx):
+            idx = fut2idx[fut]
+            try:
+                _, s, f, t = fut.result()
+                pred_success[idx] = s
+                pred_finish[idx] = f
+                raw_texts[idx] = t
+            except Exception as e:
+                print(f"[ERR] Task {idx} future error: {e}")
+
+    return pred_success, pred_finish, raw_texts
+
+
+# =========================
+# finish_step 评测
+# =========================
+def compute_finish_step_metrics(tasks: List[RewardTask]) -> Dict[str, float]:
+    """
+    仅对 (GT=1 且 预测=1) 的样本统计完成步误差。
+    """
+    errs: List[int] = []
+    n_gt_pos = 0
+    n_pred_pos = 0
+    for t in tasks:
+        if t.score_gt == 1:
+            n_gt_pos += 1
+        if t.pred_success == 1:
+            n_pred_pos += 1
+        if t.score_gt == 1 and t.pred_success == 1 and t.finish_step_gt_mapped is not None and t.finish_step_gt_mapped >= 0 and t.pred_finish_step is not None and t.pred_finish_step >= 0:
+            errs.append(abs(int(t.pred_finish_step) - int(t.finish_step_gt_mapped)))
+        
+    if not errs:
+        return {
+            "count": 0,
+            "mae": None,
+            "med_ae": None,
+            "rmse": None,
+            "within_0": None,
+            "within_1": None,
+            "within_2": None,
+            "gt_success_count": n_gt_pos,
+            "pred_success_count": n_pred_pos,
+            "coverage_pred_success_over_gt_success": 0.0 if n_gt_pos > 0 else None,
+        }
+
+    arr = np.asarray(errs, dtype=float)
+    mae = float(np.mean(arr))
+    med = float(np.median(arr))
+    rmse = float(np.sqrt(np.mean(arr**2)))
+    within_0 = float(np.mean(arr <= 0.5))       # 精确命中
+    within_1 = float(np.mean(arr <= 1.0))       # 误差≤1帧
+    within_2 = float(np.mean(arr <= 2.0))       # 误差≤2帧
+
+    # 覆盖率：在 GT=1 的样本中，被判为成功的比例
+    cov = None
+    if n_gt_pos > 0:
+        # 注意：覆盖率不是 errs 占比，因为 errs 仅统计了 (GT=1 & pred=1)
+        # 覆盖率 = (#(GT=1 & pred=1)) / (#(GT=1))
+        n_gt_pred = sum(1 for t in tasks if t.score_gt == 1 and t.pred_success == 1)
+        cov = n_gt_pred / n_gt_pos
+
+    return {
+        "count": int(len(errs)),
+        "mae": mae,
+        "med_ae": med,
+        "rmse": rmse,
+        "within_0": within_0,
+        "within_1": within_1,
+        "within_2": within_2,
+        "gt_success_count": n_gt_pos,
+        "pred_success_count": n_pred_pos,
+        "coverage_pred_success_over_gt_success": cov,
+    }
+
+def process_single_video(name, eval_folder, task_name, num_frames):
+    """
+    处理单个视频文件，提取所有必要信息。
+    这个函数将在一个独立的进程中运行。
+    
+    返回:
+        一个包含 RewardTask 和 csv_row 的元组，如果处理失败则返回 None。
+    """
+    video_path = eval_folder / name
+    try:
+        gt = parse_success_from_name(name)
+    except Exception:
+        print(f"[SKIP] {name}（未找到 success=True/False）")
+        return None
+
+    task_lang_lookup = {}
+    if benchmark is not None:
+        try:
+            bdict = benchmark.get_benchmark_dict()
+            if task_name in bdict:
+                suite = bdict[task_name]()
+                task_lang_lookup["__suite__"] = suite
+        except Exception as e:
+            print(f"[WARN] benchmark 加载失败：{e}")
+            
+    task_id = parse_task_id_from_name(name)
+    task_lang = ""
+    if "__suite__" in task_lang_lookup and task_id is not None:
+        try:
+            lang = task_lang_lookup["__suite__"].get_task(task_id)[1]
+            task_lang = str(lang)
+        except Exception:
+            pass  # 保持 task_lang 为空字符串
+
+    # 瓶颈所在：I/O 和 CPU 密集型操作
+    frames, frame_indices = process_video_to_base64_frames_with_indices(video_path, num_frames=num_frames)
+
+    finish_raw = parse_finish_step_from_name(name)
+    finish_mapped = map_finish_step_to_sampled_idx(finish_raw, frame_indices) if finish_raw is not None else -1
+
+    task = RewardTask(
+        frames=frames,
+        frame_indices=frame_indices,
+        description=task_lang,
+        score_gt=gt,
+        video_name=name,
+        finish_step_gt_raw=finish_raw,
+        finish_step_gt_mapped=finish_mapped if gt == 1 else -1,
+    )
+
+    row_for_csv = {
+        "video_name": name,
+        "task_id": task_id,
+        "task_lang": task_lang,
+        "gt_success": gt,
+        "gt_finish_step_raw": finish_raw,
+        "gt_finish_step_mapped": finish_mapped if gt == 1 else -1,
+    }
+
+    return (task, row_for_csv)
+
+def main_processing_loop(videos, eval_folder, args):
+    tasks = []
+    rows_for_csv = []
+    
+    # 如果是 debug 模式，只处理前10个视频
+    if args.debug:
+        videos_to_process = sorted(videos)[:10]
+    else:
+        videos_to_process = sorted(videos)
+
+    # 设置工作进程数，通常设置为 CPU 核心数，或者可以由 args 控制
+    num_workers = args.max_workers if hasattr(args, 'max_workers') else os.cpu_count()
+    # num_workers = os.cpu_count() # 使用所有CPU核心
+    print(f"使用 {num_workers} 个进程进行并行处理...")
+
+    # 使用 functools.partial 来预先填充 process_single_video 函数的固定参数
+    worker_func = partial(
+        process_single_video,
+        eval_folder=eval_folder,
+        task_name=args.task_name,
+        num_frames=args.num_frames
+    )
+
+    # 创建一个进程池
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # 使用 executor.map 来将任务分配给进程池
+        # executor.map 会保持原始输入的顺序
+        # 将其包裹在 tqdm 中以显示进度条
+        results_iterator = executor.map(worker_func, videos_to_process)
+        
+        for result in tqdm(results_iterator, total=len(videos_to_process), desc="Processing videos"):
+            if result is not None:
+                task, row_for_csv = result
+                tasks.append(task)
+                rows_for_csv.append(row_for_csv)
+
+    return tasks, rows_for_csv
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate reward model on rollout videos.")
+    parser = argparse.ArgumentParser(description="Evaluate SFT-style reward model (JSON success + finish_step).")
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_val",
                         help="存放评测视频的目录")
-    parser.add_argument("--output_dir", type=str, default="work_dirs", help="结果保存目录（CSV、JSON）")
-    parser.add_argument("--tag", type=str, default="sft-7b", help="")
-    parser.add_argument("--mode", type=str, default="", help="do not use")
+    parser.add_argument("--output_dir", type=str, default="work_dirs/sft-7b-lora64", help="结果保存目录")
+    parser.add_argument("--tag", type=str, default="sft-7b-lora64-3ep", help="子目录名")
+    parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=50, help="每段视频抽帧数")
-    parser.add_argument("--threshold", type=float, default=0.5, help="连续分数二值化阈值")
     parser.add_argument("--max_workers", type=int, default=64, help="judge 并行线程数")
+    parser.add_argument("--debug", action="store_true", help="")
     parser.add_argument("--dry_run", action="store_true", help="只做解析不过 judge（用于快速检查）")
     args = parser.parse_args()
 
@@ -309,100 +506,90 @@ def main():
         api_key="not-needed"
     )
 
-    task_lang_lookup = {}
-    if benchmark is not None:
-        try:
-            bdict = benchmark.get_benchmark_dict()
-            if args.task_name in bdict:
-                suite = bdict[args.task_name]()
-                task_lang_lookup["__suite__"] = suite
-        except Exception as e:
-            print(f"[WARN] benchmark 加载失败：{e}")
+    # 加载任务语料
+
 
     videos = [f for f in os.listdir(eval_folder) if is_video_file(f)]
     if not videos:
         raise FileNotFoundError(f"目录中未找到视频: {eval_folder}")
 
-    tasks: List[RewardTask] = []
-    rows = []
-    for name in tqdm(sorted(videos)):
-        video_path = eval_folder / name
-        try:
-            gt = parse_success_from_name(name)
-        except Exception:
-            print(f"[SKIP] {name}（未找到 success=True/False）")
-            continue
-
-        task_id = parse_task_id_from_name(name)
-        if "__suite__" in task_lang_lookup and task_id is not None:
-            try:
-                lang = task_lang_lookup["__suite__"].get_task(task_id)[1]
-                task_lang = str(lang)
-            except Exception:
-                task_lang = ""
-        else:
-            task_lang = ""
-
-        frames = process_video_to_base64_frames(video_path, num_frames=args.num_frames)
-
-        tasks.append(RewardTask(
-            frames=frames,
-            description=task_lang,
-            score_gt=gt,
-            video_name=name,
-        ))
-
-        rows.append({
-            "video_name": name,
-            "task_id": task_id,
-            "task_lang": task_lang,
-            "score_gt": gt,
-        })
-
+    tasks, rows_for_csv = main_processing_loop(videos, eval_folder, args)
+    
     if args.dry_run:
         print(f"[DRY-RUN] 已解析 {len(tasks)} 段视频，停止于此。")
         return
 
-    scores, texts = get_rewards_from_judge_batch_sync(client, tasks, max_workers=args.max_workers, mode=args.mode)
-    if len(scores) != len(tasks):
-        raise RuntimeError(f"返回分数数量与任务数量不一致: {len(scores)} vs {len(tasks)}")
-    for i, (s, t) in enumerate(zip(scores, texts)):
-        tasks[i].score_vlm = float(s)
-        tasks[i].score_text = str(t)
+    # 批量评测
+    pred_success, pred_finish, raw_texts = get_rewards_from_judge_batch_sync(
+        client, tasks, max_workers=args.max_workers, mode=args.mode
+    )
+    if len(pred_success) != len(tasks):
+        raise RuntimeError(f"返回数量不一致: {len(pred_success)} vs {len(tasks)}")
 
+    for i, t in enumerate(tasks):
+        t.pred_success = int(pred_success[i])
+        t.pred_finish_step = int(pred_finish[i])
+        t.score_text = raw_texts[i]
+
+    # 分类指标（是否完成）
     y_true = [t.score_gt for t in tasks]
-    y_score = [t.score_vlm for t in tasks]
-    stat = compute_all_metrics(y_true, y_score, threshold=args.threshold)
+    y_pred = [t.pred_success for t in tasks]
+    cls_stat = compute_all_metrics(y_true, y_pred)
 
+    step_stat = compute_finish_step_metrics(tasks)
+
+    # 保存 CSV 明细
     import csv
     csv_path = out_dir / "reward_eval_details.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        header = ["video_name", "task_id", "task_lang", "score_gt", "score_vlm", "pred_label", "score_text"]
+        header = [
+            "video_name", "task_id", "task_lang",
+            "gt_success", "pred_success",
+            "gt_finish_step_raw", "gt_finish_step_mapped",
+            "pred_finish_step", "step_abs_err",
+            "raw_text",
+        ]
         writer.writerow(header)
-        if is_binary_like(y_score):
-            y_pred = [int(s) for s in y_score]
-        else:
-            y_pred = to_pred_labels(y_score, stat["threshold"])
-        for t, yl in zip(tasks, y_pred):
-            writer.writerow([t.video_name, parse_task_id_from_name(t.video_name), t.description, t.score_gt, t.score_vlm, yl, t.score_text])
+        for t in tasks:
+            step_err = (
+                abs(int(t.pred_finish_step) - int(t.finish_step_gt_mapped))
+                if (t.score_gt == 1 and t.pred_success == 1 and t.finish_step_gt_mapped is not None and t.finish_step_gt_mapped >= 0 and t.pred_finish_step is not None and t.pred_finish_step >= 0)
+                else ""
+            )
+            writer.writerow([
+                t.video_name,
+                parse_task_id_from_name(t.video_name),
+                t.description,
+                t.score_gt,
+                t.pred_success,
+                t.finish_step_gt_raw,
+                t.finish_step_gt_mapped if t.score_gt == 1 else -1,
+                t.pred_finish_step if t.pred_success == 1 else -1,
+                step_err,
+                t.score_text,
+            ])
 
+    # 保存 JSON 汇总
     json_path = out_dir / "reward_eval_metrics.json"
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(stat, f, ensure_ascii=False, indent=2)
+        json.dump({"classification": cls_stat, "finish_step": step_stat}, f, ensure_ascii=False, indent=2)
 
+    # 文本摘要
     txt_path = out_dir / "reward_eval_summary.txt"
-    cm = stat["confusion"]
-    m = stat["metrics"]
+    cm = cls_stat["confusion"]
+    m = cls_stat["metrics"]
     with open(txt_path, "w", encoding="utf-8") as f:
-        f.write("== Confusion Matrix ==\n")
-        f.write(f"TP={cm['TP']}  FP={cm['FP']}  TN={cm['TN']}  FN={cm['FN']}\n\n")
-        f.write("== Metrics ==\n")
-        f.write(f"Accuracy={m['accuracy']:.4f}\nPrecision={m['precision']:.4f}\nRecall/TPR={m['recall']:.4f}\nF1={m['f1']:.4f}\n")
-        f.write(f"FPR={m['fpr']:.4f}\nTNR/Specificity={m['tnr_specificity']:.4f}\nFNR={m['fnr']:.4f}\n")
-        f.write(f"Balanced-Acc={m['balanced_accuracy']:.4f}\nMCC={m['mcc']:.4f}\n")
-        f.write(f"Threshold={stat['threshold']}\n")
-        f.write(f"AUROC={stat['auroc'] if stat['auroc'] is not None else 'N/A'}\n")
+        f.write("== Classification (Success) ==\n")
+        f.write(f"TP={cm['TP']}  FP={cm['FP']}  TN={cm['TN']}  FN={cm['FN']}\n")
+        f.write(f"Accuracy={m['accuracy']:.4f}  Precision={m['precision']:.4f}  Recall/TPR={m['recall']:.4f}  F1={m['f1']:.4f}\n")
+        f.write(f"FPR={m['fpr']:.4f}  TNR/Specificity={m['tnr_specificity']:.4f}  FNR={m['fnr']:.4f}  Balanced-Acc={m['balanced_accuracy']:.4f}  MCC={m['mcc']:.4f}\n\n")
+
+        f.write("== Finish Step (only on GT=1 & Pred=1) ==\n")
+        f.write(f"Count={step_stat['count']}  GT_pos={step_stat['gt_success_count']}  Pred_pos={step_stat['pred_success_count']}\n")
+        f.write(f"Coverage (Pred=1 among GT=1)={step_stat['coverage_pred_success_over_gt_success']}\n")
+        f.write(f"MAE={step_stat['mae']}  MedianAE={step_stat['med_ae']}  RMSE={step_stat['rmse']}\n")
+        f.write(f"Within±0={step_stat['within_0']}  Within±1={step_stat['within_1']}  Within±2={step_stat['within_2']}\n")
 
     print(f"[OK] 评测完成，共 {len(tasks)} 段。")
     print(f"明细: {csv_path}")

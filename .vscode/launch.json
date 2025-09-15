@@ -358,7 +358,18 @@
                 "--save_total_limit", "10",
                 "--dataloader_num_workers", "4"
             ]
-          }
+          },
+          {
+            "name": "Debug qwenvl rm eval",
+            "type": "debugpy",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/qwenvl_chat/",
+            "program": "utils/eval_reward_model.py",
+            "console": "integratedTerminal",
+            "args":[
+              // "--debug"
+            ]
+          },
         
     ]
 }

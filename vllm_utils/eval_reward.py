@@ -136,7 +136,7 @@ def process_video_to_base64_frames(video_path: Path, num_frames: int = 10) -> li
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
         if ret:
-            # resized_frame = cv2.resize(frame, (128, 128))
+            resized_frame = cv2.resize(frame, (128, 128))
             # _, buffer = cv2.imencode('.jpg', resized_frame)
             _, buffer = cv2.imencode('.jpg', frame)
             base64_str = base64.b64encode(buffer).decode('utf-8')
