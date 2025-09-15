@@ -21,7 +21,7 @@ NUM_GPUS=8
 NUM_NODES=1 
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/align.json"
 
-HYDRA_FULL_ERROR=1 python -m verl.trainer.main_ppo \
+HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
     data.libero_raw_data_dir=$DATASET_PATH \
     data.num_trials_per_task=50 \
