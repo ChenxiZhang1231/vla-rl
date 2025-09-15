@@ -44,90 +44,201 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     return diff
 
 
-@dataclass
+# @dataclass
+# class SmolVLAConfig(PretrainedConfig):
+#     model_type: str = "smolvla"
+#     tie_word_embeddings: bool = False
+#     # Input / output structure.
+#     n_obs_steps: int = 1
+#     chunk_size: int = 50
+#     n_action_steps: int = 50
+
+#     normalization_mapping: dict[str, NormalizationMode] = field(
+#         default_factory=lambda: {
+#             "VISUAL": NormalizationMode.IDENTITY,
+#             "STATE": NormalizationMode.MEAN_STD,
+#             "ACTION": NormalizationMode.MEAN_STD,
+#         }
+#     )
+
+#     # Shorter state and action vectors will be padded
+#     max_state_dim: int = 32
+#     max_action_dim: int = 32
+
+#     # Image preprocessing
+#     resize_imgs_with_padding: tuple[int, int] = (512, 512)
+
+#     # Add empty images. Used by smolvla_aloha_sim which adds the empty
+#     # left and right wrist cameras in addition to the top camera.
+#     empty_cameras: int = 0
+
+#     # Converts the joint and gripper values from the standard Aloha space to
+#     # the space used by the pi internal runtime which was used to train the base model.
+#     adapt_to_pi_aloha: bool = False
+
+#     # Converts joint dimensions to deltas with respect to the current state before passing to the model.
+#     # Gripper dimensions will remain in absolute values.
+#     use_delta_joint_actions_aloha: bool = False
+
+#     # Tokenizer
+#     tokenizer_max_length: int = 48
+
+#     # Decoding
+#     num_steps: int = 10
+
+#     # Attention utils
+#     use_cache: bool = True
+
+#     # Finetuning settings
+#     freeze_vision_encoder: bool = False
+#     train_expert_only: bool = False
+#     train_state_proj: bool = True
+
+#     # Training presets
+#     optimizer_lr: float = 1e-4
+#     optimizer_betas: tuple[float, float] = (0.9, 0.95)
+#     optimizer_eps: float = 1e-8
+#     optimizer_weight_decay: float = 1e-10
+#     optimizer_grad_clip_norm: float = 10
+
+#     scheduler_warmup_steps: int = 1_000
+#     scheduler_decay_steps: int = 30_000
+#     scheduler_decay_lr: float = 2.5e-6
+
+#     pretrained_path: str = ""
+#     vlm_model_name: str = "/inspire/ssd/project/robotsimulation/public/huggingface_models/SmolVLM2-500M-Video-Instruct"  # Select the VLM backbone.
+#     load_vlm_weights: bool = False  # Set to True in case of training the expert from scratch. True when init from pretrained SmolVLA weights
+
+#     add_image_special_tokens: bool = False  # Whether to use special image tokens around image features.
+
+#     attention_mode: str = "cross_attn"
+
+#     prefix_length: int = -1
+
+#     pad_language_to: str = "longest"  # "max_length"
+
+#     num_expert_layers: int = -1  # Less or equal to 0 is the default where the action expert has the same number of layers of VLM. Otherwise the expert have less layers.
+#     num_vlm_layers: int = 16  # Number of layers used in the VLM (first num_vlm_layers layers)
+#     self_attn_every_n_layers: int = 2  # Interleave SA layers each self_attn_every_n_layers
+#     expert_width_multiplier: float = 0.75  # The action expert hidden size (wrt to the VLM)
+
+#     min_period: float = 4e-3  # sensitivity range for the timestep used in sine-cosine positional encoding
+#     max_period: float = 4.0
+
+#     device: str | None = None  # cuda | cpu | mp
+#     use_amp: bool = False
+#     architectures: str = None
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+
 class SmolVLAConfig(PretrainedConfig):
-    model_type: str = "smolvla"
-    tie_word_embeddings: bool = False
-    # Input / output structure.
-    n_obs_steps: int = 1
-    chunk_size: int = 50
-    n_action_steps: int = 50
+    model_type = "smolvla"  # Class attribute
 
-    normalization_mapping: dict[str, NormalizationMode] = field(
-        default_factory=lambda: {
-            "VISUAL": NormalizationMode.IDENTITY,
-            "STATE": NormalizationMode.MEAN_STD,
-            "ACTION": NormalizationMode.MEAN_STD,
-        }
-    )
+    # 编写一个标准的 __init__ 方法
+    def __init__(
+        self,
+        tie_word_embeddings: bool = False,
+        n_obs_steps: int = 1,
+        chunk_size: int = 50,
+        n_action_steps: int = 50,
+        normalization_mapping: dict[str, NormalizationMode] = None,
+        max_state_dim: int = 32,
+        max_action_dim: int = 32,
+        resize_imgs_with_padding: tuple[int, int] = (512, 512),
+        empty_cameras: int = 0,
+        adapt_to_pi_aloha: bool = False,
+        use_delta_joint_actions_aloha: bool = False,
+        tokenizer_max_length: int = 48,
+        num_steps: int = 10,
+        use_cache: bool = True,
+        freeze_vision_encoder: bool = False,
+        train_expert_only: bool = False,
+        train_state_proj: bool = True,
+        optimizer_lr: float = 1e-4,
+        optimizer_betas: tuple[float, float] = (0.9, 0.95),
+        optimizer_eps: float = 1e-8,
+        optimizer_weight_decay: float = 1e-10,
+        optimizer_grad_clip_norm: float = 10,
+        scheduler_warmup_steps: int = 1_000,
+        scheduler_decay_steps: int = 30_000,
+        scheduler_decay_lr: float = 2.5e-6,
+        pretrained_path: str = "",
+        vlm_model_name: str = "/inspire/ssd/project/robotsimulation/public/huggingface_models/SmolVLM2-500M-Video-Instruct",
+        load_vlm_weights: bool = False,
+        add_image_special_tokens: bool = False,
+        attention_mode: str = "cross_attn",
+        prefix_length: int = -1,
+        pad_language_to: str = "longest",
+        num_expert_layers: int = -1,
+        num_vlm_layers: int = 16,
+        self_attn_every_n_layers: int = 2,
+        expert_width_multiplier: float = 0.75,
+        min_period: float = 4e-3,
+        max_period: float = 4.0,
+        device: str | None = None,
+        use_amp: bool = False,
+        architectures: str = None,
+        **kwargs  # 捕获所有其他关键字参数
+    ):
+        # 1. 首先调用父类的 __init__，传递它可能需要的参数
+        # transformers 会从 kwargs 中取走它认识的参数，比如 attn_implementation
+        # super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
-    # Shorter state and action vectors will be padded
-    max_state_dim: int = 32
-    max_action_dim: int = 32
+        # 2. 现在，为这个类自己的所有属性赋值
+        self.n_obs_steps = n_obs_steps
+        self.chunk_size = chunk_size
+        self.n_action_steps = n_action_steps
+        
+        # 处理可变的默认参数
+        if normalization_mapping is None:
+            self.normalization_mapping = {
+                "VISUAL": NormalizationMode.IDENTITY,
+                "STATE": NormalizationMode.MEAN_STD,
+                "ACTION": NormalizationMode.MEAN_STD,
+            }
+        else:
+            self.normalization_mapping = normalization_mapping
 
-    # Image preprocessing
-    resize_imgs_with_padding: tuple[int, int] = (512, 512)
-
-    # Add empty images. Used by smolvla_aloha_sim which adds the empty
-    # left and right wrist cameras in addition to the top camera.
-    empty_cameras: int = 0
-
-    # Converts the joint and gripper values from the standard Aloha space to
-    # the space used by the pi internal runtime which was used to train the base model.
-    adapt_to_pi_aloha: bool = False
-
-    # Converts joint dimensions to deltas with respect to the current state before passing to the model.
-    # Gripper dimensions will remain in absolute values.
-    use_delta_joint_actions_aloha: bool = False
-
-    # Tokenizer
-    tokenizer_max_length: int = 48
-
-    # Decoding
-    num_steps: int = 10
-
-    # Attention utils
-    use_cache: bool = True
-
-    # Finetuning settings
-    freeze_vision_encoder: bool = False
-    train_expert_only: bool = False
-    train_state_proj: bool = True
-
-    # Training presets
-    optimizer_lr: float = 1e-4
-    optimizer_betas: tuple[float, float] = (0.9, 0.95)
-    optimizer_eps: float = 1e-8
-    optimizer_weight_decay: float = 1e-10
-    optimizer_grad_clip_norm: float = 10
-
-    scheduler_warmup_steps: int = 1_000
-    scheduler_decay_steps: int = 30_000
-    scheduler_decay_lr: float = 2.5e-6
-
-    pretrained_path: str = ""
-    vlm_model_name: str = "/inspire/ssd/project/robotsimulation/public/huggingface_models/SmolVLM2-500M-Video-Instruct"  # Select the VLM backbone.
-    load_vlm_weights: bool = False  # Set to True in case of training the expert from scratch. True when init from pretrained SmolVLA weights
-
-    add_image_special_tokens: bool = False  # Whether to use special image tokens around image features.
-
-    attention_mode: str = "cross_attn"
-
-    prefix_length: int = -1
-
-    pad_language_to: str = "longest"  # "max_length"
-
-    num_expert_layers: int = -1  # Less or equal to 0 is the default where the action expert has the same number of layers of VLM. Otherwise the expert have less layers.
-    num_vlm_layers: int = 16  # Number of layers used in the VLM (first num_vlm_layers layers)
-    self_attn_every_n_layers: int = 2  # Interleave SA layers each self_attn_every_n_layers
-    expert_width_multiplier: float = 0.75  # The action expert hidden size (wrt to the VLM)
-
-    min_period: float = 4e-3  # sensitivity range for the timestep used in sine-cosine positional encoding
-    max_period: float = 4.0
-
-    device: str | None = None  # cuda | cpu | mp
-    use_amp: bool = False
-    architectures: str = None
+        self.max_state_dim = max_state_dim
+        self.max_action_dim = max_action_dim
+        self.resize_imgs_with_padding = resize_imgs_with_padding
+        self.empty_cameras = empty_cameras
+        self.adapt_to_pi_aloha = adapt_to_pi_aloha
+        self.use_delta_joint_actions_aloha = use_delta_joint_actions_aloha
+        self.tokenizer_max_length = tokenizer_max_length
+        self.num_steps = num_steps
+        self.use_cache = use_cache
+        self.freeze_vision_encoder = freeze_vision_encoder
+        self.train_expert_only = train_expert_only
+        self.train_state_proj = train_state_proj
+        self.optimizer_lr = optimizer_lr
+        self.optimizer_betas = optimizer_betas
+        self.optimizer_eps = optimizer_eps
+        self.optimizer_weight_decay = optimizer_weight_decay
+        self.optimizer_grad_clip_norm = optimizer_grad_clip_norm
+        self.scheduler_warmup_steps = scheduler_warmup_steps
+        self.scheduler_decay_steps = scheduler_decay_steps
+        self.scheduler_decay_lr = scheduler_decay_lr
+        self.pretrained_path = pretrained_path
+        self.vlm_model_name = vlm_model_name
+        self.load_vlm_weights = load_vlm_weights
+        self.add_image_special_tokens = add_image_special_tokens
+        self.attention_mode = attention_mode
+        self.prefix_length = prefix_length
+        self.pad_language_to = pad_language_to
+        self.num_expert_layers = num_expert_layers
+        self.num_vlm_layers = num_vlm_layers
+        self.self_attn_every_n_layers = self_attn_every_n_layers
+        self.expert_width_multiplier = expert_width_multiplier
+        self.min_period = min_period
+        self.max_period = max_period
+        self.device = device
+        self.use_amp = use_amp
+        self.architectures = architectures
+        super().__init__(
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs
+        )
 
     @property
     def image_features(self) -> dict[str, PolicyFeature]:
@@ -209,7 +320,8 @@ class SmolVLAConfig(PretrainedConfig):
         default_config_dict = PretrainedConfig().to_dict()
 
         # Get class-specific config dict if not part of a composition
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        # class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        class_config_dict = self.__class__().to_dict()
 
         serializable_config_dict = {}
 
@@ -260,7 +372,7 @@ class SmolVLAConfig(PretrainedConfig):
         if "_name_or_path" in serializable_config_dict:
             del serializable_config_dict["_name_or_path"]
         
-        del serializable_config_dict['output_features']
-        del serializable_config_dict['input_features']
+        # del serializable_config_dict['output_features']
+        # del serializable_config_dict['input_features']
 
         return serializable_config_dict

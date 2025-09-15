@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict
+import random
+from collections import Counter
 
 import base64
 import cv2
@@ -251,7 +253,7 @@ def try_parse_json_response(text: str) -> Optional[Dict]:
 # =========================
 # VLM 调用（SFT 版）
 # =========================
-def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode: str) -> Tuple[int, int, int, str]:
+def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode: str, temperature, top_p, seed) -> Tuple[int, int, int, str]:
     """
     对单个样本调用 judge。
     返回: (task_index, pred_success (0/1), pred_finish_step (int or -1), raw_text)
@@ -272,7 +274,8 @@ def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode: str) 
                 {"role": "user", "content": user_content},
             ],
             max_tokens=200,
-            temperature=0.0,
+            temperature=temperature,
+            top_p=top_p,
         )
         resp = completion.choices[0].message.content or ""
     except Exception as e:
@@ -294,6 +297,9 @@ def get_rewards_from_judge_batch_sync(
     tasks: List[RewardTask],
     max_workers: int = 10,
     mode: str = "v2",
+    temperature: float = 0.0, 
+    top_p: float = 1.0,
+    seeds: Optional[int] = None
 ) -> Tuple[List[int], List[int], List[str]]:
     """
     返回:
@@ -307,7 +313,10 @@ def get_rewards_from_judge_batch_sync(
 
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         fut2idx = {
-            ex.submit(fetch_one_reward_sync, client, task, i, mode): i
+            ex.submit(
+                fetch_one_reward_sync, client, task, i, mode,
+                temperature, top_p,
+                None if seeds is None else seeds[i],): i
             for i, task in enumerate(tasks)
         }
         for fut in as_completed(fut2idx):
@@ -483,18 +492,50 @@ def main_processing_loop(videos, eval_folder, args):
 
     return tasks, rows_for_csv
 
+
+def aggregate_success_and_finish(pred_success_list: List[int], pred_finish_list: List[int], m: int, strategy: str="min") -> Tuple[int,int]:
+    """
+    m-of-n 聚合：
+      - 若 >= m 票成功 → 最终成功=1，否则 0
+      - finish_step 仅在成功时聚合成功票的 step
+    strategy: "min" | "median" | "mode"
+    """
+    success_votes = [i for i, s in enumerate(pred_success_list) if s == 1]
+    if len(success_votes) >= m:
+        finishes = [pred_finish_list[i] for i in success_votes if pred_finish_list[i] is not None and pred_finish_list[i] >= 0]
+        if not finishes:
+            return 1, -1
+        if strategy == "min":
+            return 1, int(min(finishes))          # 最保守：取最早完成
+        elif strategy == "median":
+            return 1, int(np.median(finishes))
+        elif strategy == "mode":
+            c = Counter(finishes).most_common(1)[0][0]
+            return 1, int(c)
+        else:
+            return 1, int(min(finishes))
+    else:
+        return 0, -1
+    
 def main():
     parser = argparse.ArgumentParser(description="Evaluate SFT-style reward model (JSON success + finish_step).")
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_val",
                         help="存放评测视频的目录")
-    parser.add_argument("--output_dir", type=str, default="work_dirs/sft-7b-lora64", help="结果保存目录")
-    parser.add_argument("--tag", type=str, default="sft-7b-lora64-3ep", help="子目录名")
+    parser.add_argument("--output_dir", type=str, default="work_dirs/sft-32b-lora64", help="结果保存目录")
+    parser.add_argument("--tag", type=str, default="sft-7b-lora64-60steps-vote5-pass3", help="子目录名")
     parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=50, help="每段视频抽帧数")
-    parser.add_argument("--max_workers", type=int, default=64, help="judge 并行线程数")
+    parser.add_argument("--max_workers", type=int, default=128, help="judge 并行线程数")
     parser.add_argument("--debug", action="store_true", help="")
     parser.add_argument("--dry_run", action="store_true", help="只做解析不过 judge（用于快速检查）")
+    parser.add_argument("--vote_n", type=int, default=5, help="每个视频生成多少个变体做投票 (n)")
+    parser.add_argument("--vote_m", type=int, default=3, help="至少多少票成功算通过 (m)")
+    parser.add_argument("--vote_finish_agg", type=str, default="min", choices=["min","median","mode"],
+                        help="对成功变体的 finish_step 聚合方式")
+    parser.add_argument("--temperature", type=float, default=0.6, help="采样温度（>0 才有随机性）")
+    parser.add_argument("--top_p", type=float, default=0.9, help="nucleus sampling 截断")
+    parser.add_argument("--seed_base", type=int, default=-1, help=">=0 时每次采样用 seed_base+i；<0 则不传 seed")
     args = parser.parse_args()
 
     eval_folder = Path(args.eval_folder)
@@ -519,26 +560,57 @@ def main():
         print(f"[DRY-RUN] 已解析 {len(tasks)} 段视频，停止于此。")
         return
 
-    # 批量评测
-    pred_success, pred_finish, raw_texts = get_rewards_from_judge_batch_sync(
-        client, tasks, max_workers=args.max_workers, mode=args.mode
-    )
-    if len(pred_success) != len(tasks):
-        raise RuntimeError(f"返回数量不一致: {len(pred_success)} vs {len(tasks)}")
+    if args.vote_n <= 1:
+        # ===== 单裁决（保持旧逻辑）=====
+        pred_success, pred_finish, raw_texts = get_rewards_from_judge_batch_sync(
+            client, tasks, max_workers=args.max_workers, mode=args.mode
+        )
+        for i, t in enumerate(tasks):
+            t.pred_success = int(pred_success[i])
+            t.pred_finish_step = int(pred_finish[i])
+            t.score_text = raw_texts[i]
+    else:
+        # ===== m-of-n 投票 =====
+        # 1) 为每个视频构造 n 个变体
+        flat_tasks: List[RewardTask] = [t for t in tasks for _ in range(args.vote_n)]
 
-    for i, t in enumerate(tasks):
-        t.pred_success = int(pred_success[i])
-        t.pred_finish_step = int(pred_finish[i])
-        t.score_text = raw_texts[i]
+        if args.seed_base >= 0:
+            seeds = []
+            for i, _ in enumerate(flat_tasks):
+                # 每个样本都用不同 seed：seed_base + i
+                seeds.append(args.seed_base + i)
+        else:
+            seeds = None
+            
+        v_succ, v_finish, v_text = get_rewards_from_judge_batch_sync(
+            client, flat_tasks, max_workers=args.max_workers, mode=args.mode,
+            temperature=args.temperature, top_p=args.top_p, seeds=seeds
+        )
+    
 
-    # 分类指标（是否完成）
+        ptr = 0
+        for i, t in enumerate(tasks):
+            seg_succ  = v_succ[ptr:ptr + args.vote_n]
+            seg_finish = v_finish[ptr:ptr + args.vote_n]
+            seg_text   = v_text[ptr:ptr + args.vote_n]
+            ptr += args.vote_n
+
+            agg_s, agg_f = aggregate_success_and_finish(seg_succ, seg_finish, m=args.vote_m, strategy="min")
+            t.pred_success = int(agg_s)
+            t.pred_finish_step = int(agg_f)
+            # 可选：保存“第一条成功的 raw text”，便于审计
+            if agg_s == 1 and any(s == 1 for s in seg_succ):
+                k = seg_succ.index(1)
+                t.score_text = seg_text[k]
+            else:
+                t.score_text = seg_text[0] if seg_text else ""
+
     y_true = [t.score_gt for t in tasks]
     y_pred = [t.pred_success for t in tasks]
     cls_stat = compute_all_metrics(y_true, y_pred)
 
     step_stat = compute_finish_step_metrics(tasks)
 
-    # 保存 CSV 明细
     import csv
     csv_path = out_dir / "reward_eval_details.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
@@ -570,12 +642,10 @@ def main():
                 t.score_text,
             ])
 
-    # 保存 JSON 汇总
     json_path = out_dir / "reward_eval_metrics.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump({"classification": cls_stat, "finish_step": step_stat}, f, ensure_ascii=False, indent=2)
 
-    # 文本摘要
     txt_path = out_dir / "reward_eval_summary.txt"
     cm = cls_stat["confusion"]
     m = cls_stat["metrics"]

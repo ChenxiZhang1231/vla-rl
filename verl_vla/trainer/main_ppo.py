@@ -22,8 +22,9 @@ from functools import partial
 import numpy as np
 import cv2
 import base64
-from typing import List
+from typing import List, Tuple, Optional, Dict
 import re
+from collections import Counter
 from dataclasses import dataclass
 import openai
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -175,7 +176,26 @@ class RobRewardManager():
 @dataclass
 class RewardTask:
     frames: List[str]
+    frame_indices: List[int]
     description: str
+
+PROMPT = """You are a task-conditioned video rollout success judge.
+
+You are given an ordered sequence of frames from a policy rollout video.
+Your job is to decide (1) whether the task is successfully completed,
+and (2) at which step index (from the provided step_id list) the success is FIRST
+visibly satisfied.
+
+Principles
+- Use only the provided frames. Do not assume off-camera facts.
+- Success requires visible, decisive evidence in-frame.
+- Do NOT infer “about to succeed” (hovering ≠ ON/IN).
+- If a required condition cannot be verified from the frames, choose Failure.
+- The reported finish_step must be one of the provided step_ids; if Failure, use -1.
+
+Required Output (JSON only; no extra text):
+{"success": 0 or 1, "finish_step": <int>}
+"""
 
 class RobVLMRewardManager():
     """The reward manager.
@@ -194,6 +214,10 @@ class RobVLMRewardManager():
             base_url="http://localhost:18901/v1", # 请确保这是您的服务地址
             api_key="not-needed"
         )
+        self.vote_n = self.config.reward_model.vote_n
+        self.vote_m = self.config.reward_model.vote_m
+        self.temperature = self.config.reward_model.temperature
+        self.top_p = self.config.reward_model.top_p
 
     def verify_env(self, data):
         completes = data.batch['complete'].tolist()
@@ -217,146 +241,114 @@ class RobVLMRewardManager():
 
     def get_rewards_from_judge_batch_sync(
         self,
-        tasks: List[RewardTask], 
-        max_workers: int = 10
-    ) -> List[float]:
+        client,
+        tasks: List[RewardTask],
+        max_workers: int = 10,
+        temperature: float = 0.0, 
+        top_p: float = 1.0,
+        seeds: Optional[int] = None
+    ) -> Tuple[List[int], List[int], List[str]]:
         """
-        Args:
-            tasks: 一个RewardTask对象的列表。
-            max_workers: 同时执行任务的最大线程数。
+        返回:
+        pred_success_list: 与 tasks 对应的 0/1 列表
+        pred_finish_steps: 与 tasks 对应的 int（或 -1）
+        raw_texts:         与 tasks 对应的模型原始输出
+        """
+        pred_success = [0] * len(tasks)
+        pred_finish = [-1] * len(tasks)
+        raw_texts = [""] * len(tasks)
 
-        Returns:
-            一个浮点数列表，包含了与输入tasks顺序对应的奖励分数。
-        """
-        results = [0.0] * len(tasks) # 初始化一个与tasks等长的结果列表
-        results_text = ['a'] * len(tasks) 
-        # 使用线程池来管理并发请求
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有任务到线程池
-            # future_to_index 映射了每个future对象到它的原始索引
-            future_to_index = {
-                executor.submit(self.fetch_one_reward_sync, task, i): i
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            fut2idx = {
+                ex.submit(
+                    self.fetch_one_reward_sync, client, task, i,
+                    temperature, top_p,
+                    None if seeds is None else seeds[i],): i
                 for i, task in enumerate(tasks)
             }
-
-            # 当每个任务完成时，处理它的结果
-            for future in as_completed(future_to_index):
-                original_index = future_to_index[future]
+            for fut in as_completed(fut2idx):
+                idx = fut2idx[fut]
                 try:
-                    # 获取任务的结果 (index, reward)
-                    _, reward, response_text = future.result()
-                    # 将奖励值放入结果列表中正确的位置
-                    results[original_index] = reward
-                    results_text[original_index] = response_text
+                    _, s, f, t = fut.result()
+                    pred_success[idx] = s
+                    pred_finish[idx] = f
+                    raw_texts[idx] = t
                 except Exception as e:
-                    print(f"Task {original_index} generated an exception: {e}")
-                    # 在结果列表中保留默认值0.0
+                    print(f"[ERR] Task {idx} future error: {e}")
 
-        return results, results_text
+        return pred_success, pred_finish, raw_texts
 
-    def parse_reward_from_box(self, response: str) -> float:
+    def fetch_one_reward_sync(self, client, task: RewardTask, task_index: int, temperature, top_p, seed) -> Tuple[int, int, int, str]:
         """
+        对单个样本调用 judge。
+        返回: (task_index, pred_success (0/1), pred_finish_step (int or -1), raw_text)
         """
-        match = re.search(r"\\box\{(.*?)\}", response.lower())
-        if match:
-            answer = match.group(1).strip()
-            if answer == "success":
-                return 1.0
-        return 0.0
+        if not task.frames:
+            return task_index, 0, -1, "Empty"
 
-#     def fetch_one_reward_sync(self, task: RewardTask, task_index: int) -> tuple[int, float]:
-#         """
-#         """
-#         if not task.frames:
-#             print(f"Task {task_index}: Input list is empty")
-#             return task_index, 0.0
-
-#         prompt_text = f"""Please analyze the following image sequence to determine task completion.\n
-# Task Description: {task.description}\n
-# Input: A sequence of {len(task.frames)} temporally ordered image frames.\n
-# Instruction: Based on the visual evidence in the sequence, judge if the task objective has been met.\n
-# Required Output Format: Output your thought process first, then output the final answer. Your final answer must be strictly one of the following two words: 'Success' or 'Failure', and it must be enclosed in \\box{{}}.\n
-# Example: \\box{{Success}}"""
-
-# #         prompt_text = f"""请分析以下图像序列以判断任务是否完成。
-# # 任务描述：{task.description}
-# # 输入：一个由 {len(task.frames)} 帧按时间顺序排列的图像序列。
-# # 指令要求：请根据序列中的视觉证据，判断任务目标是否已经达成。
-# # 要求输出格式：先输出你的思考过程，然后输出最终答案。你的最终答案必须也只能是'成功'或'失败'这两个词中的一个，并且必须用 \\box{{}} 包裹。
-# # 例如：\\box{{成功}}"""
-
-#         content = [{"type": "text", "text": prompt_text}]
-#         for frame_url in task.frames:
-#             content.append({"type": "image_url", "image_url": {"url": frame_url}})
-
-#         try:
-#             print(f"Sending request for task {task_index}...")
-#             completion = self.client.chat.completions.create(
-#                 model="judge",
-#                 messages=[{"role": "user", "content": content}],
-#                 max_tokens=500,
-#                 temperature=0.0
-#             )
-#             response_text = completion.choices[0].message.content
-#             print(f"Task {task_index} response: '{response_text}'")
-#             reward = self.parse_reward_from_box(response_text)
-#             return task_index, reward, response_text
-
-#         except Exception as e:
-#             print(f"Task {task_index} - Callback API Error: {e}")
-#             return task_index, 0.0, "Empty"
-        
-    def fetch_one_reward_sync(self, task: RewardTask, task_index: int) -> tuple[int, float, str]:
-        """
-        Run a strict VLM judge on a sequence of frames to decide Success/Failure.
-        Returns: (task_index, reward_float, raw_response_text)
-        reward_float is parsed from the model's \\box{{Success}} / \\box{{Failure}} output.
-        """
-        # Guard: empty input
-        if not getattr(task, "frames", None):
-            print(f"Task {task_index}: Input frame list is empty")
-            return task_index, 0.0, "Empty"
-
-        n_frames = len(task.frames)
-        system_prompt = build_system_prompt(mode="v1") 
-
-        # === User文本头：任务与输入说明 ===
-        user_header = (
-            f"BEGIN INPUT\n"
-            f"Task: {task.description}\n\n"
-            f"Frames: {n_frames} frames in chronological order (Frame 1 = earliest … Frame {n_frames} = latest).\n"
-            f"Judge using only the provided frames.\n"
-            f"END INPUT\n"
-        )
-
-        # === 组装多模态内容：文本 + 每帧的编号与图片 ===
-        # 建议把“Frame k:”这行文本放在对应图片前，帮助模型建立时序对齐。
-        user_content = [{"type": "text", "text": user_header}]
-        for i, frame_url in enumerate(task.frames, start=1):
-            user_content.append({"type": "text", "text": f"Frame {i}:"})
+        step_ids = task.frame_indices[:len(task.frames)]
+        question = self.build_question(task.description, step_ids=step_ids)
+        user_content = [{"type": "text", "text": question}]
+        for frame_url in task.frames:
             user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
 
         try:
-            print(f"Sending request for task {task_index} with {n_frames} frames...")
-            completion = self.client.chat.completions.create(
-                model="judge",  # 你的72B VLM别名
+            completion = client.chat.completions.create(
+                model="judge",
                 messages=[
-                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
                 ],
-                max_tokens=500,
-                temperature=0.0,
+                max_tokens=200,
+                temperature=temperature,
+                top_p=top_p,
             )
-            response_text = completion.choices[0].message.content or ""
-            print(f"Task {task_index} response: '{response_text}'")
-
-            # 解析 \box{Success} / \box{Failure}
-            reward = self.parse_reward_from_box(response_text)  # 你已有的解析函数
-            return task_index, reward, response_text
-
+            resp = completion.choices[0].message.content or ""
         except Exception as e:
-            print(f"Task {task_index} - Callback API Error: {e}")
-            return task_index, 0.0, "Empty"
+            print(f"[ERR] Task {task_index} API error: {e}")
+            return task_index, 0, -1, f"APIError: {e}"
+
+        data = self.try_parse_json_response(resp)
+        if data is None:
+            return task_index, 0, -1, resp
+
+        succ = 1 if int(data.get("success", 0)) == 1 else 0
+        fs_raw = int(data.get("finish_step", -1))
+        fs_mapped = self.map_finish_step_to_sampled_idx(fs_raw, step_ids) if succ == 1 else -1
+        return task_index, succ, fs_mapped, resp
+
+    def try_parse_json_response(self, text: str) -> Optional[Dict]:
+        """
+        从模型输出中尽可能提取 JSON（容错）
+        """
+        if not text:
+            return None
+        # 直接尝试整体解析
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        # 截取第一个 '{' 到最后一个 '}' 之间
+        try:
+            l = text.find("{")
+            r = text.rfind("}")
+            if 0 <= l < r:
+                return json.loads(text[l:r+1])
+        except Exception:
+            return None
+        return None
+
+    def map_finish_step_to_sampled_idx(self, finish_step_raw: int, sampled_indices: List[int]) -> int:
+        """
+        将原视频的完成步编号映射到采样后的 step_id（就地 frame index）。
+        若 sampled_indices 为空，或 finish_step_raw 无效，返回 -1。
+        若模型/GT 给了不在集合内的值，映射到最近的 step_id。
+        """
+        if finish_step_raw is None or finish_step_raw < 0 or len(sampled_indices) == 0:
+            return -1
+        # 最近邻
+        arr = np.asarray(sampled_indices)
+        j = int(np.argmin(np.abs(arr - finish_step_raw)))
+        return int(arr[j])
 
     def get_reward_tasks(self, step_images, step_images_mask, task_lang):
         B, L, H, W, C = step_images.shape
@@ -369,13 +361,45 @@ class RobVLMRewardManager():
             base64_frames = []
             for idx in frame_indices:
                 frame = valid_images[idx]
-                _, buffer = cv2.imencode('.jpg', frame)
+                resized_frame = cv2.resize(frame, (128, 128))
+                _, buffer = cv2.imencode('.jpg', resized_frame)
                 base64_str = base64.b64encode(buffer).decode('utf-8')
                 base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
-            reward_task = RewardTask(frames=base64_frames, description=task_lang[i])
+            reward_task = RewardTask(frames=base64_frames, frame_indices=frame_indices, description=task_lang[i])
             tasks_to_process.append(reward_task)
         return tasks_to_process
-            
+     
+    def build_question(self, task_lang: str, step_ids: list[int]) -> str:
+        """
+        生成与你 SFT 一致的 user 文本：先 PROMPT，然后 Task，再逐行
+        'frame_step{step_id}-<image>'，不使用 system prompt。
+        注意：这里的 step_ids 必须与后续附加的图片顺序一一对应。
+        """
+        # 如果视频解码有丢帧，务必用 len(frames) 截齐 step_ids，以保证一一对应
+        frame_str = "".join([f"frame_step{sid}-<image>\n" for sid in step_ids])
+        return f"{PROMPT}\nTask: {task_lang}\n{frame_str}"
+
+    def try_parse_json_response(self, text: str) -> Optional[Dict]:
+        """
+        从模型输出中尽可能提取 JSON（容错）
+        """
+        if not text:
+            return None
+        # 直接尝试整体解析
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+        # 截取第一个 '{' 到最后一个 '}' 之间
+        try:
+            l = text.find("{")
+            r = text.rfind("}")
+            if 0 <= l < r:
+                return json.loads(text[l:r+1])
+        except Exception:
+            return None
+        return None
+       
     def save_video_grid(
         self,
         video_tensor: torch.Tensor, 
@@ -484,35 +508,122 @@ class RobVLMRewardManager():
         video_writer.release()
         print(f"Video saved successfully to {output_path}")
         
+    def aggregate_success_and_finish(self, pred_success_list: List[int], pred_finish_list: List[int], m: int, strategy: str="min") -> Tuple[int,int]:
+        """
+        m-of-n 聚合：
+        - 若 >= m 票成功 → 最终成功=1，否则 0
+        - finish_step 仅在成功时聚合成功票的 step
+        strategy: "min" | "median" | "mode"
+        """
+        success_votes = [i for i, s in enumerate(pred_success_list) if s == 1]
+        if len(success_votes) >= m:
+            finishes = [pred_finish_list[i] for i in success_votes if pred_finish_list[i] is not None and pred_finish_list[i] >= 0]
+            if not finishes:
+                return 1, -1
+            if strategy == "min":
+                return 1, int(min(finishes))          # 最保守：取最早完成
+            elif strategy == "median":
+                return 1, int(np.median(finishes))
+            elif strategy == "mode":
+                c = Counter(finishes).most_common(1)[0][0]
+                return 1, int(c)
+            else:
+                return 1, int(min(finishes))
+        else:
+            return 0, -1
+        
+    def compute_confusion(self, y_true: List[int], y_pred: List[int]) -> Dict[str, int]:
+        TP = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)
+        FP = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)
+        TN = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 0)
+        FN = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 0)
+        return {"TP": TP, "FP": FP, "TN": TN, "FN": FN}
+
+    def compute_basic_metrics(self, cm: Dict[str, int]) -> Dict[str, float]:
+        TP, FP, TN, FN = cm["TP"], cm["FP"], cm["TN"], cm["FN"]
+        n = TP + FP + TN + FN
+        acc = (TP + TN) / n if n > 0 else 0.0
+        precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+        recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+        f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+        fpr = FP / (FP + TN) if (FP + TN) > 0 else 0.0
+        tnr = TN / (TN + FP) if (TN + FP) > 0 else 0.0
+        fnr = FN / (FN + TP) if (FN + TP) > 0 else 0.0
+        bal_acc = (recall + tnr) / 2.0
+        import math
+        denom = math.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+        mcc = ((TP * TN) - (FP * FN)) / denom if denom > 0 else 0.0
+        return {
+            "accuracy": acc, "precision": precision, "recall": recall, "f1": f1,
+            "fpr": fpr, "tnr_specificity": tnr, "fnr": fnr,
+            "balanced_accuracy": bal_acc, "mcc": mcc,
+        }
+
+    def compute_all_metrics(self, y_true: List[int], y_pred: List[int]) -> Dict[str, object]:
+        cm = self.compute_confusion(y_true, y_pred)
+        basic = self.compute_basic_metrics(cm)
+        return {"confusion": cm, "metrics": basic}
+
     def verify(self, data):
         if self.return_env_score and ('complete' in data.batch):
             score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
         step_images = data.batch["step_images"]
         step_images_mask = data.batch["step_images_mask"]
         task_lang = data.non_tensor_batch['task_lang']
-        
+        B, N, H, W, C = step_images.shape
         reward_tasks = self.get_reward_tasks(step_images, step_images_mask, task_lang)
-        scores, results_text = self.get_rewards_from_judge_batch_sync(reward_tasks, max_workers=64)
-        breakpoint()
-        self.save_video_grid(
-            step_images, 
-            "output_4x4_padded_white.mp4", 
-            fps=10, 
-            grid_size=(4, 4), 
-            padding=10,
-            pad_value=255
-        )
+        
+        if self.vote_n <= 1:
+            pred_success, pred_finish, raw_texts = self.get_rewards_from_judge_batch_sync(
+                self.client, reward_tasks, max_workers=64
+            )
+        else:
+            flat_tasks = [t for t in reward_tasks for _ in range(self.vote_n)]
+            seeds = None
+            v_succ, v_finish, v_text = self.get_rewards_from_judge_batch_sync(
+                self.client, flat_tasks, max_workers=64,
+                temperature=self.temperature, top_p=self.top_p, seeds=seeds
+            )
+
+            ptr = 0
+            pred_success, pred_finish = [], []
+            for i, t in enumerate(reward_tasks):
+                seg_succ  = v_succ[ptr:ptr + self.vote_n]
+                seg_finish = v_finish[ptr:ptr + self.vote_n]
+                seg_text   = v_text[ptr:ptr + self.vote_n]
+                ptr += self.vote_n
+
+                agg_s, agg_f = self.aggregate_success_and_finish(seg_succ, seg_finish, m=self.vote_m, strategy="min")
+                pred_success.append(int(agg_s))
+                pred_finish.append(int(agg_f))
+        
+        scores = pred_success
+        finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
+        complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
+        cls_stat = self.compute_all_metrics(score_env, scores)
+        # breakpoint()
+        # self.save_video_grid(
+        #     step_images, 
+        #     "output_4x4_padded_white.mp4", 
+        #     fps=10, 
+        #     grid_size=(4, 4), 
+        #     padding=10,
+        #     pad_value=255
+        # )
     
         format = [1.0 for _ in range(len(scores))]
 
         data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
+        data.batch['complete'] = complete
+        data.batch['finish_step'] = finish_step
         
         reward_metrics = {}
         format_metrics = {}
         reward_format_metrics = {}
             
         reward_metrics['all'] = data.batch['acc'].mean().item()
+        reward_metrics['rm'] = cls_stat
         format_metrics['all'] = data.batch['format_correctness'].mean().item()
         reward_format_metrics['all'] = data.batch['acc'].mean().item()
         return scores, reward_metrics, format_metrics, reward_format_metrics

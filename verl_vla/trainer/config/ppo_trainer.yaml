@@ -199,6 +199,10 @@ reward_model:
   type: rule
   strategy: fsdp
   vlm_input_num_frames: 10
+  vote_n: 1
+  vote_m: 1
+  temperature: 0.0
+  top_p: 1.0
   return_env_score: True
   model:
     action_token_len: ${actor_rollout_ref.model.action_token_len}

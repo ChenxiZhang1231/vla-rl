@@ -712,7 +712,16 @@ class RayTrainer(object):
                     valid_batch = self.add_to_buffer(valid_batch, batch_size, n_samples)
 
                 for k, v in reward_metrics.items():  # success before filter
-                    metrics['train_verify_score/' + k] = np.mean(metrics['train_verify_score/' + k])
+                    if k == 'rm':
+                        confusion = v['confusion']
+                        metric_rm = v['metrics']
+                        all_individual_metrics = {**confusion, **metric_rm}
+                        # metrics['train_verify_score/' + k] = metrics['train_verify_score/' + k]
+                        for k_, v_ in all_individual_metrics.items():
+                            metric_key = 'train_verify_score/rm/' + k_
+                            metrics[metric_key] = v_
+                    else:
+                        metrics['train_verify_score/' + k] = np.mean(metrics['train_verify_score/' + k])
                     
                 for k, v in format_metrics.items():
                     metrics['format_score/' + k] = np.mean(metrics['format_score/' + k])

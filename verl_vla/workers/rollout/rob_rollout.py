@@ -495,8 +495,8 @@ def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, conf
             'type': 'step',
             'obs': obs,
             'active': active,
-            'complete': complete,
-            'finish_step': finish_step,
+            'complete_raw': complete,
+            'finish_step_raw': finish_step,
             # 'valid_images': step_images.copy() if is_valid else []
             'valid_images': step_images.copy()
         }
@@ -772,8 +772,8 @@ class RobHFRollout(BaseRollout):
             elif self.config.reward_type == 'vlm' and is_train:
                 output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             else:
-                # output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
-                output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
+                output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
+                # output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
@@ -1285,8 +1285,8 @@ class RobHFRollout(BaseRollout):
                 assert result['type'] == 'step'
                 new_inputs[idx] = self._obs_to_input(result['obs'])
                 task_records[idx]['active'] = result['active']
-                task_records[idx]['complete'] = result['complete']
-                task_records[idx]['finish_step'] = result['finish_step']
+                task_records[idx]['complete_raw'] = result['complete_raw']
+                task_records[idx]['finish_step_raw'] = result['finish_step_raw']
                 task_records[idx]['step_images'].extend(result['valid_images']) 
                 if is_valid:
                     valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
@@ -1303,9 +1303,9 @@ class RobHFRollout(BaseRollout):
         torch.cuda.empty_cache()
         if is_valid:
             for task_file, images in valid_video.items():
-                complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                complete = any(r['complete_raw'] for r in task_records if r['task_file_name'] == task_file)
                 # breakpoint()
-                finish_step = [r['finish_step'] for r in task_records if r['task_file_name'] == task_file][0]
+                finish_step = [r['finish_step_raw'] for r in task_records if r['task_file_name'] == task_file][0]
                 save_rollout_video(
                     images,
                     self.config.experiment_name,
@@ -1338,17 +1338,19 @@ class RobHFRollout(BaseRollout):
         for k,v in batch.items():
             batch[k] = torch.stack(v, dim=1) 
         
-        batch["complete"] = []
-        batch["finish_step"] = []
+        batch["complete_raw"] = []
+        batch["finish_step_raw"] = []
         batch["step_images"] = []
         for k in task_records:
-            batch["complete"].append(k["complete"])
-            batch["finish_step"].append(k["finish_step"])
+            batch["complete_raw"].append(k["complete_raw"])
+            batch["finish_step_raw"].append(k["finish_step_raw"])
             batch["step_images"].append(np.stack(k["step_images"]))
             
         
-        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
-        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
         padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
         batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
         batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
