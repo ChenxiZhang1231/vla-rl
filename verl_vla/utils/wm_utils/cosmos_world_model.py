@@ -99,7 +99,7 @@ class CosMosWorldModel(nn.Module):
         pass
 
     @torch.no_grad()
-    def step(self, current_obs_batch: np.ndarray, action_batch: np.ndarray) -> np.ndarray:
+    def step(self, current_obs_batch: np.ndarray, action_batch: np.ndarray, step) -> np.ndarray:
         """
         执行一步并行的闭环模拟。
         这个版本利用了BatchPipeline，不再需要for循环。
@@ -155,7 +155,7 @@ class CosMosWorldModel(nn.Module):
         videos_batch_numpy = videos_batch_hwc.cpu().numpy()
         videos_batch_uint8 = (videos_batch_numpy * 255).astype(np.uint8)
         # breakpoint()
-        # self.save_video_grid(videos_batch_uint8, 'debug.mp4')
+        # self.save_video_grid(videos_batch_uint8, f'debug{step}.mp4')
         # self.save_trajectory_grid_image(videos_batch_uint8, 'debug.png')
         return videos_batch_uint8[:, 1:]  # B, chunk_size, H, W, C
     

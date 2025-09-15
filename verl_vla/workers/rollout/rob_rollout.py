@@ -1566,7 +1566,7 @@ class RobHFRollout(BaseRollout):
         for idx in range(batch_size):
             task_records.append({
                 "active": True,
-                "complete": False,  # 在World Model中，'complete'通常只在达到max_steps时为True
+                "complete": False,
                 "finish_step": 0,
                 "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}"
             })
@@ -1620,7 +1620,7 @@ class RobHFRollout(BaseRollout):
                 raise ValueError("World Model Worker Group has not been set!")
             
             with Timer(name="World_Model_Step", text="{name} mean: {:.4f}s") as timer:
-                next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch)  # B, chunk_size, H, W, C
+                next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch, step)  # B, chunk_size, H, W, C
             wm_timings.append(timer.last)
             # breakpoint()
             # current_obs_batch_np = next_obs_batch_np
@@ -1664,14 +1664,15 @@ class RobHFRollout(BaseRollout):
         
         # self.world_model.save_trajectory_grid_image(
         #     full_trajectory_video, 
-        #     f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
+        #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
         # )
+        ran_id = random.randint(1, 10000)
         self.world_model.save_video_grid(
             full_trajectory_video, 
-            f"output/{self.config.experiment_name}/trajectory_grid_{global_steps}.mp4"
+            f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}_rand{ran_id}.mp4"
         )
             
-            
+        breakpoint()
         print("\n" + "="*50)
         print(" Performance Measurement Report")
         print("="*50)
