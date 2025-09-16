@@ -17,7 +17,7 @@ Single Process Actor
 
 import itertools
 from typing import Iterable, Tuple
-
+import math
 import torch
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -535,6 +535,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         # See PPO paper for details. https://arxiv.org/abs/1707.06347
         dataloader = batch.split(self.config.ppo_mini_batch_size)
         metrics = {}
+        # torch.autograd.set_detect_anomaly(True)
         for batch_idx, data in enumerate(dataloader):
             # split batch into micro_batches
             mini_batch = data
@@ -660,7 +661,12 @@ class RobDataParallelPPOActor(BasePPOActor):
             grad_norm = self._optimizer_step()
             # breakpoint()
             data = {'actor/grad_norm': grad_norm.detach().item()}
-            if data['actor/grad_norm'] == 0:
+            grad_norm_val = data['actor/grad_norm']
+            # if math.isnan(grad_norm_val):
+            #     print("!!! grad_norm is NaN! Breaking...")
+            #     breakpoint()
+            if grad_norm_val == 0:
+                print("!!! grad_norm is zero! Breaking...")
                 breakpoint()
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()

@@ -848,6 +848,7 @@ class RayTrainer(object):
                     logger.log(data=val_metrics, step=global_steps)
 
                 # collect metrics
+                breakpoint()
                 with Timer(name='logging1', text="{name}: {seconds:.1f} seconds") as timer:
                     data_metrics = compute_data_metrics(batch=batch, config=self.config, model_name=self.config.actor_rollout_ref.model.vla)
                 with Timer(name='logging2', text="{name}: {seconds:.1f} seconds") as timer:

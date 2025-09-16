@@ -1671,6 +1671,7 @@ class VLAFlowMatching(nn.Module):
         ent_joint = ent_outer.sum(dim=1)
         mean = mean[..., :original_action_dim]
         std_dev_t = std_dev_t[..., :original_action_dim]
+        # breakpoint()
         return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint, mean, std_dev_t
     
     def compute_values(

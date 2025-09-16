@@ -1,21 +1,45 @@
 
-crean create -n lrm_wm python=3.10
+crean create -n lrm_wm2 python=3.10
 pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
-uv pip install vllm --torch-backend=cu128
-pip install flash-attn --no-build-isolation
-
-cd lerobot; pip install -e .
 
 cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO
-apt install cmake
-conda install -c conda-forge egl-probe=1.0.2
 pip install -r requirements.txt
-pip install -e .
-
-cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/openvla-oft
 pip install -e .
 
 pip install tensordict
 pip install codetiming
 pip install transformers==4.51.0
 pip install num2words
+pip install ray[default]==2.38.0
+pip install openai
+
+pip install --upgrade mujocopip 
+pip uninstall pyopengl pyopengl-accelerate
+pip install pyopengl pyopengl-accelerate
+pip install numpy==1.26.4
+pip install debugpy==1.8.0
+pip install timm
+
+cd lerobot
+pip install -e .
+
+
+
+
+
+
+
+apt install cmake
+conda install -c conda-forge egl-probe=1.0.2
+pip install -r requirements.txt
+pip install -e .
+
+uv pip install vllm --torch-backend=cu128
+pip install flash-attn --no-build-isolation
+
+cd lerobot; pip install -e .
+
+
+
+cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/openvla-oft
+pip install -e .

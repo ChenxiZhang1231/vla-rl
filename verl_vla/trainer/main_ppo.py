@@ -220,7 +220,7 @@ class RobVLMRewardManager():
         self.top_p = self.config.reward_model.top_p
 
     def verify_env(self, data):
-        completes = data.batch['complete'].tolist()
+        completes = data.batch['complete_raw'].tolist()
         batch_size = data.batch[self.data_key].size(0)
         assert len(completes) == batch_size
         score = [float(item) for item in completes]
@@ -599,8 +599,10 @@ class RobVLMRewardManager():
         
         scores = pred_success
         finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
+        # scores = score_env
+        # finish_step = data.batch["finish_step_raw"]
         complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
-        cls_stat = self.compute_all_metrics(score_env, scores)
+        cls_stat = self.compute_all_metrics(score_env, pred_success)
         # breakpoint()
         # self.save_video_grid(
         #     step_images, 

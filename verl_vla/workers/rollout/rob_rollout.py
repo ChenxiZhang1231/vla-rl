@@ -42,6 +42,20 @@ from verl_vla.utils.libero_utils import get_libero_env, get_libero_dummy_action,
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+
+# 获取所有物理上的GPU设备
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+  try:
+    # 遍历所有GPU，并为它们设置内存动态增长
+    # 这会使得TensorFlow按需分配显存
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    print(f"Successfully set memory growth to True for {len(gpus)} GPU(s)")
+  except RuntimeError as e:
+    # 内存动态增长的设置必须在GPU被初始化之前完成
+    print(e)
+    
 from verl_vla import DataProto
 from libero.libero import benchmark
 from codetiming import Timer
@@ -50,7 +64,8 @@ import random
 
 import multiprocessing
 import gc
-from multiprocessing import Process, Queue
+# from multiprocessing import Process, Queue
+import multiprocessing as mp
 from collections import defaultdict
 from multiprocessing.connection import Connection
 import time
@@ -715,6 +730,23 @@ def pad_dataprotos_step_images(
         
     return padded_videos, attention_mask
 
+def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps):
+    # 无头渲染（robosuite/mujoco）
+    os.environ.setdefault("MUJOCO_GL", "egl")
+    os.environ.pop("DISPLAY", None)
+
+    # 只在子进程里触碰 CUDA
+    import torch
+    if torch.cuda.is_available():
+        torch.cuda.set_device(0)                 # Ray 下本 actor 的第一个可见 GPU
+        torch.backends.cudnn.benchmark = False   # 可选：稳定性
+        torch.backends.cudnn.deterministic = False
+
+    # 延迟导入/创建 env & 模型，避免父进程提前初始化 CUDA
+    return env_worker_smolvla(
+        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
+    )
+    
 class RobHFRollout(BaseRollout):
 
     def __init__(self, module: nn.Module, config):
@@ -1057,25 +1089,43 @@ class RobHFRollout(BaseRollout):
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         is_train = meta_info.get('is_train', False)
+
+
+        ctx = mp.get_context("spawn")
+
         processes = []
         input_queues = []
         output_queues = []
-        # mp.set_start_method('spawn')
+
         for idx in range(batch_size):
             task_name = task_suite_name[idx]
-            t_id = task_id[idx][0].item()
-            tr_id = trial_id[idx][0].item()
-            in_state = init_state[idx].cpu().numpy()
-            input_q = Queue()
-            output_q = Queue()
-            p = Process(
-                target=env_worker_smolvla,
-                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps)
+
+            # 这些如果是 torch 张量，转成 Python 标量更稳妥
+            t_id = int(task_id[idx][0].item())
+            tr_id = int(trial_id[idx][0].item())
+
+            # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
+            in_state = (init_state[idx]
+                        .detach()
+                        .cpu()
+                        .contiguous()
+                        .numpy()
+                        .copy())
+
+            input_q = ctx.Queue()
+            output_q = ctx.Queue()
+
+            p = ctx.Process(
+                target=_env_entry,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
+                daemon=True,   # 可选：随父进程退出
             )
             p.start()
+
             processes.append(p)
             input_queues.append(input_q)
             output_queues.append(output_q)
+            
         
         inputs = []
         task_descriptions = []
