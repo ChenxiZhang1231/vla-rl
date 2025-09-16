@@ -137,5 +137,5 @@ verl/models
 verl/ckpts
 verl/data
 verl/tensorboard_log
-MUJOCO_LOG.TXT
+core.*
 MUJOCO_LOG.TXT
