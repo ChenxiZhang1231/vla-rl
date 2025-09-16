@@ -213,7 +213,7 @@ def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config
     # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
     # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
     B, S, K, CH, D = data.batch['x_t'].shape
-    response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
+    response_length = S * config.actor_rollout_ref.rollout.action_chunks_len * config.actor_rollout_ref.model.action_token_len 
     finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(response_length, device=data.batch['x_t'].device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(data.batch['x_t'].size(0), -1)
@@ -237,8 +237,8 @@ def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config
         # attention_mask = data.batch['attention_mask']
         # response_mask = attention_mask[:, -response_length:]
         # token_level_rewards = data.batch['token_level_rewards']
-        token_level_rewards = token_level_rewards.reshape(B, S, CH, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
-        response_mask = response_mask.reshape(B, S, CH, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        token_level_rewards = token_level_rewards.reshape(B, S, config.actor_rollout_ref.rollout.action_chunks_len, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        response_mask = response_mask.reshape(B, S, config.actor_rollout_ref.rollout.action_chunks_len, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
         macro_mask = (response_mask > 0).float()
         advantages, returns = core_algos.compute_gae_advantage_return(token_level_rewards=token_level_rewards,
                                                                       values=values,
@@ -313,12 +313,12 @@ def compute_data_metrics(batch, config, model_name):
     if model_name == 'smolvla':
         B, S, K, CH, D = batch.batch['x_t'].shape
         finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
-        response_length = S * CH * config.actor_rollout_ref.model.action_token_len 
+        response_length = S * config.actor_rollout_ref.rollout.action_chunks_len * config.actor_rollout_ref.model.action_token_len 
         steps = torch.arange(response_length, device=batch.batch['x_t'].device)  # (traj_len,)
         steps_expanded = steps.unsqueeze(0).expand(batch.batch['x_t'].size(0), -1)
         response_mask = steps_expanded < finish_step.unsqueeze(1)
         if config.algorithm.adv_estimator == "gae":
-            response_mask = response_mask.reshape(B, S, CH, 7).sum(dim=(-1,-2))
+            response_mask = response_mask.reshape(B, S, config.actor_rollout_ref.rollout.action_chunks_len, 7).sum(dim=(-1,-2))
             response_mask = (response_mask > 0).float()
             
         
@@ -667,6 +667,7 @@ class RayTrainer(object):
                     # do accuracy filtering and score logging
                     # breakpoint()
                     with Timer(name='verify', text="{name}: {seconds:.1f} seconds") as timer:
+                        # scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify_env(roll_batch)
                         scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify(roll_batch)
                         for k, v in reward_metrics.items():
                             metrics['train_verify_score/' + k].append(v)

@@ -11,7 +11,7 @@ export MUJOCO_GL="osmesa"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='debug_wm_12w' 
+EXPERIMENT_NAME='debug_wm_19w' 
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -25,8 +25,9 @@ NUM_NODES=1
 ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/align.json"
 
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-13_12-36-12/checkpoints/model/iter_000042000.pt"
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000080000.pt"
+# DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000080000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000118000.pt"
+DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
 VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \

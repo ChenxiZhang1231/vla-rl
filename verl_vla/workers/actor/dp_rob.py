@@ -552,7 +552,7 @@ class RobDataParallelPPOActor(BasePPOActor):
 
                 B, S, K, CH, D = data['x_t'].shape
                 finish_step = data['finish_step'] * self.config.action_token_len
-                response_length = S * CH * self.config.action_token_len
+                response_length = S * self.config.action_chunks_len * self.config.action_token_len
                 steps = torch.arange(response_length, device=data['x_t'].device)  # (traj_len,)
                 steps_expanded = steps.unsqueeze(0).expand(data['x_t'].size(0), -1)
                 response_mask = steps_expanded < finish_step.unsqueeze(1)
@@ -585,7 +585,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 entropy, log_prob, mean, std = self._forward_micro_batch_update_smolvla(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
-
+                # breakpoint()
    
                 old_log_prob_tmp = old_log_prob.reshape(B, -1)
                 advantages_tmp = advantages.reshape(B, -1)
@@ -598,7 +598,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 if self.config.algo == "grpo":
                     pass
                 elif self.config.algo == "ppo":
-                    advantages_tmp = advantages_tmp.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, CH, self.config.action_token_len)
+                    advantages_tmp = advantages_tmp.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, self.config.action_chunks_len, self.config.action_token_len)
                     advantages_tmp = advantages_tmp.reshape(B, -1)
                 else:
                     raise

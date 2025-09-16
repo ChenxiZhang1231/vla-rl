@@ -1634,22 +1634,25 @@ class VLAFlowMatching(nn.Module):
         mean = x_t_f + dt * drift
         std  = (sqrt_abs_dt * std_dev_t).clamp_min(1e-6)
 
+        CH = self.config.n_action_steps
         CH_idx = torch.arange(CH, device=device)[None, None, :]
         S_idx  = torch.arange(S,  device=device)[None, :, None]
         s_fin  = (finish_step.to(device) // CH).view(B, 1, 1)
         c_fin  = (finish_step.to(device) %  CH).view(B, 1, 1)
 
         mask_before = (S_idx <  s_fin).float()
-        mask_equal  = (S_idx == s_fin).float() * (CH_idx <= c_fin).float()
+        # mask_equal  = (S_idx == s_fin).float() * (CH_idx <= c_fin).float()
+        mask_equal  = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
         mask_actions = mask_before.expand(B, S, CH) + mask_equal
         mask_elem = mask_actions[:, :, None, :, None]
-
+        # breakpoint()
         # lp_elem = Normal(mean, std).log_prob(x_next_f.detach())
         lp_elem = (
             -((x_next_f.detach() - mean) ** 2) / (2 * ((std)**2))
             - torch.log(std)
             - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
         )
+        lp_elem = lp_elem[..., :self.config.n_action_steps, :]
         lp_elem = lp_elem * mask_elem
         original_action_dim = 7
         lp_elem = lp_elem[..., :original_action_dim]
