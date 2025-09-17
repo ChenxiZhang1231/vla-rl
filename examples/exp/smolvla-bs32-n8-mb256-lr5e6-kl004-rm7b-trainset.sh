@@ -6,6 +6,13 @@ export TOKENIZERS_PARALLELISM=true
 export ACCELERATE_USE_FSDP=true
 export FSDP_CPU_RAM_EFFICIENT_LOADING=true
 export MUJOCO_GL="osmesa"
+# export MUJOCO_GL="egl"
+# export MUJOCO_GL="glx"
+export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+
+# export CUDA_LAUNCH_BLOCKING=1
+# export TORCH_USE_CUDA_DSA=1
+# export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
 EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b-trainset'

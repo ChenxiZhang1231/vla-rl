@@ -2,6 +2,10 @@
 crean create -n lrm_wm2 python=3.10
 pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 
+cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/openvla-oft
+pip install -e .
+
+
 cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO
 pip install -r requirements.txt
 pip install -e .
@@ -41,5 +45,7 @@ cd lerobot; pip install -e .
 
 
 
-cd /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/openvla-oft
-pip install -e .
+
+
+ImportError: ('Unable to load OpenGL library', "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/miniconda3/envs/lrm_cu126/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /lib/x86_64-linux-gnu/libLLVM.so.19.1)", 'libOSMesa.so.8', 'libOSMesa.so.8')
+
