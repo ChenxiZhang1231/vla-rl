@@ -316,7 +316,7 @@ class RobActorRolloutRefWorker(Worker):
                     dtype="float32",
                 )
             # breakpoint()
-            actor_module.to(torch_dtype)
+            # actor_module.to(torch_dtype)
             # breakpoint()
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
@@ -359,6 +359,7 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
         # We wrap FSDP for rollout as well
         mixed_precision_config = fsdp_config.get('mixed_precision', None)
+        # breakpoint()
         if mixed_precision_config is not None:
             param_dtype = PrecisionType.to_dtype(mixed_precision_config.get('param_dtype', 'bf16'))
             reduce_dtype = PrecisionType.to_dtype(mixed_precision_config.get('reduce_dtype', 'fp32'))
@@ -369,7 +370,7 @@ class RobActorRolloutRefWorker(Worker):
             buffer_dtype = torch.float32
 
         mixed_precision = MixedPrecision(param_dtype=param_dtype, reduce_dtype=reduce_dtype, buffer_dtype=buffer_dtype)
-
+        mixed_precision = None
         if self._is_ref:
             mixed_precision = None
         

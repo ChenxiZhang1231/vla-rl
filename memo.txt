@@ -28,24 +28,6 @@ cd lerobot
 pip install -e .
 
 
-
-
-
-
-
-apt install cmake
-conda install -c conda-forge egl-probe=1.0.2
-pip install -r requirements.txt
-pip install -e .
-
-uv pip install vllm --torch-backend=cu128
-pip install flash-attn --no-build-isolation
-
-cd lerobot; pip install -e .
-
-
-
-
-
-ImportError: ('Unable to load OpenGL library', "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/miniconda3/envs/lrm_cu126/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /lib/x86_64-linux-gnu/libLLVM.so.19.1)", 'libOSMesa.so.8', 'libOSMesa.so.8')
-
+pip install mediapy
+pip install megatron-core==0.12.1
+pip install pynvml
