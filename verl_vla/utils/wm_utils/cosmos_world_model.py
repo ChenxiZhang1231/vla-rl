@@ -111,9 +111,9 @@ class CosMosWorldModel(nn.Module):
         Returns:
             np.ndarray: 下一步的批量观测，形状与输入相同 [B, H, W, 3]，uint8
         """
-        print(f"--- [CosMosWorldModel] step called on PID {os.getpid()} ---")
-        print(f"--- Input obs shape: {current_obs_batch.shape}, dtype: {current_obs_batch.dtype} ---")
-        print(f"--- Input action shape: {action_batch.shape}, dtype: {action_batch.dtype} ---")
+        # print(f"--- [CosMosWorldModel] step called on PID {os.getpid()} ---")
+        # print(f"--- Input obs shape: {current_obs_batch.shape}, dtype: {current_obs_batch.dtype} ---")
+        # print(f"--- Input action shape: {action_batch.shape}, dtype: {action_batch.dtype} ---")
 
         # 1. 适配pipeline的输入要求
         # a. 将批量的初始帧从numpy数组转换为列表
@@ -144,7 +144,7 @@ class CosMosWorldModel(nn.Module):
             guidance=self.config.get("guidance", 7.0),
             seed=self.config.get("seed", 0),
             num_sampling_step=self.config.get("num_sampling_step", 10),
-            # use_cuda_graphs=True,
+            use_cuda_graphs=self.config.get("use_cuda_graphs", False),
         )
         
         

@@ -668,7 +668,7 @@ class RayTrainer(object):
                     # breakpoint()
                     with Timer(name='verify', text="{name}: {seconds:.1f} seconds") as timer:
                         # scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify_env(roll_batch)
-                        scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify(roll_batch)
+                        scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify(roll_batch, global_steps=global_steps)
                         for k, v in reward_metrics.items():
                             metrics['train_verify_score/' + k].append(v)
                             

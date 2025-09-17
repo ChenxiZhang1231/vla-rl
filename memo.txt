@@ -31,3 +31,7 @@ pip install -e .
 pip install mediapy
 pip install megatron-core==0.12.1
 pip install pynvml
+pip install loguru
+pip install fvcore
+pip instal transformer-engine-torch
+conda install -c conda-forge python=3.10 transformer-engine-torch --update-specs

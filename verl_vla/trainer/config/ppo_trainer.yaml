@@ -83,6 +83,7 @@ actor_rollout_ref:
     chunk_size: 20
     guidance: 0
     num_sampling_step: 35
+    use_cuda_graphs: True
     
     fsdp_config:
       model_dtype: bfloat16
