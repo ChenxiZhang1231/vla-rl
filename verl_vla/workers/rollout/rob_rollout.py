@@ -1152,7 +1152,7 @@ class RobHFRollout(BaseRollout):
             init_data = output_queues[idx].get(timeout=120)
             assert init_data['type'] == 'init'
             task_descriptions.append(init_data["task_description"])
-            inputs.append(self._obs_to_input(init_data['obs']))
+            inputs.append(self._obs_to_input(init_data['obs'], is_train))
             task_records.append({
                 "active": init_data['active'],
                 "complete": init_data['complete'],
@@ -1196,7 +1196,7 @@ class RobHFRollout(BaseRollout):
             for idx in active_indices:
                 result = output_queues[idx].get(timeout=30)
                 assert result['type'] == 'step'
-                new_inputs[idx] = self._obs_to_input(result['obs'])
+                new_inputs[idx] = self._obs_to_input(result['obs'], is_train)
                 task_records[idx]['active'] = result['active']
                 task_records[idx]['complete'] = result['complete']
                 task_records[idx]['finish_step'] = result['finish_step']
@@ -2016,8 +2016,8 @@ class RobHFRollout(BaseRollout):
         
         return batch
 
-    def _obs_to_input(self, obs):
-        if self.use_world_model:
+    def _obs_to_input(self, obs, is_train=True):
+        if self.use_world_model and is_train:
             return {
                 "full_image": obs,
             }
