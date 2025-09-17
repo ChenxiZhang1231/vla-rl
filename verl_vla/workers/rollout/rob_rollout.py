@@ -1434,6 +1434,7 @@ class RobHFRollout(BaseRollout):
         batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
         batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
         batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # breakpoint()
         padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
         batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
         batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
@@ -1651,7 +1652,8 @@ class RobHFRollout(BaseRollout):
                 "active": True,
                 "complete": False,
                 "finish_step": 0,
-                "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}"
+                "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}",
+                "step_images": [current_obs_batch_np]
             })
             
         valid_video = defaultdict(list)
@@ -1727,6 +1729,7 @@ class RobHFRollout(BaseRollout):
                     if r['finish_step'] >= max_steps:
                         r['active'] = False
                         r['complete'] = True 
+                # r['step_images'].extend()
                                 
         torch.cuda.empty_cache()
         if is_valid:
@@ -1749,13 +1752,13 @@ class RobHFRollout(BaseRollout):
         #     full_trajectory_video, 
         #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
         # )
-        ran_id = random.randint(1, 10000)
-        self.world_model.save_video_grid(
-            full_trajectory_video, 
-            f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}_rand{ran_id}.mp4"
-        )
+        # ran_id = random.randint(1, 10000)
+        # self.world_model.save_video_grid(
+        #     full_trajectory_video, 
+        #     f"work_dirs/{self.config.experiment_name}_train_rollouts/trajectory_grid_{global_steps}_rand{ran_id}.mp4"
+        # )
             
-        breakpoint()
+        # breakpoint()
         print("\n" + "="*50)
         print(" Performance Measurement Report")
         print("="*50)
@@ -1811,16 +1814,19 @@ class RobHFRollout(BaseRollout):
         for k,v in batch.items():
             batch[k] = torch.stack(v, dim=1) 
         
-        breakpoint()
+        # breakpoint()
         batch["complete"] = []
         batch["finish_step"] = []
-        
+        # breakpoint()
         for k in task_records:
             batch["complete"].append(k["complete"])
             batch["finish_step"].append(k["finish_step"])
+            
         
         batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
         batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['observation.images.image'].device)
         
         output_batch = TensorDict(
             batch,

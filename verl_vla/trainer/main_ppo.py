@@ -22,6 +22,9 @@ from functools import partial
 import numpy as np
 import cv2
 import base64
+import random
+from pathlib import Path
+
 from typing import List, Tuple, Optional, Dict
 import re
 from collections import Counter
@@ -34,7 +37,8 @@ import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/LIBERO")
 from verl_vla import DataProto
 import torch
-from verl_vla.utils.reward_score import gsm8k, math, countdown, multiply, logic
+# from verl_vla.utils.reward_score import gsm8k, math, countdown, multiply, logic
+import math
 
 from verl_vla.utils.prompt_utils.prompt import build_system_prompt
 from verl_vla.trainer.ppo.ray_trainer import RayTrainer
@@ -51,7 +55,7 @@ class RobRewardManager():
         else:
             self.data_key = 'responses'
 
-    def verify(self, data):
+    def verify(self, data, global_steps=-1):
         completes = data.batch['complete'].tolist()
         batch_size = data.batch[self.data_key].size(0)
         assert len(completes) == batch_size
@@ -206,6 +210,7 @@ class RobVLMRewardManager():
         self.config=config
         self.vlm_input_num_frames = self.config.reward_model.vlm_input_num_frames
         self.return_env_score = self.config.reward_model.return_env_score
+        self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
         if config.actor_rollout_ref.model.vla == 'smolvla':
             self.data_key = 'action_tensor'
         else:
@@ -407,101 +412,152 @@ class RobVLMRewardManager():
         fps: int = 10, 
         grid_size: tuple = None,
         padding: int = 5,
-        pad_value: int = 0
+        pad_value: int = 0,
+        scores=None,                 # 新增：模型/判别器分数（长度=B）
+        scores_env=None,             # 新增：环境返回的分数（长度=B）
+        score_text_fn=None,          # 可选：主分数文本格式化函数
+        score_env_text_fn=None,      # 可选：环境分数文本格式化函数
+        label_scores: str = "S",     # 可选：主分数标签
+        label_scores_env: str = "E", # 可选：环境分数标签
+        font_scale: float = None,    # 可选：字体大小（不传则按H自适应）
+        thickness: int = None        # 可选：线宽（不传则按H自适应）
     ):
         """
-        将一个批次的视频张量拼接成一个网格，并保存为视频文件。
-
-        Args:
-            video_tensor (torch.Tensor): 输入的视频张量。
-                形状应为 (B, T, H, W, C)，数据类型为 torch.uint8。
-                B: 批次大小 (视频数量)
-                T: 帧数
-                H: 高度
-                W: 宽度
-                C: 通道数 (应为3，即RGB)
-            output_path (str): 输出视频文件的路径 (例如 "output.mp4")。
-            fps (int): 输出视频的帧率 (Frames Per Second)。
-            grid_size (tuple, optional): 网格的 (行数, 列数)。
-                如果为 None，函数将自动计算一个尽可能接近方形的网格。
-            padding (int): 网格中图像之间的间距（像素）。
-            pad_value (int): 间距的颜色 (0=黑色, 255=白色)。
+        将一个批次的视频张量拼接成一个网格，并保存为视频文件，
+        同时在每个小视频左上角叠加 score（支持 scores 与 scores_env 两行）。
+        video_tensor: (B, T, H, W, C), uint8, RGB
         """
         # --- 1. 参数校验和准备 ---
         if not isinstance(video_tensor, torch.Tensor):
             raise TypeError(f"Input must be a torch.Tensor, but got {type(video_tensor)}")
-        
         if video_tensor.dim() != 5:
             raise ValueError(f"Input tensor must have 5 dimensions (B, T, H, W, C), but got {video_tensor.dim()}")
-
         if video_tensor.dtype != torch.uint8:
-            print(f"Warning: Input tensor dtype is {video_tensor.dtype}, converting to uint8. "
-                "Values should be in the range [0, 255].")
+            print(f"Warning: dtype is {video_tensor.dtype}, converting to uint8. Values should be in [0,255].")
             video_tensor = video_tensor.byte()
 
         B, T, H, W, C = video_tensor.shape
-        
         if C != 3:
             raise ValueError(f"Input tensor must have 3 channels (RGB), but got {C}")
 
-        # 将张量移动到 CPU 并转换为 NumPy 数组，以便 OpenCV 处理
-        # .permute(0, 1, 2, 3, 4) 是为了确保顺序，虽然在这里不是必须的
-        # .contiguous() 确保内存是连续的，对于某些操作是必需的
+        # 处理 scores
+        def _to_list(x):
+            if x is None: return None
+            if isinstance(x, torch.Tensor): return x.detach().cpu().tolist()
+            if isinstance(x, np.ndarray):   return x.tolist()
+            return list(x)
+
+        scores     = _to_list(scores)
+        scores_env = _to_list(scores_env)
+
+        if scores is not None and len(scores) != B:
+            raise ValueError(f"len(scores)={len(scores)} != batch size B={B}")
+        if scores_env is not None and len(scores_env) != B:
+            raise ValueError(f"len(scores_env)={len(scores_env)} != batch size B={B}")
+
+        # 自适应字体和线宽
+        if font_scale is None:
+            font_scale = max(0.4, H / 256.0)
+        if thickness is None:
+            thickness = max(1, int(round(H / 160.0)))
+
+        # 文本函数
+        if score_text_fn is None:
+            score_text_fn = lambda s: f"{int(s)}" if isinstance(s, (int, bool)) or str(s) in ("0","1","True","False") else str(s)
+        if score_env_text_fn is None:
+            score_env_text_fn = lambda s: f"{int(s)}" if isinstance(s, (int, bool)) or str(s) in ("0","1","True","False") else str(s)
+
+        # 颜色映射
+        def score_to_color(val):
+            if str(val) in ("1","True") or val == 1 or val is True:
+                return (0, 200, 0)     # 绿（BGR）
+            if str(val) in ("0","False") or val == 0 or val is False:
+                return (0, 0, 220)     # 红
+            return (220, 160, 0)       # 橙蓝
+
+        # 张量转 numpy
         video_np = video_tensor.cpu().numpy()
 
         # --- 2. 自动计算网格尺寸 ---
         if grid_size is None:
-            # 尝试找到最接近方形的布局
-            rows = int(math.sqrt(B))
-            cols = (B + rows - 1) // rows # 向上取整
+            rows = int(math.sqrt(B)) or 1
+            cols = (B + rows - 1) // rows
             grid_size = (rows, cols)
-        
         rows, cols = grid_size
         if rows * cols < B:
             raise ValueError(f"Grid size {grid_size} is too small for batch size {B}")
 
-        # --- 3. 计算最终视频帧的尺寸 ---
+        # --- 3. 计算最终视频帧尺寸 ---
         grid_h = rows * H + (rows - 1) * padding
         grid_w = cols * W + (cols - 1) * padding
 
         # --- 4. 初始化视频写入器 ---
-        # 定义视频编码器，'mp4v' 是一种常见的选择，兼容性好
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v') 
-        # 或者使用 'avc1' for H.264
-        # fourcc = cv2.VideoWriter_fourcc(*'avc1')
-        
+        os.makedirs(str(Path(output_path).parent), exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(output_path, fourcc, fps, (grid_w, grid_h))
-
         if not video_writer.isOpened():
             raise IOError(f"Could not open video writer for path {output_path}")
 
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
         # --- 5. 逐帧处理并写入 ---
         for t in range(T):
-            # 创建一个用于拼接的空白大画布
             grid_frame = np.full((grid_h, grid_w, C), pad_value, dtype=np.uint8)
-            
-            # 从批次中获取当前时间步的所有帧
-            frame_batch = video_np[:, t, :, :, :] # Shape: (B, H, W, C)
-            
-            # 将帧填充到网格中
+            frame_batch = video_np[:, t, :, :, :]  # (B, H, W, C), RGB
+
             for i in range(B):
                 row_idx = i // cols
                 col_idx = i % cols
-                
-                # 计算当前帧在网格中的起始坐标
+
                 start_y = row_idx * (H + padding)
                 start_x = col_idx * (W + padding)
-                
-                # 从 BGR (OpenCV 默认) 转换为 RGB
-                # PyTorch/NumPy 通常是 RGB, OpenCV 是 BGR
-                # 如果你的输入已经是 BGR，可以注释掉这行
+
+                # 转 BGR 给 OpenCV
                 frame_rgb = frame_batch[i]
                 frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                grid_frame[start_y:start_y+H, start_x:start_x+W] = frame_bgr
 
-                # 将帧复制到画布上
-                grid_frame[start_y : start_y + H, start_x : start_x + W] = frame_bgr
-            
-            # 将拼接好的帧写入视频
+                # 叠加多行 score：第一行 S，第二行 E（如果提供）
+                lines = []
+                if scores is not None:
+                    lines.append((f"{label_scores}:{score_text_fn(scores[i])}", score_to_color(scores[i])))
+                if scores_env is not None:
+                    lines.append((f"{label_scores_env}:{score_env_text_fn(scores_env[i])}", score_to_color(scores_env[i])))
+
+                if lines:
+                    # 计算整体文本框尺寸
+                    line_gap = max(2, int(round(H / 200.0)))
+                    pad = 4
+                    text_sizes = [cv2.getTextSize(txt, font, font_scale, thickness)[0] for (txt, _) in lines]
+                    tw = max(w for (w, h) in text_sizes)
+                    th_total = sum(h for (w, h) in text_sizes) + (len(lines)-1)*line_gap
+
+                    rect_x1 = start_x + 2
+                    rect_y1 = start_y + 2
+                    rect_x2 = min(start_x + 2 + tw + 2*pad, start_x + W - 1)
+                    rect_y2 = min(start_y + 2 + th_total + 2*pad, start_y + H - 1)
+
+                    # 半透明背景（统一深灰）
+                    alpha = 0.5
+                    roi = grid_frame[rect_y1:rect_y2, rect_x1:rect_x2].astype(np.float32)
+                    bg_patch = np.full_like(roi, (30,30,30), dtype=np.float32)
+                    blended = (alpha * bg_patch + (1 - alpha) * roi).astype(np.uint8)
+                    grid_frame[rect_y1:rect_y2, rect_x1:rect_x2] = blended
+
+                    # 逐行绘制文本与小圆点
+                    cursor_y = rect_y1 + pad
+                    dot_r = max(2, int(H / 64))
+                    for (txt, color), (tw_i, th_i) in zip(lines, text_sizes):
+                        text_x = rect_x1 + pad + 2*dot_r + 4   # 预留左侧圆点位置
+                        text_y = cursor_y + th_i
+                        # 左侧状态圆点
+                        cy = cursor_y + th_i//2
+                        cx = rect_x1 + pad + dot_r
+                        cv2.circle(grid_frame, (cx, cy), dot_r, color, -1, lineType=cv2.LINE_AA)
+                        # 文本白色
+                        cv2.putText(grid_frame, txt, (text_x, text_y), font, font_scale, (255,255,255), thickness, cv2.LINE_AA)
+                        cursor_y = text_y + line_gap
+
             video_writer.write(grid_frame)
 
         # --- 6. 释放资源 ---
@@ -564,9 +620,12 @@ class RobVLMRewardManager():
         basic = self.compute_basic_metrics(cm)
         return {"confusion": cm, "metrics": basic}
 
-    def verify(self, data):
+    def verify(self, data, global_steps=-1):
+        # breakpoint()
         if self.return_env_score and ('complete' in data.batch):
             score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
+        else:
+            scores_env = None
         step_images = data.batch["step_images"]
         step_images_mask = data.batch["step_images_mask"]
         task_lang = data.non_tensor_batch['task_lang']
@@ -602,16 +661,20 @@ class RobVLMRewardManager():
         # scores = score_env
         # finish_step = data.batch["finish_step_raw"]
         complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
-        cls_stat = self.compute_all_metrics(score_env, pred_success)
-        # breakpoint()
-        # self.save_video_grid(
-        #     step_images, 
-        #     "output_4x4_padded_white.mp4", 
-        #     fps=10, 
-        #     grid_size=(4, 4), 
-        #     padding=10,
-        #     pad_value=255
-        # )
+        if self.return_env_score:
+            cls_stat = self.compute_all_metrics(score_env, pred_success)
+        if self.use_world_model and (global_steps != -1):
+            # breakpoint()
+            ran_id = random.randint(1, 10000)
+            save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}.mp4"
+            self.save_video_grid(
+                step_images, save_path, fps=10,
+                scores=scores,
+                scores_env=scores_env,
+                # score_text_fn=lambda s: f"{int(s)}",
+                # score_env_text_fn=lambda s: f"{int(s)}",
+                label_scores="S",
+                label_scores_env="E",)
     
         format = [1.0 for _ in range(len(scores))]
 
@@ -625,7 +688,8 @@ class RobVLMRewardManager():
         reward_format_metrics = {}
             
         reward_metrics['all'] = data.batch['acc'].mean().item()
-        reward_metrics['rm'] = cls_stat
+        if self.return_env_score:
+            reward_metrics['rm'] = cls_stat
         format_metrics['all'] = data.batch['format_correctness'].mean().item()
         reward_format_metrics['all'] = data.batch['acc'].mean().item()
         return scores, reward_metrics, format_metrics, reward_format_metrics
@@ -633,7 +697,6 @@ class RobVLMRewardManager():
     def __call__(self, data: DataProto):
         
         # aggregate all available reward tensors
-
         reward_tensor_dict={}
         reward_metrics={}
         reward_tensor = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32) # batch * 64 * 56
