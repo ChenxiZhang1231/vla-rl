@@ -136,7 +136,7 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate reward model on rollout videos.")
     parser.add_argument("--video_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train",
                         help="")
-    parser.add_argument("--output_dir", type=str, default="/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl", help="")
+    parser.add_argument("--output_dir", type=str, default="/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train", help="")
     parser.add_argument("--num_frames", type=int, default=50, help="")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     args = parser.parse_args()

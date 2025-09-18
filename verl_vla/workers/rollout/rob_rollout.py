@@ -820,6 +820,8 @@ class RobHFRollout(BaseRollout):
                 output = [self._generate_minibatch_smolvla_wm(p) for p in batch_prompts]
             elif self.config.reward_type == 'vlm' and is_train:
                 output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
+            elif self.config.only_for_gen_rm_data and (not is_train):
+                output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             else:
                 output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
                 # output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]

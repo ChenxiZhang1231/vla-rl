@@ -29,6 +29,7 @@ actor_rollout_ref:
     action_token_len: 7
     action_chunks_len: 8
     path: ~/models/deepseek-llm-7b-chat
+    load_ckpt: ""
     external_lib: null
     override_config: { }
     enable_gradient_checkpointing: False
@@ -108,6 +109,7 @@ actor_rollout_ref:
     ulysses_sequence_parallel_size: ${actor_rollout_ref.actor.ulysses_sequence_parallel_size} # sp size
   rollout:
     reward_type: env
+    only_for_gen_rm_data: False
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     experiment_name: None

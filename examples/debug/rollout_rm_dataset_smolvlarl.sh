@@ -10,10 +10,17 @@ export MUJOCO_GL="osmesa"
 # export TORCH_USE_CUDA_DSA=1
 # export MUJOCO_GL=egl
 
+DEFAULT_LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/actor/global_step_9"
+DEFAULT_EXPERIMENT_NAME="rm_train2_default"
+
+LOAD_MODEL_PATH="${1:-$DEFAULT_LOAD_MODEL_PATH}"
+EXPERIMENT_NAME="${2:-$DEFAULT_EXPERIMENT_NAME}"
+
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='rm_val'
+# EXPERIMENT_NAME='rm_train2'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/actor/global_step_9"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
@@ -38,6 +45,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
+    actor_rollout_ref.model.load_ckpt=$LOAD_MODEL_PATH \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
     actor_rollout_ref.model.action_chunks_len=20 \
@@ -74,6 +82,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=hf \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
+    actor_rollout_ref.rollout.only_for_gen_rm_data=True \
     actor_rollout_ref.ref.log_prob_micro_batch_size=8 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.00 \
