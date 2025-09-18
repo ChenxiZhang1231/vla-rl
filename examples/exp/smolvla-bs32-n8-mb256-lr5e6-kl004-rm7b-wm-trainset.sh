@@ -100,7 +100,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     reward_model.temperature=0.6 \
     reward_model.top_p=0.9 \
     reward_model.return_env_score=False \
-    algorithm.kl_ctrl.kl_coef=0.00 \
     actor_rollout_ref.ref.vla=$VLA_NAME \
     actor_rollout_ref.world_model.dit_path=$DIT_PATH \
     actor_rollout_ref.world_model.vae_folder=$VAE_FOLDER \
