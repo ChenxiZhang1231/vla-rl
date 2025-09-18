@@ -370,6 +370,19 @@
               // "--debug"
             ]
           },
-        
+          {
+            "name": "Debug VLAC QuickStart",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/VLAC",
+            "program": "quick_start.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+            ],
+            "env": {
+                // "CUDA_VISIBLE_DEVICES": "0" 
+            }
+          },
     ]
 }
