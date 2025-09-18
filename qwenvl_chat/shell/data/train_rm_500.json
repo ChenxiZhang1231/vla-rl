@@ -1,7 +1,7 @@
 {
     "sft-rm": {
-      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl",
-      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/train_rm_496.jsonl",
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train/train_rm_496.jsonl",
       "data_augment": false,
       "repeat_time": 1,
       "length": 496

@@ -628,6 +628,9 @@ class RobActorRolloutRefWorker(Worker):
                 processing_class=None,
                 checkpoint_config=None,
             )
+            if self.config.model.load_ckpt != "":
+                self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)
+                
             # import threading
             # self._save_req  = threading.Event()
             # self._save_done = threading.Event()
@@ -669,6 +672,7 @@ class RobActorRolloutRefWorker(Worker):
         torch.cuda.synchronize()
         torch.distributed.barrier()
         torch.cuda.empty_cache()
+        # breakpoint()
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def update_actor(self, data: DataProto):
