@@ -46,7 +46,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.actor.fsdp_config.model_dtype=float32 \
+    actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.actor.grad_clip=1 \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
@@ -94,6 +94,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
