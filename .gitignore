@@ -139,3 +139,8 @@ verl/data
 verl/tensorboard_log
 core.*
 MUJOCO_LOG.TXT
+VLAC/*.mp4
+VLAC/*.mov
+VLAC/*.jpg
+VLAC/evo_vlac/examples/images
+VLAC/evo_vlac/examples/videos
