@@ -135,7 +135,7 @@ class CosMosWorldModel(nn.Module):
         action_batch_dual = np.concatenate([action_batch, dummy_action_batch], axis=-1)
         action_sequences: List[np.ndarray] = [seq[:self.chunk_size] for seq in action_batch_dual]
         # action_sequences = self.process_action(action_sequences)
-        
+        # breakpoint()
         predicted_videos = self.pipe(
             first_frames=first_frames,  # H W 3
             actions_list=action_sequences,  # 50 7
