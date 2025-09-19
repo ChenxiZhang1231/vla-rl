@@ -384,5 +384,20 @@
                 // "CUDA_VISIBLE_DEVICES": "0" 
             }
           },
+          {
+            "name": "Debug VLAC eval",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/VLAC",
+            "program": "eval_reward_model.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+              "--debug"
+            ],
+            "env": {
+                // "CUDA_VISIBLE_DEVICES": "0" 
+            }
+          },
     ]
 }

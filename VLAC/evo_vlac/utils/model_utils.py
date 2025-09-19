@@ -420,7 +420,47 @@ class GAC_model():
         batch_related_critic=think_critic_list
         return batch_done,batch_related_critic
 
-
+    def eval_trajectory(self, task,
+                            batch_num=20, ref_num=9, skip=1, frame_skip=False, done_threshold=False, 
+                            video_output=False, output_path=""):
+        list_video = task.frames
+        ref_list = task.ref_frames
+        done_ref = ref_list
+        done_list = self.get_trajectory_done(
+            task=task.description, 
+            image_list=list_video, 
+            ref_image_list=done_ref, 
+            batch_num=batch_num, 
+            rich=True, 
+            ref_num=ref_num, 
+            threshold=done_threshold
+        )
+        # if frame_skip:
+        #     done_list = [done_list[i] for i in range(0,len(done_list),skip)]
+        
+        if video_output:
+            if ref_num>0:
+                ref_image_paths=ref_list
+            else:
+                ref_image_paths=None
+            fps = 1
+            video_path = video_trajectory(
+                traj_id=task.video_name[:-4],
+                view='0',
+                image_paths=[],
+                image_objects=list_video,
+                done_list=done_list,
+                critic_list=done_list,
+                value_list=done_list,
+                task=task.description,
+                output_path=output_path,
+                fps=fps,
+                ref_image_paths=ref_image_paths,
+                n_num=ref_num
+            )
+        
+        return done_list
+            
     def web_trajectory_critic(self, task_description, main_video_path, reference_video_path=None, 
                             batch_num=20, ref_num=9, think=False, skip=1, rich=False, reverse_eval=False,output_path=None,fps=None,frame_skip=False,addition_scale=1,bias=0,positive_clip=0,negative_clip=0,related_critic=False,done_flag=False,in_context_done=False,done_threshold=False,video_output=True):
         list_video=images_get_from_video(main_video_path)
