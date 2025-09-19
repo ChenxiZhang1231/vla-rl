@@ -316,7 +316,8 @@ class RobActorRolloutRefWorker(Worker):
                     dtype="float32",
                 )
             # breakpoint()
-            # actor_module.to(torch_dtype)
+            if torch_dtype != torch.float32:
+                actor_module.to(torch_dtype)
             # breakpoint()
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
@@ -370,7 +371,8 @@ class RobActorRolloutRefWorker(Worker):
             buffer_dtype = torch.float32
 
         mixed_precision = MixedPrecision(param_dtype=param_dtype, reduce_dtype=reduce_dtype, buffer_dtype=buffer_dtype)
-        mixed_precision = None
+        if torch_dtype == torch.float32:
+            mixed_precision = None
         if self._is_ref:
             mixed_precision = None
         
