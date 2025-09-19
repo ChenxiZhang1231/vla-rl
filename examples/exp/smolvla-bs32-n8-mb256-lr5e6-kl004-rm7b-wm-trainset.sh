@@ -15,7 +15,7 @@ export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b-wm-trainset'
+EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b-wm-trainset-2'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -52,7 +52,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
     actor_rollout_ref.model.action_chunks_len=20 \
-    actor_rollout_ref.actor.optim.lr=5e-6 \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.warmup_style=constant \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
     actor_rollout_ref.actor.ppo_micro_batch_size=$NUM_GPUS \
@@ -60,16 +60,16 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
-    actor_rollout_ref.actor.grad_clip=1 \
+    actor_rollout_ref.actor.fsdp_config.model_dtype=float32 \
+    actor_rollout_ref.actor.grad_clip=0.5 \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
     actor_rollout_ref.actor.num_images_in_input=1 \
     actor_rollout_ref.actor.traj_mini_batch_size=13 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_type=kl \
-    actor_rollout_ref.actor.kl_loss_coef=0.04 \
-    algorithm.kl_ctrl.kl_coef=0.04 \
+    actor_rollout_ref.actor.kl_loss_coef=0.4 \
+    algorithm.kl_ctrl.kl_coef=0.4 \
     actor_rollout_ref.model.enable_gradient_checkpointing=False \
     actor_rollout_ref.model.use_remove_padding=False \
     actor_rollout_ref.actor.entropy_coeff=0. \
@@ -122,6 +122,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
