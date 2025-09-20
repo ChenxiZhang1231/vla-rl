@@ -517,6 +517,20 @@ def get_fsdp_wrap_policy_wm(root_module):
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy
 
+def get_fsdp_wrap_policy_rm(root_module):
+    
+    # tag_action_embedder(root_module)
+    # policies = []
+    
+    # def is_tagged(m: nn.Module) -> bool:
+    #     return getattr(m, "_fsdp_wrap_me", False)
+    # tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    # policies.append(tag_policy)
+    
+    # auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+    # return auto_wrap_policy
+    return None
+
 def offload_fsdp_grad(module):
     for _, param in module.named_parameters():
         if param.grad is not None:

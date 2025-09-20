@@ -30,6 +30,8 @@ from torchvision import transforms
 # import torch.multiprocessing as mp
 import torchvision.transforms.functional as F
 from typing import List, Tuple
+from pathlib import Path
+import cv2 
 
 from verl_vla import DataProto
 from verl_vla.utils.torch_functional import get_eos_mask
@@ -79,6 +81,22 @@ OPENVLA_V01_SYSTEM_PROMPT = (
     "A chat between a curious user and an artificial intelligence assistant. "
     "The assistant gives helpful, detailed, and polite answers to the user's questions."
 )
+
+REF_DICT = {
+    "libero_spatial": {
+        0: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_0_trial_0--success=True--ran=9350.mp4",
+        1: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_1_trial_5--success=True--ran=3448.mp4",
+        2: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_2_trial_0--success=True--ran=4112.mp4",
+        3: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_3_trial_0--success=True--ran=7681.mp4",
+        4: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_4_trial_2--success=True--ran=6921.mp4",
+        5: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_5_trial_0--success=True--ran=2259.mp4",
+        6: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_6_trial_3--success=True--ran=6237.mp4",
+        7: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_7_trial_16--success=True--ran=6198.mp4",
+        8: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_8_trial_46--success=True--ran=6438.mp4",
+        9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
+    }
+}
+
 
 def crop_and_resize(image, crop_scale, batch_size):
     """
@@ -764,6 +782,13 @@ def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, out
         task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
     )  
 
+SUCCESS_VALUE_THRESH = 95.0      # 认为成功的 value 阈值
+NO_PROGRESS_M = 500                # 连续 m 步 Δvalue <= 0 判定为无进展
+BETA = 0.05                      # r_t = BETA * Δvalue 的缩放
+CLIP_CRITIC_MIN = -90.0          # critic 数值裁剪下界，避免 -100 邻域不稳定
+CLIP_CRITIC_MAX = 100.0          # critic 数值裁剪上界
+CLIP_VALUE = True                # 是否把 value clip 到 [0, 100]
+
 class RobHFRollout(BaseRollout):
 
     def __init__(self, module: nn.Module, config):
@@ -817,9 +842,14 @@ class RobHFRollout(BaseRollout):
         batch_prompts = prompts.chunk(chunks=num_chunks)
         if self.config.vla == "smolvla":
             if self.use_world_model and is_train:
-                output = [self._generate_minibatch_smolvla_wm(p) for p in batch_prompts]
+                if self.config.reward_type == 'vlm':
+                    output = [self._generate_minibatch_smolvla_wm(p) for p in batch_prompts]
+                elif self.config.reward_type == 'vlac':  # use_reward_model
+                    output = [self._generate_minibatch_smolvla_wm_vlac(p) for p in batch_prompts]
             elif self.config.reward_type == 'vlm' and is_train:
                 output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
+            elif self.config.reward_type == 'vlac' and is_train:
+                output = [self._generate_minibatch_smolvla_vlac_reward(p) for p in batch_prompts]
             elif self.config.only_for_gen_rm_data and (not is_train):
                 output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             else:
@@ -1445,6 +1475,777 @@ class RobHFRollout(BaseRollout):
             batch_size=batch_size)
         return DataProto(batch=output_batch)
     
+    def _build_chunk_pairs_and_map(self, task_records, task_descriptions, chunk_len):
+        """
+        把本 chunk 的所有 env 的相邻帧对打平，返回 pairs 与 map，供批量 RM 推理。
+        约定：用每步的“末帧”代表该步的后状态：
+        - 对于每个 env：我们取它的 step_images 中“上一 chunk 的末帧” + “本 chunk 的 20 张末帧”，
+            形成 20 个相邻对：(prev_last, img0), (img0, img1), ..., (img18, img19)
+        """
+        pairs = []
+        pair_task_texts = []
+        pair_map = []  # (env_idx, local_step_in_chunk)
+
+        for env_idx, rec in enumerate(task_records):
+            imgs = rec['step_images']
+            # 确保本 chunk 有 chunk_len 张新帧已 append
+            # 假设 step_images 结构：开头 init 1 帧 + 每个 step append 1 张末帧
+            # 则本 chunk 结束后，新增了 chunk_len 张；上一 chunk 的末帧 = imgs[-chunk_len-1]
+            if len(imgs) < 2:
+                continue  # 还没积累到帧
+            if rec.get('active', True) is False:
+                continue  # 已经停了的不参与
+            if rec.get('complete', False) is True:
+                continue
+
+            # 最近 chunk 的 20 张末帧
+            recent = imgs[-chunk_len:]             # 长度 chunk_len
+            prev_last = imgs[-chunk_len-1]         # 前一帧（上一 chunk 的末帧）
+
+            # 组 20 个相邻对
+            cur_pairs = [(prev_last, recent[0])]
+            for j in range(1, len(recent)):
+                cur_pairs.append((recent[j-1], recent[j]))
+
+            # 打平到全局 pairs
+            task_text = task_descriptions[env_idx]
+            for j, (img_t, img_tp1) in enumerate(cur_pairs):
+                pairs.append({"img_t": img_t, "img_tp1": img_tp1})
+                pair_task_texts.append(task_text)
+                pair_map.append((env_idx, j))  # j ∈ [0, chunk_len-1]
+
+        return pairs, pair_task_texts, pair_map
+
+    def _build_pairs_full_trajectory(self, task_records, task_descriptions, step_interval, ref_frames_list= None, ref_num=1):
+        """
+        从每个 env 的整段轨迹构造『抽样相邻帧对』用于一次性 RM 推理。
+        约定：
+        - rec['step_images'] 里：第0张是初始帧，之后每步末帧各1张；
+            因此总帧数 F = T + 1，步数 T = F - 1
+        - 以 step_interval 为步长做分段：
+            段 j: [s, e)，其中 s = j*step_interval，e = min(s+step_interval, T)
+            送入 RM 的帧对是 (frame[s], frame[e])
+        返回：
+        pairs: [{"img_t": .., "img_tp1": ..}, ...]
+        pair_task_texts: 与 pairs 对齐的任务文本
+        pair_map: [(env_idx, start_step, seg_len), ...]
+        """
+        pairs = []
+        pair_task_texts = []
+        pair_map = []  # (env_idx, start_step, seg_len)
+
+        for env_idx, rec in enumerate(task_records):
+            imgs = rec.get('step_images', [])
+            if len(imgs) < 2:
+                continue
+
+            T = len(imgs) - 1  # 步数
+            if T <= 0:
+                continue
+
+            task_text = task_descriptions[env_idx]
+            
+            def _even_subsample(lst, k: int):
+                if not lst or k <= 0:
+                    return []
+                if len(lst) <= k:
+                    return list(lst)
+                # 从 [0, len-1] 等距取 k 个索引
+                step = (len(lst) - 1) / (k - 1)
+                return [lst[int(round(i * step))] for i in range(k)]
+            
+            s = 0
+            while s < T:
+                e = min(s + step_interval, T)
+                # 帧对：起点帧=imgs[s]，终点帧=imgs[e]
+                ref_seq = ref_frames_list[env_idx]
+                refs = _even_subsample(ref_seq, ref_num)
+                pairs.append({"img_t": imgs[s], "img_tp1": imgs[e], "img_0": imgs[0], "img_ref": refs})
+                pair_task_texts.append(task_text)
+                pair_map.append((env_idx, s, e - s))  # 段长 seg_len = e-s
+                s = e
+
+        return pairs, pair_task_texts, pair_map
+
+    def _distribute_and_finalize_rewards(
+        self, 
+        task_records, 
+        pair_map, 
+        critic_chunks,
+        beta: float = 0.05,
+        success_window: int = 2,
+        max_steps: int = 500,
+    ):
+        """
+        输入：
+        - pair_map: [(env_idx, start_step, seg_len), ...]
+        - critic_chunks: 与 pair_map 对齐的段级critic（百分比，正进负退）
+        过程：
+        1) 把每个段级 critic 按 seg_len 均匀摊到段内每一步的 per-step critic
+        2) 对每个 env 的 per-step critic（长度 T）累计成 value，并计算 Δvalue
+        3) 写回 rec['critic'] / rec['value'] / rec['delta'] / rec['reward']，并标记 complete/active
+        """
+        # 先聚合：为每个 env 准备 per-step critic 容器
+        per_env_step_critic = {}  # env_idx -> list[length T]，T由该env的 step_images 决定
+        for env_idx, rec in enumerate(task_records):
+            imgs = rec.get('step_images', [])
+            T = max(len(imgs) - 1, 0)
+            per_env_step_critic[env_idx] = [0.0] * T
+
+        # 1) 段级 critic 均匀摊回每步
+        for (env_idx, start, seg_len), c in zip(pair_map, critic_chunks):
+            if seg_len <= 0:
+                continue
+            contrib = float(c) / float(seg_len)
+            
+            step_list = per_env_step_critic.get(env_idx, None)
+            if step_list is None:
+                continue
+            for t in range(start, start + seg_len):
+                if 0 <= t < len(step_list):
+                    step_list[t] += contrib
+
+        # 2) 累计每个 env 的 value/Δvalue，并写 reward
+        for env_idx, step_critic in per_env_step_critic.items():
+            rec = task_records[env_idx]
+            T = len(step_critic)
+            if T == 0:
+                # 没有步就跳过
+                rec['critic'] = []
+                rec['delta'] = []
+                rec['value'] = [0.0]
+                rec['reward'] = []
+                rec['active'] = False
+                continue
+
+            v0 = 0.0
+            value, deltas = self._accumulate_value_delta(step_critic, v0=v0)
+            rewards = [beta * d for d in deltas]
+            
+            rec['critic'] = step_critic 
+            rec['delta'] = deltas 
+            rec['value'] = value 
+            rec['reward'] = rewards
+            
+            finish_step = None
+            consec = 0
+            # 遍历 1..T（value 的索引），i 对应“完成第 i 步后的进度”
+            for i in range(1, T + 1):
+                if value[i] >= SUCCESS_VALUE_THRESH:
+                    consec += 1
+                else:
+                    consec = 0
+                if consec >= success_window:
+                    # 第一次满足窗口长度时，finish_step = i（即原始第 i 步）
+                    finish_step = i
+                    break
+
+            if finish_step is not None:
+                rec['complete'] = True
+                rec['finish_step'] = int(finish_step)
+            else:
+                rec['complete'] = False
+                # 若希望把最后一步记为 finish_step（未成功但到头），可如下设置；否则置 0/None 皆可
+                rec['finish_step'] = max_steps
+
+            # 整段评估完成，统一置 inactive
+            rec['active'] = False
+            
+    def _accumulate_value_delta(self, critic_seq, v0=0.0, eps: float = 1e-3):
+        """
+        累计 critic → value（0..100）并给出 Δvalue。
+        - 正向：v_next = v + (100 - v) * (c/100)
+        - 负向：v_next = 100 - (100 - v) * 100/(100 + c)   # c<0
+        （移除 d 的 1.0 下限，或改为极小 eps，避免临门一脚“巨幅下坠”）
+        """
+        value = [float(v0)]
+        deltas = []
+        for c in critic_seq:
+            c = float(max(min(c, CLIP_CRITIC_MAX), CLIP_CRITIC_MIN))  # 例如 [-90, 100]
+            v = value[-1]
+            if c >= 0:
+                v_next = v + (100.0 - v) * (c / 100.0)
+            else:
+                gap = max(100.0 - v, eps)   # 以前是 max(..., 1.0) —— 改为极小 eps
+                v_next = 100.0 - gap * (100.0 / (100.0 + c))
+            if CLIP_VALUE:
+                v_next = min(max(v_next, 0.0), 100.0)
+            value.append(v_next)
+            deltas.append(v_next - v)
+        return value, deltas
+
+    def _accumulate_value_delta_symmetric(self, critic_seq, v0=0.0):
+        value = [float(v0)]
+        deltas = []
+        for c in critic_seq:
+            c = float(max(min(c, CLIP_CRITIC_MAX), CLIP_CRITIC_MIN))
+            v = value[-1]
+            if c >= 0:
+                v_next = v + (100.0 - v) * (c / 100.0)
+            else:
+                v_next = v + v * (c / 100.0)   # 朝 0 退，幅度与 v 成正比
+            if CLIP_VALUE:
+                v_next = min(max(v_next, 0.0), 100.0)
+            value.append(v_next)
+            deltas.append(v_next - v)
+        return value, deltas
+
+    def _scatter_progress_back_and_update(self, task_records, pair_map, progress_list, chunk_len):
+        """
+        按 pair_map 回填 progress，累计成 value/Δvalue，写入 task_records，并据此更新 active/complete。
+        假设每个 env 我们只关心“本 chunk 的 20 个 critic”，用 env 的 last_value 作为 v0。
+        """
+        # 先按 env 聚合
+        env_chunk_critic = {}  # env_idx -> list length chunk_len
+        for (env_idx, j), prog in zip(pair_map, progress_list):
+            env_chunk_critic.setdefault(env_idx, [None]*chunk_len)
+            env_chunk_critic[env_idx][j] = float(prog)
+
+        for env_idx, critic_seq in env_chunk_critic.items():
+            # 初始化 per-env 的缓存槽位
+            rec = task_records[env_idx]
+            if 'critic' not in rec: rec['critic'] = []
+            if 'value'  not in rec: rec['value']  = [0.0]   # 从 0 开始
+            if 'delta'  not in rec: rec['delta']  = []
+            if 'no_progress_count' not in rec: rec['no_progress_count'] = 0
+
+            # 用上一时刻 value 的最后一个作为 v0
+            v0 = rec['value'][-1]
+
+            # 计算本 chunk 的 value/Δvalue
+            value_seq, delta_seq = self._accumulate_value_delta(critic_seq, v0=v0)
+
+            # 追加到全局（注意 value_seq 比 critic_seq 多 1 个）
+            rec['critic'].extend(critic_seq)
+            rec['delta'].extend(delta_seq)
+            rec['value'].extend(value_seq[1:])  # 去掉 v0，只追加新 20 个
+
+            # 成功/早停判断
+            # 规则1：若本 chunk 末 value >= 阈值，则标成功并 inactive
+            if rec['value'][-1] >= SUCCESS_VALUE_THRESH:
+                rec['complete'] = True
+                rec['active'] = False
+                rec['finish_step'] = len(rec['critic'])   # 累计步数（近似）
+                continue
+
+            # 规则2：若连续 m 步 Δvalue <= 0，则 early stop（无进展）
+            # 只检查本 chunk 新增的 Δvalue
+            for d in delta_seq:
+                if d <= 0:
+                    rec['no_progress_count'] += 1
+                else:
+                    rec['no_progress_count'] = 0
+
+            if rec['no_progress_count'] >= NO_PROGRESS_M:
+                rec['active'] = False  # 早停
+                # 不标 complete，表示失败停
+                # 可选：把 no_progress_count 归零
+                rec['no_progress_count'] = 0
+
+            # 也可以在这里顺便把逐步奖励写进 rec['reward']，供 GRPO/PPO 用
+            if 'reward' not in rec: rec['reward'] = [0]
+            rec['reward'].extend([BETA * d for d in delta_seq])
+            
+    def _generate_minibatch_smolvla_vlac_reward_step(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+            
+        ctx = mp.get_context("spawn")
+
+        processes = []
+        input_queues = []
+        output_queues = []
+
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+
+            # 这些如果是 torch 张量，转成 Python 标量更稳妥
+            t_id = int(task_id[idx][0].item())
+            tr_id = int(trial_id[idx][0].item())
+
+            # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
+            in_state = (init_state[idx]
+                        .detach()
+                        .cpu()
+                        .contiguous()
+                        .numpy()
+                        .copy())
+
+            input_q = ctx.Queue()
+            output_q = ctx.Queue()
+
+            p = ctx.Process(
+                target=_env_entry_vlm_reward,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
+                daemon=True,   # 可选：随父进程退出
+            )
+            p.start()
+
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            init_data = output_queues[idx].get(timeout=120)
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs']))
+            task_records.append({
+                "active": True,
+                "active_raw": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name'],
+                "step_images": [init_data['obs']['agentview_image'][::-1]]
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            # active_indices = [i for i, r in enumerate(task_records)]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                result = output_queues[idx].get(timeout=30)
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'])
+                task_records[idx]['active_raw'] = result['active']
+                task_records[idx]['complete_raw'] = result['complete_raw']
+                task_records[idx]['finish_step_raw'] = result['finish_step_raw']
+                task_records[idx]['step_images'].extend(result['valid_images']) 
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            # breakpoint()
+            # compute_vlac_reward
+            # self.reward_model.reward_step()
+            chunk_len = self.config.action_chunks_len
+            # 1) 组装 pairs（跨所有仍 active 的 env）
+            pairs, pair_task_texts, pair_map = self._build_chunk_pairs_and_map(
+                task_records, task_descriptions, chunk_len
+            )
+            
+            if len(pairs) > 0:
+                # 2) 批量 RM 推理 —— TODO: 用你的接口替换这行
+                #    例如 progress = self.reward_model_predict(pairs, pair_task_texts)
+                # progress = self.reward_model.reward_step(pairs, pair_task_texts)  # -> list/np.array, len == len(pairs)
+                critic_list = self.reward_model.reward_step(pairs, pair_task_texts,
+                                                        batch_num=256,
+                                                        temperature=0.0,
+                                                        top_k=None,
+                                                        addition_scale=1.0,
+                                                        divide_skip=1,
+                                                        value_simple="simple",
+                                                        related_critic=False,
+                                                        return_value=False,
+                                                        rich=False)
+
+                # 3) 回填 + 累计 + 成功/早停判定 + 写逐步 reward
+                self._scatter_progress_back_and_update(
+                    task_records, pair_map, critic_list, chunk_len
+                )
+                # breakpoint()
+                # 4) 根据更新后的 active 状态，决定下一轮 active_indices
+                for idx in active_indices:
+                    vals = task_records[idx].get('value', [])
+                    last5 = vals[-5:] if len(vals) >= 5 else vals
+                    if len(last5) >= 1 and all(v >= 95.0 for v in last5):  # 0-100 尺度
+                        task_records[idx]['active'] = False
+            else:
+                pass
+
+                
+            
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
+        torch.cuda.empty_cache()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete_raw'] for r in task_records if r['task_file_name'] == task_file)
+                # breakpoint()
+                finish_step = [r['finish_step_raw'] for r in task_records if r['task_file_name'] == task_file][0]
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete,
+                    finish_step
+                )
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                "observation.state":[], 
+                "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": [],
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        breakpoint()
+        batch["complete_raw"] = []
+        batch["finish_step_raw"] = []
+        batch["step_images"] = []
+        batch["critic"] = []
+        batch["value"] = []
+        batch["delta"] = []
+        batch["reward"] = []
+        for k in task_records:
+            batch["complete_raw"].append(k["complete_raw"])
+            batch["finish_step_raw"].append(k["finish_step_raw"])
+            batch["step_images"].append(np.stack(k["step_images"]))
+            batch["critic"].append(np.stack(k["critic"]))
+            batch["value"].append(np.stack(k["value"]))
+            batch["delta"].append(np.stack(k["delta"]))
+            batch["reward"].append(np.stack(k["reward"]))
+        
+            
+        
+        batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # breakpoint()
+        padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
+        batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+
+    def process_video_to_PIL_frames_with_indices(self, video_path: Path, num_frames: int = 10) -> Tuple[List[str], List[int]]:
+        """
+        读取视频，均匀下采样到指定帧数，返回 (base64-URL 列表, 采样到的原始帧编号列表)
+        """
+        if not video_path.exists():
+            raise FileNotFoundError(f"视频文件未找到: {video_path}")
+
+        cap = cv2.VideoCapture(str(video_path))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            return [], []
+
+        frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int).tolist()
+        image_list = []
+        for idx in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                resized_frame = cv2.resize(frame, (128, 128))
+                rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(rgb_frame)
+                image_list.append(pil_image)
+        cap.release()
+        # 若读帧失败导致数量不一致，截齐
+        L = min(len(image_list), len(frame_indices))
+        return image_list[:L], frame_indices[:L]
+    
+    def _generate_minibatch_smolvla_vlac_reward(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+            
+        ctx = mp.get_context("spawn")
+
+        processes = []
+        input_queues = []
+        output_queues = []
+
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+
+            # 这些如果是 torch 张量，转成 Python 标量更稳妥
+            t_id = int(task_id[idx][0].item())
+            tr_id = int(trial_id[idx][0].item())
+
+            # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
+            in_state = (init_state[idx]
+                        .detach()
+                        .cpu()
+                        .contiguous()
+                        .numpy()
+                        .copy())
+
+            input_q = ctx.Queue()
+            output_q = ctx.Queue()
+
+            p = ctx.Process(
+                target=_env_entry_vlm_reward,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
+                daemon=True,   # 可选：随父进程退出
+            )
+            p.start()
+
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            init_data = output_queues[idx].get(timeout=120)
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs']))
+            task_records.append({
+                "active": True,
+                "active_raw": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name'],
+                "step_images": [init_data['obs']['agentview_image'][::-1]]
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            # active_indices = [i for i, r in enumerate(task_records)]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                result = output_queues[idx].get(timeout=30)
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'])
+                task_records[idx]['active_raw'] = result['active']
+                task_records[idx]['complete_raw'] = result['complete_raw']
+                task_records[idx]['finish_step_raw'] = result['finish_step_raw']
+                task_records[idx]['step_images'].extend(result['valid_images']) 
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+  
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
+        torch.cuda.empty_cache()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete_raw'] for r in task_records if r['task_file_name'] == task_file)
+                # breakpoint()
+                finish_step = [r['finish_step_raw'] for r in task_records if r['task_file_name'] == task_file][0]
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete,
+                    finish_step
+                )
+        
+        step_interval = getattr(self.config, "rm_step_interval", self.config.action_chunks_len)
+        
+        ref_video_path_list = [Path(REF_DICT[task_name][task_id[i].item()]) for i in range(len(task_id))]
+        ref_frames_list = []
+        for ref_video_path in ref_video_path_list:
+            ref_frames, ref_frame_indices = self.process_video_to_PIL_frames_with_indices(ref_video_path, num_frames=10)
+            ref_frames_list.append(ref_frames)
+        pairs, pair_task_texts, pair_map = self._build_pairs_full_trajectory(
+            task_records, task_descriptions, step_interval=step_interval, ref_frames_list=ref_frames_list, ref_num=10
+        )
+        
+        if len(pairs) > 0:
+    
+            critic_chunks = self.reward_model.reward_step(
+                pairs, pair_task_texts,
+                use_ref=True,
+                batch_num=256,
+                addition_scale=1.0,
+                divide_skip=1,
+                related_critic=False,
+                return_value=False,
+                rich=False,
+            )
+
+            self._distribute_and_finalize_rewards(
+                task_records, pair_map, critic_chunks, beta=0.05, success_window=2, max_steps=max_steps
+            )
+        else:
+            # 没有帧对就全置空
+            for rec in task_records:
+                rec['critic'] = []
+                rec['delta']  = []
+                rec['value']  = [0.0]
+                rec['reward'] = []
+                rec['active'] = False
+    
+                
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                "observation.state":[], 
+                "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": [],
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        # breakpoint()
+        batch["complete_raw"] = []
+        batch["complete"] = []
+        batch["finish_step_raw"] = []
+        batch["finish_step"] = []
+        batch["step_images"] = []
+        batch["critic"] = []
+        batch["value"] = []
+        batch["delta"] = []
+        batch["reward"] = []
+        for k in task_records:
+            batch["complete_raw"].append(k["complete_raw"])
+            batch["complete"].append(k["complete"])
+            batch["finish_step_raw"].append(k["finish_step_raw"])
+            batch["finish_step"].append(k["finish_step"])
+            batch["step_images"].append(np.stack(k["step_images"]))
+            batch["critic"].append(np.stack(k["critic"]))
+            batch["value"].append(np.stack(k["value"]))
+            batch["delta"].append(np.stack(k["delta"]))
+            batch["reward"].append(np.stack(k["reward"]))
+        
+            
+        
+        batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        # batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        # batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # breakpoint()
+        padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
+        batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
+        batch["critic"] = torch.tensor(batch["critic"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        batch["value"] = torch.tensor(batch["value"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        batch["delta"] = torch.tensor(batch["delta"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        batch["reward"] = torch.tensor(batch["reward"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        breakpoint()
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
     def _generate_minibatch_smolvla_pipe(self, prompts):
         self.module.eval()
         meta_info = prompts.meta_info
@@ -1834,6 +2635,219 @@ class RobHFRollout(BaseRollout):
             batch,
             batch_size=batch_size)
         return DataProto(batch=output_batch)
+    
+    
+    def _generate_minibatch_smolvla_wm_vlac(self, prompts):
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        task_lang = np.repeat(prompts.non_tensor_batch['task_lang'], n_samples)
+        task_descriptions = [name for name in task_lang]
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_train = meta_info.get('is_train', False)
+        current_obs_batch_np = init_state.cpu().numpy()
+        
+
+        task_records = []
+        for idx in range(batch_size):
+            task_records.append({
+                "active": True,
+                "complete": False,
+                "finish_step": 0,
+                "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}",
+                "step_images": [current_obs_batch_np]
+            })
+            
+        valid_video = defaultdict(list)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        if is_valid:
+            # current_obs_batch_np 的形状是 [B, H, W, 3]
+            # 我们需要把它拆开，存到每个任务对应的视频列表中
+            for idx in range(batch_size):
+                task_file = task_records[idx]['task_file_name']
+                # 从批次中取出第 idx 帧图像，并进行上下翻转（如果需要的话，这模仿了原函数的行为）
+                img = current_obs_batch_np[idx]  # [::-1, :, :] 
+                valid_video[task_file].append(img)
+        
+        step = 0
+        vla_history = []
+        trajectory_video_batch = [current_obs_batch_np]
+        vla_timings = []
+        wm_timings = []
+        rm_timings = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            
+            if not active_indices:
+                break
+            
+            inputs = [self._obs_to_input(obs) for obs in current_obs_batch_np]
+            
+            vla_input = self.process_input_smolvla(inputs, task_descriptions)
+            vla_input.update(meta_info)
+            
+            with Timer(name="VLA_Inference", text="{name} mean: {:.4f}s") as timer:
+                vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            vla_timings.append(timer.last)
+            
+            actions_batch = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions_batch
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            if self.world_model is None:
+                raise ValueError("World Model Worker Group has not been set!")
+            
+            with Timer(name="World_Model_Step", text="{name} mean: {:.4f}s") as timer:
+                next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch, step)  # B, chunk_size, H, W, C
+            wm_timings.append(timer.last)
+            breakpoint()
+            with Timer(name="Reward_Model_Step", text="{name} mean: {:.4f}s") as timer:
+                next_obs_batch_np = self.world_model.reward_step(current_obs_batch_np, actions_batch, step)  # B, chunk_size, H, W, C
+            rm_timings.append(timer.last)
+            
+            
+            
+            # current_obs_batch_np = next_obs_batch_np
+            current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
+
+            step += self.config.action_chunks_len
+            trajectory_video_batch.append(next_obs_batch_np)
+
+            if is_valid:
+                num_frames_in_chunk = next_obs_batch_np.shape[1]
+                
+                for idx in range(batch_size):
+                    task_file = task_records[idx]['task_file_name']
+                    for f_idx in range(num_frames_in_chunk):
+                        img = next_obs_batch_np[idx, f_idx, :, :, :]  #[::-1, :, :]
+                        valid_video[task_file].append(img)
+            
+            for r in task_records:
+                if r['active']:
+                    r['finish_step'] = step
+                    if r['finish_step'] >= max_steps:
+                        r['active'] = False
+                        r['complete'] = True 
+                # r['step_images'].extend()
+                                
+        torch.cuda.empty_cache()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete_flags = [r['complete'] for r in task_records if r['task_file_name'] == task_file]
+                complete = complete_flags[0] if complete_flags else False
+                
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete
+                )
+        initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
+        video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
+        full_trajectory_video = np.concatenate(video_chunks, axis=1)
+        
+        # self.world_model.save_trajectory_grid_image(
+        #     full_trajectory_video, 
+        #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
+        # )
+        # ran_id = random.randint(1, 10000)
+        # self.world_model.save_video_grid(
+        #     full_trajectory_video, 
+        #     f"work_dirs/{self.config.experiment_name}_train_rollouts/trajectory_grid_{global_steps}_rand{ran_id}.mp4"
+        # )
+            
+        # breakpoint()
+        print("\n" + "="*50)
+        print(" Performance Measurement Report")
+        print("="*50)
+        
+        if vla_timings:
+            print("\n--- VLA Inference (`_generate_one_step_smolvla`) ---")
+            print(f"  Total steps measured: {len(vla_timings)}")
+            print(f"  Total time spent:     {np.sum(vla_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(vla_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(vla_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(vla_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(vla_timings):.4f} seconds")
+
+        if wm_timings:
+            print("\n--- World Model Step (`world_model.step`) ---")
+            print(f"  Total steps measured: {len(wm_timings)}")
+            print(f"  Total time spent:     {np.sum(wm_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(wm_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(wm_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(wm_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(wm_timings):.4f} seconds (首次调用可能因CUDA Graph录制而较慢)")
+
+        if vla_timings and wm_timings:
+            total_mean_per_step = np.mean(vla_timings) + np.mean(wm_timings)
+            print("\n--- Combined ---")
+            print(f"  Average total processing time per step: {total_mean_per_step:.4f} seconds")
+
+        print("="*50 + "\n")
+
+            
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                # "observation.state":[], 
+                # "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": []
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                #   "observation.state", "observation.state_is_pad", 
+                  "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        # breakpoint()
+        batch["complete"] = []
+        batch["finish_step"] = []
+        # breakpoint()
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+            
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['observation.images.image'].device)
+        
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
     
     @torch.no_grad()
     def _generate_one_step(self, prompts: dict):

@@ -176,6 +176,88 @@ class RobRewardManager():
         reward_metrics['reward_all'] = reward_tensor.sum(dim=(-1)).mean(dim=0).item()
         
         return reward_tensor_dict, reward_metrics
+    
+
+class RobVLACRewardManager():
+    """The reward manager.
+    """
+    # TODO: we are requiring a reward manager to be much more stronger than this. so this is fully refactored!
+    def __init__(self, num_examine,config) -> None:
+        self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
+        self.config=config
+        if config.actor_rollout_ref.model.vla == 'smolvla':
+            self.data_key = 'action_tensor'
+        else:
+            self.data_key = 'responses'
+
+    def verify(self, data, global_steps=-1):
+        breakpoint()
+        completes = data.batch['complete'].tolist()
+        batch_size = data.batch[self.data_key].size(0)
+        assert len(completes) == batch_size
+        score = [float(item) for item in completes]
+        format = [1.0 for _ in range(len(completes))]
+
+        data.batch['acc'] = torch.tensor(score, dtype=torch.float32, device=data.batch[self.data_key].device)
+        data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
+        
+        reward_metrics = {}
+        format_metrics = {}
+        reward_format_metrics = {}
+            
+        reward_metrics['all'] = data.batch['acc'].mean().item()
+        format_metrics['all'] = data.batch['format_correctness'].mean().item()
+        reward_format_metrics['all'] = data.batch['acc'].mean().item()
+
+        return score, reward_metrics, format_metrics, reward_format_metrics
+    
+    def __call__(self, data: DataProto):
+        # aggregate all available reward tensors
+
+        reward_tensor_dict={}
+        reward_metrics={}
+        reward_tensor = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32) # batch * 64 * 56
+        verifier_reward = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32)
+        reward_tensor = reward_tensor.reshape((reward_tensor.shape[0], -1))
+        verifier_reward = verifier_reward.reshape((verifier_reward.shape[0], -1))
+        
+        valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len 
+
+        
+        # valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len
+        # s_fin  = (data.batch['finish_step'] // CH).view(B)
+        # c_fin  = (data.batch['finish_step'] %  CH).view(B)
+        # valid_response_length = data.batch['finish_step']
+       
+        if 'acc' in data.batch:
+            # the separated rewards have been logged; now we add format correctness back for reward shaping
+            #verifier_score = data.batch['acc'].cpu().numpy().tolist() + (0.0 * data.batch['format_correctness'].cpu().numpy()).tolist()
+            verifier_score = data.batch['acc'].cpu().numpy().tolist()
+        else:
+            verifier_score, verifier_metrics, format_metrics, reward_format_metrics = self.verify(data)
+            reward_metrics.update(verifier_metrics)
+        for i in range(verifier_reward.shape[0]):
+            verifier_reward[i,valid_response_length[i]-1] += verifier_score[i]
+            
+        reward_tensor_dict['gt_scores'] = verifier_reward
+
+        # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
+        # if 'rm_scores' in data.batch.keys():
+        #     raise  ValueError
+        #     reward_tensor_dict['rm_scores'] = data.batch['rm_scores']
+        #     reward_metrics['reward_model']=data.batch['rm_scores'].sum(dim=1).mean().item()
+        #     if self.config.reward_model.rm_coef!=0:
+        #         reward_tensor += self.config.reward_model.rm_coef * reward_tensor_dict['rm_scores']
+
+        if self.config.verifier.reward_coef!=0:
+            # reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=1).mean().item()
+            reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=(1)).mean().item()
+            reward_tensor += self.config.verifier.reward_coef * reward_tensor_dict['gt_scores']
+
+        reward_tensor_dict['all'] = reward_tensor
+        reward_metrics['reward_all'] = reward_tensor.sum(dim=(-1)).mean(dim=0).item()
+        
+        return reward_tensor_dict, reward_metrics
 
 @dataclass
 class RewardTask:
@@ -822,6 +904,8 @@ def main_task(config):
         reward_fn = RobRewardManager(num_examine=0, config=config) # note: verifier is called both inside reward_fn and outside.
     elif config.reward_model.type == "vlm_serve":
         reward_fn = RobVLMRewardManager(num_examine=0, config=config)
+    elif config.reward_model.type == 'vlac':
+        reward_fn = RobVLACRewardManager(num_examine=0, config=config)
     else:
         raise NotImplementedError
         

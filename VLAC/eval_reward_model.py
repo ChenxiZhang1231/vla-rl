@@ -57,8 +57,6 @@ REF_DICT = {
         7: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_7_trial_16--success=True--ran=6198.mp4",
         8: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_8_trial_46--success=True--ran=6438.mp4",
         9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
-        
-
     }
 }
 # =========================
@@ -600,7 +598,7 @@ def main():
             task,
             batch_num=10,
             ref_num=10,
-            skip=5,
+            skip=1,
             frame_skip=True, #whether to skip frames(if false, each frame while be evaluated, cost more time)
             done_threshold=0.9,#done threshold
             video_output=True,

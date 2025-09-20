@@ -426,18 +426,36 @@ class GAC_model():
         list_video = task.frames
         ref_list = task.ref_frames
         done_ref = ref_list
-        done_list = self.get_trajectory_done(
-            task=task.description, 
-            image_list=list_video, 
-            ref_image_list=done_ref, 
-            batch_num=batch_num, 
-            rich=True, 
-            ref_num=ref_num, 
-            threshold=done_threshold
+        # done_list = self.get_trajectory_done(
+        #     task=task.description, 
+        #     image_list=list_video, 
+        #     ref_image_list=done_ref, 
+        #     batch_num=batch_num, 
+        #     rich=True, 
+        #     ref_num=ref_num, 
+        #     threshold=done_threshold
+        # )
+        critic_list, think_value_list=self.get_trajectory_critic(
+            task=task.description,
+            image_list=list_video,
+            ref_image_list=ref_list,
+            batch_num=batch_num,
+            ref_num=ref_num,
+            think=False,
+            skip=skip,
+            rich=False,
+            reverse_eval=False,
+            frame_skip=frame_skip,
+            addition_scale=1,
+            bias=0,
+            positive_clip=0,
+            negative_clip=0,
+            related_critic=False,
         )
+        value_list = think_value_list
         # if frame_skip:
         #     done_list = [done_list[i] for i in range(0,len(done_list),skip)]
-        
+        done_list = value_list
         if video_output:
             if ref_num>0:
                 ref_image_paths=ref_list
@@ -450,8 +468,8 @@ class GAC_model():
                 image_paths=[],
                 image_objects=list_video,
                 done_list=done_list,
-                critic_list=done_list,
-                value_list=done_list,
+                critic_list=critic_list,
+                value_list=value_list,
                 task=task.description,
                 output_path=output_path,
                 fps=fps,
