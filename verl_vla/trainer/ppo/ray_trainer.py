@@ -763,7 +763,10 @@ class RayTrainer(object):
                 with Timer(name='adv', text="{name}: {seconds:.1f} seconds") as timer:
                     # directly reuse previously computed rewards; but with reward shaping
                     reward_tensor_dict, reward_metrics = self.reward_fn(batch)
-                    batch.batch['token_level_scores'] = reward_tensor_dict['all']
+                    if 'all_dense' in reward_tensor_dict:
+                        batch.batch['token_level_scores'] = reward_tensor_dict['all_dense']
+                    else:
+                        batch.batch['token_level_scores'] = reward_tensor_dict['all']
                     for k, v in reward_metrics.items():
                         metrics['train_reward/' + k] = v
                     # decomposed rewards:

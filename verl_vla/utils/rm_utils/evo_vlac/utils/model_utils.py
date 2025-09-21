@@ -1625,9 +1625,9 @@ class GAC_model_client(nn.Module):
             e = min(s + batch_num, N)
             batch_prompt, batch_image = _build_batch(s, e)
             infer_requests = self.get_infer_requests_client(prompts=batch_prompt, images=batch_image)
-            # response_list, infer_time = self.chat(infer_requests)
-            keys = ray.get(self.rm_gateway.submit_many.remote(infer_requests))
-            response_list = ray.get(self.rm_gateway.get_many_blocking.remote(keys, timeout_s=300))
+            response_list, infer_time = self.chat(infer_requests)
+            # keys = ray.get(self.rm_gateway.submit_many.remote(infer_requests))
+            # response_list = ray.get(self.rm_gateway.get_many_blocking.remote(keys, timeout_s=300))
             # response_list = [ray.get(self.rm_gateway.get_result_blocking.remote(k)) for k in keys]
             answers_list, complete_requests_list = self.results_format(
                 response_list, infer_requests, rich=rich

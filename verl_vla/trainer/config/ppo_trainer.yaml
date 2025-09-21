@@ -93,17 +93,6 @@ actor_rollout_ref:
         # transformer_layer_cls_to_wrap: None
         min_num_params: 0
       fsdp_size: -1
-    
-  reward_model:
-    model_path: ""
-    
-    fsdp_config:
-      model_dtype: bfloat16
-      param_offload: False
-      wrap_policy:
-        # transformer_layer_cls_to_wrap: None
-        min_num_params: 0
-      fsdp_size: -1
       
   ref:
     # model:
@@ -124,7 +113,6 @@ actor_rollout_ref:
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     experiment_name: None
-    rm_step_interval: 1
     unnorm_key: libero_10
     micro_batch_size: 1
     val_micro_batch_size: 8
@@ -214,6 +202,7 @@ reward_model:
   type: rule
   strategy: fsdp
   vlm_input_num_frames: 10
+  rm_step_interval: 1
   vote_n: 1
   vote_m: 1
   temperature: 0.0

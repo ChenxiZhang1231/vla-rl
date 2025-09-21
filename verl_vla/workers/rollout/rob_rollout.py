@@ -2142,41 +2142,41 @@ class RobHFRollout(BaseRollout):
                     finish_step
                 )
         
-        step_interval = getattr(self.config, "rm_step_interval", self.config.action_chunks_len)
+        # step_interval = getattr(self.config, "rm_step_interval", self.config.action_chunks_len)
         
-        ref_video_path_list = [Path(REF_DICT[task_name][task_id[i].item()]) for i in range(len(task_id))]
-        ref_frames_list = []
-        for ref_video_path in ref_video_path_list:
-            ref_frames, ref_frame_indices = self.process_video_to_PIL_frames_with_indices(ref_video_path, num_frames=10)
-            ref_frames_list.append(ref_frames)
-        pairs, pair_task_texts, pair_map = self._build_pairs_full_trajectory(
-            task_records, task_descriptions, step_interval=step_interval, ref_frames_list=ref_frames_list, ref_num=10
-        )
+        # ref_video_path_list = [Path(REF_DICT[task_name][task_id[i].item()]) for i in range(len(task_id))]
+        # ref_frames_list = []
+        # for ref_video_path in ref_video_path_list:
+        #     ref_frames, ref_frame_indices = self.process_video_to_PIL_frames_with_indices(ref_video_path, num_frames=10)
+        #     ref_frames_list.append(ref_frames)
+        # pairs, pair_task_texts, pair_map = self._build_pairs_full_trajectory(
+        #     task_records, task_descriptions, step_interval=step_interval, ref_frames_list=ref_frames_list, ref_num=10
+        # )
         
-        if len(pairs) > 0:
+        # if len(pairs) > 0:
     
-            critic_chunks = self.reward_model.reward_step(
-                pairs, pair_task_texts,
-                use_ref=True,
-                batch_num=256,
-                addition_scale=1.0,
-                divide_skip=1,
-                related_critic=False,
-                return_value=False,
-                rich=False,
-            )
+        #     critic_chunks = self.reward_model.reward_step(
+        #         pairs, pair_task_texts,
+        #         use_ref=True,
+        #         batch_num=256,
+        #         addition_scale=1.0,
+        #         divide_skip=1,
+        #         related_critic=False,
+        #         return_value=False,
+        #         rich=False,
+        #     )
 
-            self._distribute_and_finalize_rewards(
-                task_records, pair_map, critic_chunks, beta=0.05, success_window=2, max_steps=max_steps
-            )
-        else:
-            # 没有帧对就全置空
-            for rec in task_records:
-                rec['critic'] = []
-                rec['delta']  = []
-                rec['value']  = [0.0]
-                rec['reward'] = []
-                rec['active'] = False
+        #     self._distribute_and_finalize_rewards(
+        #         task_records, pair_map, critic_chunks, beta=0.05, success_window=2, max_steps=max_steps
+        #     )
+        # else:
+        #     # 没有帧对就全置空
+        #     for rec in task_records:
+        #         rec['critic'] = []
+        #         rec['delta']  = []
+        #         rec['value']  = [0.0]
+        #         rec['reward'] = []
+        #         rec['active'] = False
     
                 
         self.module.train()
@@ -2205,41 +2205,41 @@ class RobHFRollout(BaseRollout):
         
         # breakpoint()
         batch["complete_raw"] = []
-        batch["complete"] = []
+        # batch["complete"] = []
         batch["finish_step_raw"] = []
-        batch["finish_step"] = []
+        # batch["finish_step"] = []
         batch["step_images"] = []
-        batch["critic"] = []
-        batch["value"] = []
-        batch["delta"] = []
-        batch["reward"] = []
+        # batch["critic"] = []
+        # batch["value"] = []
+        # batch["delta"] = []
+        # batch["reward"] = []
         for k in task_records:
             batch["complete_raw"].append(k["complete_raw"])
-            batch["complete"].append(k["complete"])
+            # batch["complete"].append(k["complete"])
             batch["finish_step_raw"].append(k["finish_step_raw"])
-            batch["finish_step"].append(k["finish_step"])
+            # batch["finish_step"].append(k["finish_step"])
             batch["step_images"].append(np.stack(k["step_images"]))
-            batch["critic"].append(np.stack(k["critic"]))
-            batch["value"].append(np.stack(k["value"]))
-            batch["delta"].append(np.stack(k["delta"]))
-            batch["reward"].append(np.stack(k["reward"]))
+            # batch["critic"].append(np.stack(k["critic"]))
+            # batch["value"].append(np.stack(k["value"]))
+            # batch["delta"].append(np.stack(k["delta"]))
+            # batch["reward"].append(np.stack(k["reward"]))
         
             
         
         batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['observation.images.image'].device)
-        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        # batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
         batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
-        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
-        # batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
-        # batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
         # breakpoint()
         padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
         batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
         batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
-        batch["critic"] = torch.tensor(batch["critic"], dtype=torch.float32, device=batch['observation.images.image'].device)
-        batch["value"] = torch.tensor(batch["value"], dtype=torch.float32, device=batch['observation.images.image'].device)
-        batch["delta"] = torch.tensor(batch["delta"], dtype=torch.float32, device=batch['observation.images.image'].device)
-        batch["reward"] = torch.tensor(batch["reward"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        # batch["critic"] = torch.tensor(batch["critic"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        # batch["value"] = torch.tensor(batch["value"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        # batch["delta"] = torch.tensor(batch["delta"], dtype=torch.float32, device=batch['observation.images.image'].device)
+        # batch["reward"] = torch.tensor(batch["reward"], dtype=torch.float32, device=batch['observation.images.image'].device)
         # breakpoint()
         output_batch = TensorDict(
             batch,

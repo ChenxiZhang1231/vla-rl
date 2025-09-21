@@ -24,6 +24,11 @@ import cv2
 import base64
 import random
 from pathlib import Path
+from PIL import Image
+from verl_vla.utils.rm_utils.evo_vlac import GAC_model_client
+from swift.plugin import InferStats
+from swift.llm.infer.protocol import RequestConfig
+import copy
 
 from typing import List, Tuple, Optional, Dict
 import re
@@ -31,6 +36,7 @@ from collections import Counter
 from dataclasses import dataclass
 import openai
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from swift.llm import InferClient, InferRequest
 
 
 import sys
@@ -194,7 +200,29 @@ def ensure_gateway():
         round_robin=True,
     )
     print("RMGateway started:", gw)
-    
+
+
+REF_DICT = {
+    "libero_spatial": {
+        0: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_0_trial_0--success=True--ran=9350.mp4",
+        1: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_1_trial_5--success=True--ran=3448.mp4",
+        2: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_2_trial_0--success=True--ran=4112.mp4",
+        3: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_3_trial_0--success=True--ran=7681.mp4",
+        4: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_4_trial_2--success=True--ran=6921.mp4",
+        5: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_5_trial_0--success=True--ran=2259.mp4",
+        6: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_6_trial_3--success=True--ran=6237.mp4",
+        7: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_7_trial_16--success=True--ran=6198.mp4",
+        8: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_8_trial_46--success=True--ran=6438.mp4",
+        9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
+    }
+}
+SUCCESS_VALUE_THRESH = 95.0      # 认为成功的 value 阈值
+NO_PROGRESS_M = 500                # 连续 m 步 Δvalue <= 0 判定为无进展
+BETA = 0.05                      # r_t = BETA * Δvalue 的缩放
+CLIP_CRITIC_MIN = -90.0          # critic 数值裁剪下界，避免 -100 邻域不稳定
+CLIP_CRITIC_MAX = 100.0          # critic 数值裁剪上界
+CLIP_VALUE = True     
+
 class RobVLACRewardManager():
     """The reward manager.
     """
@@ -209,14 +237,13 @@ class RobVLACRewardManager():
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'
-        self.client = openai.OpenAI(
-            base_url="http://localhost:18901/v1", # 请确保这是您的服务地址
-            api_key="not-needed"
-        )
-        self.vote_n = self.config.reward_model.vote_n
-        self.vote_m = self.config.reward_model.vote_m
-        self.temperature = self.config.reward_model.temperature
-        self.top_p = self.config.reward_model.top_p
+        
+        self.reward_model = GAC_model_client(tag='critic')
+        self.reward_model.init_model(model_path=self.config.reward_model.model.path, model_type='internvl2', use_server=True, device_map=f'cuda:0')
+        self.reward_model.temperature=0.5
+        self.reward_model.top_k=1
+        self.reward_model.set_config()
+        self.reward_model.set_system_prompt()
 
     def verify_env(self, data):
         completes = data.batch['complete_raw'].tolist()
@@ -238,167 +265,6 @@ class RobVLACRewardManager():
 
         return score, reward_metrics, format_metrics, reward_format_metrics
 
-    def get_rewards_from_judge_batch_sync(
-        self,
-        client,
-        tasks: List[RewardTask],
-        max_workers: int = 10,
-        temperature: float = 0.0, 
-        top_p: float = 1.0,
-        seeds: Optional[int] = None
-    ) -> Tuple[List[int], List[int], List[str]]:
-        """
-        返回:
-        pred_success_list: 与 tasks 对应的 0/1 列表
-        pred_finish_steps: 与 tasks 对应的 int（或 -1）
-        raw_texts:         与 tasks 对应的模型原始输出
-        """
-        pred_success = [0] * len(tasks)
-        pred_finish = [-1] * len(tasks)
-        raw_texts = [""] * len(tasks)
-
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            fut2idx = {
-                ex.submit(
-                    self.fetch_one_reward_sync, client, task, i,
-                    temperature, top_p,
-                    None if seeds is None else seeds[i],): i
-                for i, task in enumerate(tasks)
-            }
-            for fut in as_completed(fut2idx):
-                idx = fut2idx[fut]
-                try:
-                    _, s, f, t = fut.result()
-                    pred_success[idx] = s
-                    pred_finish[idx] = f
-                    raw_texts[idx] = t
-                except Exception as e:
-                    print(f"[ERR] Task {idx} future error: {e}")
-
-        return pred_success, pred_finish, raw_texts
-
-    def fetch_one_reward_sync(self, client, task: RewardTask, task_index: int, temperature, top_p, seed) -> Tuple[int, int, int, str]:
-        """
-        对单个样本调用 judge。
-        返回: (task_index, pred_success (0/1), pred_finish_step (int or -1), raw_text)
-        """
-        if not task.frames:
-            return task_index, 0, -1, "Empty"
-
-        step_ids = task.frame_indices[:len(task.frames)]
-        question = self.build_question(task.description, step_ids=step_ids)
-        user_content = [{"type": "text", "text": question}]
-        for frame_url in task.frames:
-            user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
-
-        try:
-            completion = client.chat.completions.create(
-                model="judge",
-                messages=[
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=200,
-                temperature=temperature,
-                top_p=top_p,
-            )
-            resp = completion.choices[0].message.content or ""
-        except Exception as e:
-            print(f"[ERR] Task {task_index} API error: {e}")
-            return task_index, 0, -1, f"APIError: {e}"
-
-        data = self.try_parse_json_response(resp)
-        if data is None:
-            return task_index, 0, -1, resp
-
-        succ = 1 if int(data.get("success", 0)) == 1 else 0
-        fs_raw = int(data.get("finish_step", -1))
-        fs_mapped = self.map_finish_step_to_sampled_idx(fs_raw, step_ids) if succ == 1 else -1
-        return task_index, succ, fs_mapped, resp
-
-    def try_parse_json_response(self, text: str) -> Optional[Dict]:
-        """
-        从模型输出中尽可能提取 JSON（容错）
-        """
-        if not text:
-            return None
-        # 直接尝试整体解析
-        try:
-            return json.loads(text)
-        except Exception:
-            pass
-        # 截取第一个 '{' 到最后一个 '}' 之间
-        try:
-            l = text.find("{")
-            r = text.rfind("}")
-            if 0 <= l < r:
-                return json.loads(text[l:r+1])
-        except Exception:
-            return None
-        return None
-
-    def map_finish_step_to_sampled_idx(self, finish_step_raw: int, sampled_indices: List[int]) -> int:
-        """
-        将原视频的完成步编号映射到采样后的 step_id（就地 frame index）。
-        若 sampled_indices 为空，或 finish_step_raw 无效，返回 -1。
-        若模型/GT 给了不在集合内的值，映射到最近的 step_id。
-        """
-        if finish_step_raw is None or finish_step_raw < 0 or len(sampled_indices) == 0:
-            return -1
-        # 最近邻
-        arr = np.asarray(sampled_indices)
-        j = int(np.argmin(np.abs(arr - finish_step_raw)))
-        return int(arr[j])
-
-    def get_reward_tasks(self, step_images, step_images_mask, task_lang):
-        B, L, H, W, C = step_images.shape
-        tasks_to_process = []
-        for i in range(B):
-            boolean_mask = step_images_mask[i].bool() 
-            valid_images = step_images[i][boolean_mask].cpu().numpy()
-            total_frames, H, W, C = valid_images.shape
-            frame_indices = np.linspace(0, total_frames - 1, self.vlm_input_num_frames, dtype=int)
-            base64_frames = []
-            for idx in frame_indices:
-                frame = valid_images[idx]
-                resized_frame = cv2.resize(frame, (128, 128))
-                _, buffer = cv2.imencode('.jpg', resized_frame)
-                base64_str = base64.b64encode(buffer).decode('utf-8')
-                base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
-            reward_task = RewardTask(frames=base64_frames, frame_indices=frame_indices, description=task_lang[i])
-            tasks_to_process.append(reward_task)
-        return tasks_to_process
-     
-    def build_question(self, task_lang: str, step_ids: list[int]) -> str:
-        """
-        生成与你 SFT 一致的 user 文本：先 PROMPT，然后 Task，再逐行
-        'frame_step{step_id}-<image>'，不使用 system prompt。
-        注意：这里的 step_ids 必须与后续附加的图片顺序一一对应。
-        """
-        # 如果视频解码有丢帧，务必用 len(frames) 截齐 step_ids，以保证一一对应
-        frame_str = "".join([f"frame_step{sid}-<image>\n" for sid in step_ids])
-        return f"{PROMPT}\nTask: {task_lang}\n{frame_str}"
-
-    def try_parse_json_response(self, text: str) -> Optional[Dict]:
-        """
-        从模型输出中尽可能提取 JSON（容错）
-        """
-        if not text:
-            return None
-        # 直接尝试整体解析
-        try:
-            return json.loads(text)
-        except Exception:
-            pass
-        # 截取第一个 '{' 到最后一个 '}' 之间
-        try:
-            l = text.find("{")
-            r = text.rfind("}")
-            if 0 <= l < r:
-                return json.loads(text[l:r+1])
-        except Exception:
-            return None
-        return None
-       
     def save_video_grid(
         self,
         video_tensor: torch.Tensor, 
@@ -557,31 +423,7 @@ class RobVLACRewardManager():
         # --- 6. 释放资源 ---
         video_writer.release()
         print(f"Video saved successfully to {output_path}")
-        
-    def aggregate_success_and_finish(self, pred_success_list: List[int], pred_finish_list: List[int], m: int, strategy: str="min") -> Tuple[int,int]:
-        """
-        m-of-n 聚合：
-        - 若 >= m 票成功 → 最终成功=1，否则 0
-        - finish_step 仅在成功时聚合成功票的 step
-        strategy: "min" | "median" | "mode"
-        """
-        success_votes = [i for i, s in enumerate(pred_success_list) if s == 1]
-        if len(success_votes) >= m:
-            finishes = [pred_finish_list[i] for i in success_votes if pred_finish_list[i] is not None and pred_finish_list[i] >= 0]
-            if not finishes:
-                return 1, -1
-            if strategy == "min":
-                return 1, int(min(finishes))          # 最保守：取最早完成
-            elif strategy == "median":
-                return 1, int(np.median(finishes))
-            elif strategy == "mode":
-                c = Counter(finishes).most_common(1)[0][0]
-                return 1, int(c)
-            else:
-                return 1, int(min(finishes))
-        else:
-            return 0, -1
-        
+           
     def compute_confusion(self, y_true: List[int], y_pred: List[int]) -> Dict[str, int]:
         TP = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)
         FP = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)
@@ -614,47 +456,339 @@ class RobVLACRewardManager():
         basic = self.compute_basic_metrics(cm)
         return {"confusion": cm, "metrics": basic}
 
+    def process_video_to_PIL_frames_with_indices(self, video_path: Path, num_frames: int = 10) -> Tuple[List[str], List[int]]:
+        """
+        读取视频，均匀下采样到指定帧数，返回 (base64-URL 列表, 采样到的原始帧编号列表)
+        """
+        if not video_path.exists():
+            raise FileNotFoundError(f"视频文件未找到: {video_path}")
+
+        cap = cv2.VideoCapture(str(video_path))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            return [], []
+
+        frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int).tolist()
+        image_list = []
+        for idx in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                resized_frame = cv2.resize(frame, (128, 128))
+                rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
+                pil_image = Image.fromarray(rgb_frame)
+                image_list.append(pil_image)
+        cap.release()
+        # 若读帧失败导致数量不一致，截齐
+        L = min(len(image_list), len(frame_indices))
+        return image_list[:L], frame_indices[:L]
+    
+    def _build_pairs_full_trajectory(self, task_records, task_descriptions, step_interval, ref_frames_list= None, ref_num=1):
+        """
+        从每个 env 的整段轨迹构造『抽样相邻帧对』用于一次性 RM 推理。
+        约定：
+        - rec['step_images'] 里：第0张是初始帧，之后每步末帧各1张；
+            因此总帧数 F = T + 1，步数 T = F - 1
+        - 以 step_interval 为步长做分段：
+            段 j: [s, e)，其中 s = j*step_interval，e = min(s+step_interval, T)
+            送入 RM 的帧对是 (frame[s], frame[e])
+        返回：
+        pairs: [{"img_t": .., "img_tp1": ..}, ...]
+        pair_task_texts: 与 pairs 对齐的任务文本
+        pair_map: [(env_idx, start_step, seg_len), ...]
+        """
+        pairs = []
+        pair_task_texts = []
+        pair_map = []  # (env_idx, start_step, seg_len)
+
+        for env_idx, rec in enumerate(task_records):
+            imgs = rec
+            if len(imgs) < 2:
+                continue
+
+            T = len(imgs) - 1  # 步数
+            if T <= 0:
+                continue
+
+            task_text = task_descriptions[env_idx]
+            
+            def _even_subsample(lst, k: int):
+                if not lst or k <= 0:
+                    return []
+                if len(lst) <= k:
+                    return list(lst)
+                # 从 [0, len-1] 等距取 k 个索引
+                step = (len(lst) - 1) / (k - 1)
+                return [lst[int(round(i * step))] for i in range(k)]
+            
+            s = 0
+            while s < T:
+                e = min(s + step_interval, T)
+                # 帧对：起点帧=imgs[s]，终点帧=imgs[e]
+                ref_seq = ref_frames_list[env_idx]
+                refs = _even_subsample(ref_seq, ref_num)
+                pairs.append({"img_t": imgs[s], "img_tp1": imgs[e], "img_0": imgs[0], "img_ref": refs})
+                pair_task_texts.append(task_text)
+                pair_map.append((env_idx, s, e - s))  # 段长 seg_len = e-s
+                s = e
+
+        return pairs, pair_task_texts, pair_map
+    
+    def _distribute_and_finalize_rewards(
+        self,
+        step_images,              # np.ndarray: (B, T+1, H, W, C)
+        pair_map,                 # List[Tuple[int, int, int]]: (env_idx, start, seg_len)
+        critics,                  # np.ndarray: (B, S_i)  每个env的段级critic序列
+        *,
+        beta: float = 0.05,
+        success_window: int = 2,
+        success_thresh: float = 95.0,
+        max_steps: int | None = None,
+    ):
+        """
+        返回：
+        - total_critic:  List[List[float]]   每env的 per-step critic，长度=T
+        - total_delta:   List[List[float]]   每env Δvalue，长度=T
+        - total_value:   List[List[float]]   每env value，长度=T+1
+        - total_reward:  List[List[float]]   每env reward=beta*Δvalue，长度=T
+        - total_active:  List[bool]          统一 False（事后评估完成）
+        - total_complete:List[bool]          是否命中 success_window
+        - total_finish_step: List[int]       成功则首次命中步；否则 min(T, max_steps)
+        """
+        import numpy as np
+
+        assert isinstance(step_images, np.ndarray) and step_images.ndim >= 3, "step_images 形状应为 (B, T+1, ...)"
+        B = step_images.shape[0]
+        T = max(step_images.shape[1] - 1, 0)
+        if max_steps is None:
+            max_steps = T
+
+        # 1) 初始化 per-env 容器 & 段计数器
+        per_env_step_critic = [[0.0] * T for _ in range(B)]
+        seg_ptr = [0] * B  # 指向 critics[env_idx] 的当前段号
+
+        # 2) 段级 critic 均匀摊回每步
+        #    对于每个 (env_idx, start, seg_len)，使用 critics[env_idx, seg_ptr[env_idx]]，然后 seg_ptr+1
+        for (env_idx, start, seg_len) in pair_map:
+            if not (0 <= env_idx < B):
+                continue
+            if seg_len is None or seg_len <= 0:
+                # 无效段，跳过并推进指针（若你希望严格对齐，可不推进）
+                if seg_ptr[env_idx] < critics.shape[1]:
+                    seg_ptr[env_idx] += 1
+                continue
+
+            if seg_ptr[env_idx] >= critics.shape[1]:
+                # 当前 env 的段级分数不足；跳过
+                continue
+            c = float(critics[env_idx, seg_ptr[env_idx]])
+            seg_ptr[env_idx] += 1
+
+            contrib = c / float(seg_len)
+            step_list = per_env_step_critic[env_idx]
+            # 把贡献均匀加到 start..start+seg_len-1
+            for t in range(start, start + seg_len):
+                if 0 <= t < T:
+                    step_list[t] += contrib
+
+        # 3) 累计每个 env 的 value/Δvalue，并计算 reward/完成度
+        total_critic, total_delta, total_value = [], [], []
+        total_reward, total_active, total_complete, total_finish_step = [], [], [], []
+
+        for env_idx in range(B):
+            step_critic = per_env_step_critic[env_idx]
+            if T == 0:
+                # 空轨迹
+                total_critic.append([])
+                total_delta.append([])
+                total_value.append([0.0])
+                total_reward.append([])
+                total_active.append(False)
+                total_complete.append(False)
+                total_finish_step.append(0)
+                continue
+
+            # 用你的累计函数：value 长度 T+1，deltas 长度 T
+            value, deltas = self._accumulate_value_delta(step_critic, v0=0.0)
+            rewards = [beta * d for d in deltas]
+
+            # 成功判定（连续 success_window 个 value >= success_thresh）
+            finish_step = None
+            consec = 0
+            for i in range(1, T + 1):  # value[i] 对应“完成第 i 步后的进度”
+                if value[i] >= success_thresh:
+                    consec += 1
+                else:
+                    consec = 0
+                if consec >= success_window:
+                    finish_step = i  # 首次满足窗口的步
+                    break
+
+            if finish_step is not None:
+                complete = True
+            else:
+                complete = False
+                finish_step = min(T, max_steps)
+
+            # 统一置 inactive（事后评估）
+            active = False
+
+            total_critic.append(step_critic)
+            total_delta.append(deltas)
+            total_value.append(value)
+            total_reward.append(rewards)
+            total_active.append(active)
+            total_complete.append(complete)
+            total_finish_step.append(int(finish_step))
+
+        return (total_critic,
+                total_delta,
+                total_value,
+                total_reward,
+                total_active,
+                total_complete,
+                total_finish_step)
+            
+    def _accumulate_value_delta(self, critic_seq, v0=0.0, eps: float = 1e-3):
+        """
+        累计 critic → value（0..100）并给出 Δvalue。
+        - 正向：v_next = v + (100 - v) * (c/100)
+        - 负向：v_next = 100 - (100 - v) * 100/(100 + c)   # c<0
+        （移除 d 的 1.0 下限，或改为极小 eps，避免临门一脚“巨幅下坠”）
+        """
+        value = [float(v0)]
+        deltas = []
+        for c in critic_seq:
+            c = float(max(min(c, CLIP_CRITIC_MAX), CLIP_CRITIC_MIN))  # 例如 [-90, 100]
+            v = value[-1]
+            if c >= 0:
+                v_next = v + (100.0 - v) * (c / 100.0)
+            else:
+                gap = max(100.0 - v, eps)   # 以前是 max(..., 1.0) —— 改为极小 eps
+                v_next = 100.0 - gap * (100.0 / (100.0 + c))
+            if CLIP_VALUE:
+                v_next = min(max(v_next, 0.0), 100.0)
+            value.append(v_next)
+            deltas.append(v_next - v)
+        return value, deltas
+
+    def _accumulate_value_delta_symmetric(self, critic_seq, v0=0.0):
+        value = [float(v0)]
+        deltas = []
+        
+        for c in critic_seq:
+            c = float(max(min(c, CLIP_CRITIC_MAX), CLIP_CRITIC_MIN))
+            v = value[-1]
+            if c >= 0:
+                v_next = v + (100.0 - v) * (c / 100.0)
+            else:
+                v_next = v + v * (c / 100.0)   # 朝 0 退，幅度与 v 成正比
+            if CLIP_VALUE:
+                v_next = min(max(v_next, 0.0), 100.0)
+            value.append(v_next)
+            deltas.append(v_next - v)
+        return value, deltas
+    
+    def _round_robin_shards(self, n_items: int, n_shards: int):
+        shards = [[] for _ in range(n_shards)]
+        for i in range(n_items):
+            shards[i % n_shards].append(i)
+        return shards
+    
     def verify(self, data, global_steps=-1):
         # breakpoint()
         if self.return_env_score and ('complete' in data.batch):
             score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
         else:
             scores_env = None
-        step_images = data.batch["step_images"]
+        step_images = data.batch["step_images"].cpu().numpy()
         step_images_mask = data.batch["step_images_mask"]
         task_lang = data.non_tensor_batch['task_lang']
+        task_suite_name = data.non_tensor_batch['task_suite_name']
+        task_id = list(data.batch['task_id'])
         B, N, H, W, C = step_images.shape
-        reward_tasks = self.get_reward_tasks(step_images, step_images_mask, task_lang)
         
-        if self.vote_n <= 1:
-            pred_success, pred_finish, raw_texts = self.get_rewards_from_judge_batch_sync(
-                self.client, reward_tasks, max_workers=64
-            )
-        else:
-            flat_tasks = [t for t in reward_tasks for _ in range(self.vote_n)]
-            seeds = None
-            v_succ, v_finish, v_text = self.get_rewards_from_judge_batch_sync(
-                self.client, flat_tasks, max_workers=64,
-                temperature=self.temperature, top_p=self.top_p, seeds=seeds
-            )
-
-            ptr = 0
-            pred_success, pred_finish = [], []
-            for i, t in enumerate(reward_tasks):
-                seg_succ  = v_succ[ptr:ptr + self.vote_n]
-                seg_finish = v_finish[ptr:ptr + self.vote_n]
-                seg_text   = v_text[ptr:ptr + self.vote_n]
-                ptr += self.vote_n
-
-                agg_s, agg_f = self.aggregate_success_and_finish(seg_succ, seg_finish, m=self.vote_m, strategy="min")
-                pred_success.append(int(agg_s))
-                pred_finish.append(int(agg_f))
+        step_interval = self.config.reward_model.rm_step_interval
+        ref_video_path_list = [Path(REF_DICT[task_suite_name[i]][task_id[i].item()]) for i in range(len(task_id))]
+        ref_frames_list = []
+        for ref_video_path in ref_video_path_list:
+            ref_frames, ref_frame_indices = self.process_video_to_PIL_frames_with_indices(ref_video_path, num_frames=10)
+            ref_frames_list.append(ref_frames)
+        pairs, pair_task_texts, pair_map = self._build_pairs_full_trajectory(
+            step_images, task_lang, step_interval=step_interval, ref_frames_list=ref_frames_list, ref_num=10
+        )
         
+        endpoints = [( "0.0.0.0", p) for p in range(8000, 8008)]
+        num_eps = len(endpoints)
+
+        shard_indices = self._round_robin_shards(len(pairs), num_eps)
+        def _run_shard(ep_id: int, idxs: list[int]):
+            """在线程内：克隆 RM、指定 engine、跑 reward_step，返回 (idxs, critics)"""
+            if not idxs:
+                return [], []
+            rm_local = copy.copy(self.reward_model)     # 浅拷贝：共享只读配置，替换 engine
+            host, port = endpoints[ep_id]
+            rm_local.engine = InferClient(host=host, port=port)
+            rm_local.infer_stats = InferStats()
+            # 如果你在 RM 里有 request_config，可复用；否则给个默认
+            if not hasattr(rm_local, "request_config") or rm_local.request_config is None:
+                rm_local.request_config = RequestConfig(max_tokens=256, temperature=0.0, stream=False)
+
+            sub_pairs = [pairs[i] for i in idxs]
+            sub_tasks = [pair_task_texts[i] for i in idxs]
+
+            critics = rm_local.reward_step(
+                sub_pairs, sub_tasks,
+                use_ref=True,           # 你现在用 ref
+                batch_num=256,          # 每端点子批；可按显存调整 128~512
+                addition_scale=1.0,
+                divide_skip=1,
+                related_critic=False,
+                return_value=False,
+                rich=False,
+            )
+            return idxs, [float(c) for c in critics]
+
+        critic_chunks = [None] * len(pairs)
+        with ThreadPoolExecutor(max_workers=num_eps) as ex:
+            futs = [ex.submit(_run_shard, ep, idxs) for ep, idxs in enumerate(shard_indices) if idxs]
+            for fut in as_completed(futs):
+                idxs, critics = fut.result()
+                for j, i in enumerate(idxs):
+                    critic_chunks[i] = critics[j]
+        
+        
+        # self.reward_model.engine = InferClient(host='0.0.0.0', port=8000)
+        # critic_chunks = self.reward_model.reward_step(
+        #     pairs, pair_task_texts,
+        #     use_ref=True,
+        #     batch_num=512,
+        #     addition_scale=1.0,
+        #     divide_skip=1,
+        #     related_critic=False,
+        #     return_value=False,
+        #     rich=False,
+        # )
+        # breakpoint()
+        critics = np.array(critic_chunks).reshape(B, -1)
+
+        (total_critic, 
+         total_delta, 
+         total_value, 
+         total_reward, 
+         total_active, 
+         total_complete, 
+         total_finish_step
+        ) = self._distribute_and_finalize_rewards(
+            step_images, pair_map, critics, beta=0.05, success_window=2, max_steps=N
+        )
+        # breakpoint()
+        
+        pred_success = list(map(int, total_complete))
         scores = pred_success
-        finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
-        # scores = score_env
-        # finish_step = data.batch["finish_step_raw"]
-        complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
+        finish_step = torch.tensor(total_finish_step, device=data.batch[self.data_key].device)
+        complete = total_complete
+        
         if self.return_env_score:
             cls_stat = self.compute_all_metrics(score_env, pred_success)
         if self.use_world_model and (global_steps != -1):
@@ -673,6 +807,7 @@ class RobVLACRewardManager():
         format = [1.0 for _ in range(len(scores))]
 
         data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=data.batch[self.data_key].device)
+        data.batch['dense_reward'] = torch.tensor(total_reward, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['complete'] = complete
         data.batch['finish_step'] = finish_step
@@ -694,28 +829,38 @@ class RobVLACRewardManager():
         reward_tensor_dict={}
         reward_metrics={}
         reward_tensor = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32) # batch * 64 * 56
+        reward_tensor_dense = torch.zeros_like(reward_tensor, dtype=torch.float32)
         verifier_reward = torch.zeros_like(data.batch['old_log_probs'], dtype=torch.float32)
         reward_tensor = reward_tensor.reshape((reward_tensor.shape[0], -1))
+        reward_tensor_dense = reward_tensor_dense.reshape((reward_tensor_dense.shape[0], -1))
         verifier_reward = verifier_reward.reshape((verifier_reward.shape[0], -1))
-        
+        verifier_dense_reward = torch.zeros_like(verifier_reward, dtype=torch.float32)
+        # breakpoint()
         valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len 
        
         if 'acc' in data.batch:
             verifier_score = data.batch['acc'].cpu().numpy().tolist()
+            verifier_dense_score = data.batch['dense_reward'].cpu().numpy()
+            verifier_dense_score = np.repeat(verifier_dense_score[..., None], self.config.actor_rollout_ref.model.action_token_len, axis=-1)
+            verifier_dense_score = verifier_dense_score.reshape(len(verifier_score), -1)
+            verifier_dense_score = torch.from_numpy(verifier_dense_score)
         else:
             verifier_score, verifier_metrics, format_metrics, reward_format_metrics = self.verify(data)
             reward_metrics.update(verifier_metrics)
         for i in range(verifier_reward.shape[0]):
             verifier_reward[i,valid_response_length[i]-1] += verifier_score[i]
-            
+            verifier_dense_reward[i, :valid_response_length[i]-1] = verifier_dense_score[i, :valid_response_length[i]-1]
         reward_tensor_dict['gt_scores'] = verifier_reward
+        reward_tensor_dict['gt_dense_scores'] = verifier_dense_reward
 
         if self.config.verifier.reward_coef!=0:
             # reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=1).mean().item()
             reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=(1)).mean().item()
             reward_tensor += self.config.verifier.reward_coef * reward_tensor_dict['gt_scores']
+            reward_tensor_dense += self.config.verifier.reward_coef * reward_tensor_dict['gt_dense_scores']
 
         reward_tensor_dict['all'] = reward_tensor
+        reward_tensor_dict['all_dense'] = reward_tensor_dense
         reward_metrics['reward_all'] = reward_tensor.sum(dim=(-1)).mean(dim=0).item()
         
         return reward_tensor_dict, reward_metrics
@@ -1366,7 +1511,6 @@ def main_task(config):
     elif config.reward_model.type == "vlm_serve":
         reward_fn = RobVLMRewardManager(num_examine=0, config=config)
     elif config.reward_model.type == 'vlac':
-        ensure_gateway()
         reward_fn = RobVLACRewardManager(num_examine=0, config=config)
     else:
         raise NotImplementedError

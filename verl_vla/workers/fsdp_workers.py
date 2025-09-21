@@ -723,16 +723,16 @@ class RobActorRolloutRefWorker(Worker):
                 self.rollout.use_world_model = False
 
             # breakpoint()
-            if self.use_reward_model:
-                self.reward_model = self._build_model_optimizer_rm(model_path=self.config.reward_model.model_path,
-                                                                fsdp_config=self.config.reward_model.fsdp_config,
-                                                                optim_config=None,
-                                                                override_model_config=override_model_config,
-                                                                trust_remote_code=True) #self.config.model.get('trust_remote_code', False)
-                self.rollout.reward_model = self.reward_model
-                self.rollout.use_reward_model = True
-            else:
-                self.rollout.use_reward_model = False
+            # if self.use_reward_model:
+            #     self.reward_model = self._build_model_optimizer_rm(model_path=self.config.reward_model.model_path,
+            #                                                     fsdp_config=self.config.reward_model.fsdp_config,
+            #                                                     optim_config=None,
+            #                                                     override_model_config=override_model_config,
+            #                                                     trust_remote_code=True) #self.config.model.get('trust_remote_code', False)
+            #     self.rollout.reward_model = self.reward_model
+            #     self.rollout.use_reward_model = True
+            # else:
+            #     self.rollout.use_reward_model = False
         
         torch.cuda.synchronize()
         torch.distributed.barrier()
