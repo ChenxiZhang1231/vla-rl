@@ -177,7 +177,24 @@ class RobRewardManager():
         
         return reward_tensor_dict, reward_metrics
     
-
+from verl_vla.utils.ray_gate import RMGateway
+def ensure_gateway():
+    endpoints = [( "0.0.0.0", p) for p in range(8000, 8008)]
+    gw = RMGateway.options(
+        name="rm_gateway",        # 全局唯一名字
+        lifetime="detached",      # Driver 退出也不被杀（方便复用）
+        get_if_exists=True,       # 已存在则直接复用
+    ).remote(
+        endpoints=endpoints,
+        max_batch_size=512,
+        max_wait_ms=15,
+        concurrency=8, 
+        max_inflight=8,
+        default_cfg={"temperature": 0.0, "max_tokens": 64, "stream": False},
+        round_robin=True,
+    )
+    print("RMGateway started:", gw)
+    
 class RobVLACRewardManager():
     """The reward manager.
     """
@@ -905,6 +922,7 @@ def main_task(config):
     elif config.reward_model.type == "vlm_serve":
         reward_fn = RobVLMRewardManager(num_examine=0, config=config)
     elif config.reward_model.type == 'vlac':
+        ensure_gateway()
         reward_fn = RobVLACRewardManager(num_examine=0, config=config)
     else:
         raise NotImplementedError

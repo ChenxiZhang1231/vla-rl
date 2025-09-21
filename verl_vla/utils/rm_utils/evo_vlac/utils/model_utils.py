@@ -7,6 +7,7 @@ from swift.tuners import Swift
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union,Literal
 from swift.llm import RequestConfig,InferRequest,TemplateInputs
 from swift.llm import InferClient, InferRequest
+import ray 
 
 import  torch
 import torch.nn as nn
@@ -1156,29 +1157,63 @@ class GAC_model_client(nn.Module):
         input_ids = input_ids[:, -logits_to_keep:]
         return selective_log_softmax(logits, input_ids)
      
-    def init_model(self,model_path,model_type='internvl2',device_map:str = 'auto',torch_dtype=torch.bfloat16,adapter: str = None):
+    def init_model(
+        self,
+        model_path: str | None,
+        model_type: str = "internvl2",
+        device_map: str | None = None,
+        torch_dtype=torch.bfloat16,
+        adapter: str | None = None,
+        use_server: bool = True,           # 关键：server 模式不加载本地大模型
+    ):
         """
-        Args:
-            device_map: ['auto', 'cuda:0',...]
+        use_server=True 时：
+          - 不加载本地权重，不构建 PtEngine
+          - 只拿到模板（如需 tokenizer，仅加载 tokenizer）
+        use_server=False 时：
+          - 本地推理：加载模型并构建 PtEngine
         """
-        template_type = model_type
-        print(f'template_type: {template_type}')
-        _, tokenizer = get_model_tokenizer(model_id_or_path=model_path,
-                                            model_type=model_type,
-                                            torch_dtype=torch_dtype,
-                                            device_map=None,
-                                            attn_impl = 'flash_attn')
-        self.template = get_template(template_type, tokenizer)
-        # if adapter:
-        #     self.model = Swift.from_pretrained(self.model, adapter, adapter_name=None)
-
-        # from swift.llm import PtEngine
+        from swift.llm.model.register import get_model_tokenizer
+        from swift.llm.template import get_template
         from swift.plugin import InferStats
-        # self.engine = PtEngine.from_model_template(self.model, self.template, max_batch_size=0)
-        self.engine = InferClient(host='127.0.0.1', port=8000)
-        self.infer_stats = InferStats()
-        seed_everything(42)
-        logger.success("model initialized successfully")
+
+        if use_server:
+            # 只需要 template；尽量避免加载大模型
+            # 很多模板并不需要 tokenizer；如果需要，可以只加载 tokenizer：
+            tokenizer = None
+            try:
+                _, tokenizer = get_model_tokenizer(
+                    model_id_or_path=model_path,
+                    model_type=model_type,
+                    torch_dtype=torch_dtype,
+                    device_map=None,           # 禁止把模型绑到本地 GPU
+                    attn_impl='flash_attn',
+                    load_model=False,          # 如果 swift 版本支持
+                )
+            except Exception:
+                tokenizer = None  # 模板能否与 None 搭配取决于 swift 版本
+
+            self.template = get_template(model_type, tokenizer)
+            self.infer_stats = InferStats()
+            self.engine = None  # 服务器推理，无本地引擎
+
+        else:
+            # 本地 PtEngine 模式（可选）
+            self.model, tokenizer = get_model_tokenizer(
+                model_id_or_path=model_path,
+                model_type=model_type,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
+                attn_impl='flash_attn',
+            )
+            from swift.llm import PtEngine
+            self.template = get_template(model_type, tokenizer)
+            self.engine = PtEngine.from_model_template(self.model, self.template, max_batch_size=0)
+            self.infer_stats = InferStats()
+
+    def bind_gateway(self, rm_gateway):
+        """绑定共享的 Ray RMGateway 句柄"""
+        self.rm_gateway = rm_gateway
    
     def chat(self,infer_requests):
         start_t=time.time()
@@ -1581,19 +1616,19 @@ class GAC_model_client(nn.Module):
             return batch_prompt, batch_image
         
         critic_raw = []
-        total_time = 0.0
-        # 覆盖/锁定RM的温度与top_k（避免调用处忘记改）
-        old_temp = getattr(self, "temperature", None)
-        old_topk = getattr(self, "top_k", None)
         
         self.temperature = temperature
         self.top_k = top_k
         
-        for s in tqdm.tqdm(range(0, N, batch_num), desc="RM batch inference"):
+        # for s in tqdm.tqdm(range(0, N, batch_num), desc="RM batch inference"):
+        for s in range(0, N, batch_num):
             e = min(s + batch_num, N)
             batch_prompt, batch_image = _build_batch(s, e)
             infer_requests = self.get_infer_requests_client(prompts=batch_prompt, images=batch_image)
-            response_list, infer_time = self.chat(infer_requests)
+            # response_list, infer_time = self.chat(infer_requests)
+            keys = ray.get(self.rm_gateway.submit_many.remote(infer_requests))
+            response_list = ray.get(self.rm_gateway.get_many_blocking.remote(keys, timeout_s=300))
+            # response_list = [ray.get(self.rm_gateway.get_result_blocking.remote(k)) for k in keys]
             answers_list, complete_requests_list = self.results_format(
                 response_list, infer_requests, rich=rich
             )
@@ -1612,8 +1647,6 @@ class GAC_model_client(nn.Module):
                     return 0.0
 
             critic_raw.extend([_to_float(a) for a in answers_list])
-            total_time += infer_time
-        print(f"[RM] total infer_time: {total_time:.3f}s, items: {N}")
         
         critic_list = [float(c) for c in critic_raw]
 

@@ -579,11 +579,20 @@ class RobActorRolloutRefWorker(Worker):
         # breakpoint()
         from verl_vla.utils.rm_utils.evo_vlac import GAC_model_client
         rm_module = GAC_model_client(tag='critic')
-        rm_module.init_model(model_path=model_path, model_type='internvl2', device_map=f'cuda:0')
+        rm_module.init_model(model_path=model_path, model_type='internvl2', use_server=True, device_map=f'cuda:0')
         rm_module.temperature=0.5
         rm_module.top_k=1
         rm_module.set_config()
         rm_module.set_system_prompt()
+        try:
+            rm_gateway = ray.get_actor("rm_gateway")
+        except ValueError:
+            # 可选：如果你在 rank0 创建，则这里获取前先 barrier 等待
+            import torch.distributed as dist
+            if dist.is_initialized():
+                dist.barrier()
+            rm_gateway = ray.get_actor("rm_gateway")
+        rm_module.bind_gateway(rm_gateway)
         
         if self._is_lora:
             raise
