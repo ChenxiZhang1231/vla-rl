@@ -2158,7 +2158,7 @@ class RobHFRollout(BaseRollout):
             critic_chunks = self.reward_model.reward_step(
                 pairs, pair_task_texts,
                 use_ref=True,
-                batch_num=512,
+                batch_num=256,
                 addition_scale=1.0,
                 divide_skip=1,
                 related_critic=False,
@@ -2240,7 +2240,7 @@ class RobHFRollout(BaseRollout):
         batch["value"] = torch.tensor(batch["value"], dtype=torch.float32, device=batch['observation.images.image'].device)
         batch["delta"] = torch.tensor(batch["delta"], dtype=torch.float32, device=batch['observation.images.image'].device)
         batch["reward"] = torch.tensor(batch["reward"], dtype=torch.float32, device=batch['observation.images.image'].device)
-        breakpoint()
+        # breakpoint()
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
