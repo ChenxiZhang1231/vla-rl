@@ -303,8 +303,9 @@ class ActionConditionedOpenxDataset(Dataset):
             label = np.load(ann_file)
             video_path = ann_file.replace('metadata', 'clips').replace('.npz', '.mp4')
             black_path = ann_file.replace('metadata', 'blacks').replace('.npz', '_black.mp4')
-            actions = np.array(label['actions'])[frame_ids][:-1].reshape(self.sequence_length - 1, self.action_dim)
-            actions = torch.from_numpy(actions)
+            # actions = np.array(label['actions'])[frame_ids][:-1].reshape(self.sequence_length - 1, self.action_dim)
+            # actions = torch.from_numpy(actions)
+            raise  # use delta state here, 
             # arm_states, gripper_states = self._get_robot_states(label, frame_ids)
             # actions = np.concatenate([arm_states, gripper_states[..., None]], axis=-1)[:-1].reshape(self.sequence_length - 1, self.action_dim)
             # actions = self._get_actions(arm_states, gripper_states, self.accumulate_action)

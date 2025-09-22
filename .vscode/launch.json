@@ -130,8 +130,37 @@
           "console": "integratedTerminal",
           "args":[
             // "--dataset_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/data",
-            // "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/data_output_debug",
+            "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/data_output_debug",
             "--jobs=1"
+          ],
+          "env": {
+          }
+        },
+        {
+          "name": "Debug Process Droid Raw",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/wm_data_process/utils/droid/python-example-droid-dataset/",
+          "program": "src/process_raw_wm_data_multi_process.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--scene", "/inspire/ssd/project/robotsimulation/public/data/droid_raw/1.0.1/TRI",
+            "--save_path", "data/droid_processed_data_debug/",
+            "--urdf", "franka_description/panda.urdf",
+            "--num_threads", "1",
+          ],
+          "env": {
+          }
+        },
+        {
+          "name": "Debug Process Droid Raw 2 Json",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/wm_data_process/",
+          "program": "utils/droid/droid_to_json.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--jobs=32"
           ],
           "env": {
           }

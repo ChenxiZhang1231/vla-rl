@@ -717,6 +717,7 @@ def main():
                     action=action,
                     obs_state=obs_state,
                 ))
+            break
                         
         # process_video_task(tasks[0])  # debug
         data: List[Dict[str, str]] = []
