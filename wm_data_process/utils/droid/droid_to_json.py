@@ -379,7 +379,7 @@ def draw_overlay_on_clip(clip_path: Path, out_path: Path,
 
         overlay = frame.copy()
 
-        for ee in range(2):
+        for ee in range(1):
             pos_w = end_pos_clip[f, ee, :]  # (3,)
             quat  = end_quat_clip[f, ee, :] # (4,)
             R_ee  = quat_to_rot(quat)       # (3,3)
@@ -448,7 +448,7 @@ def draw_overlay_on_black(clip_path: Path, out_path: Path,
         overlay = np.zeros_like(frame)
         frame = overlay.copy()
 
-        for ee in range(2):
+        for ee in range(1):
             pos_w = end_pos_clip[f, ee, :]  # (3,)
             quat  = end_quat_clip[f, ee, :] # (4,)
             R_ee  = quat_to_rot(quat)       # (3,3)
@@ -650,83 +650,83 @@ class StereoCamera:
 
     def __init__(self, recordings: Path, serial: int, device_id: int, new_image_size: tuple[int, int] = (1280, 720)):
         
-        try:
-            import pyzed.sl as sl
-            init_params = sl.InitParameters()
-            init_params.sdk_verbose = 0
-            # print(f"device_id: {device_id}")
-            init_params.sdk_gpu_id = device_id
-            svo_path = recordings / "SVO" / f"{serial}.svo"
-            init_params.set_from_svo_file(str(svo_path))
-            init_params.depth_mode = sl.DEPTH_MODE.QUALITY
-            init_params.svo_real_time_mode = False
-            init_params.coordinate_units = sl.UNIT.METER
-            init_params.depth_minimum_distance = 0.2
+        # try:
+        import pyzed.sl as sl
+        init_params = sl.InitParameters()
+        init_params.sdk_verbose = 0
+        # print(f"device_id: {device_id}")
+        init_params.sdk_gpu_id = device_id
+        svo_path = recordings / "SVO" / f"{serial}.svo"
+        init_params.set_from_svo_file(str(svo_path))
+        init_params.depth_mode = sl.DEPTH_MODE.QUALITY
+        init_params.svo_real_time_mode = False
+        init_params.coordinate_units = sl.UNIT.METER
+        init_params.depth_minimum_distance = 0.2
 
-            zed = sl.Camera()
-            err = zed.open(init_params)
-            if err != sl.ERROR_CODE.SUCCESS:
-                raise Exception(f"Error reading camera data: {err}")
+        zed = sl.Camera()
+        err = zed.open(init_params)
+        if err != sl.ERROR_CODE.SUCCESS:
+            raise Exception(f"Error reading camera data: {err}")
 
-            params = (
-                zed.get_camera_information().camera_configuration.calibration_parameters
-            )
-            
+        params = (
+            zed.get_camera_information().camera_configuration.calibration_parameters
+        )
+        
+        self.left_intrinsic_mat = np.array(
+            [
+                [params.left_cam.fx, 0, params.left_cam.cx],
+                [0, params.left_cam.fy, params.left_cam.cy],
+                [0, 0, 1],
+            ]
+        )
+        self.right_intrinsic_mat = np.array(
+            [
+                [params.right_cam.fx, 0, params.right_cam.cx],
+                [0, params.right_cam.fy, params.right_cam.cy],
+                [0, 0, 1],
+            ]
+        )
+        self.zed = zed
+
+        if new_image_size != (1280, 720):
+            scale_x = new_image_size[0] / 1280
+            scale_y = new_image_size[1] / 720 
             self.left_intrinsic_mat = np.array(
                 [
-                    [params.left_cam.fx, 0, params.left_cam.cx],
-                    [0, params.left_cam.fy, params.left_cam.cy],
+                    [params.left_cam.fx * scale_x, 0, params.left_cam.cx * scale_x],
+                    [0, params.left_cam.fy * scale_y, params.left_cam.cy * scale_y],
                     [0, 0, 1],
                 ]
             )
             self.right_intrinsic_mat = np.array(
                 [
-                    [params.right_cam.fx, 0, params.right_cam.cx],
-                    [0, params.right_cam.fy, params.right_cam.cy],
+                    [params.right_cam.fx * scale_x, 0, params.right_cam.cx * scale_x],
+                    [0, params.right_cam.fy * scale_y, params.right_cam.cy * scale_y],
                     [0, 0, 1],
                 ]
             )
-            self.zed = zed
 
-            if new_image_size != (1280, 720):
-                scale_x = new_image_size[0] / 1280
-                scale_y = new_image_size[1] / 720 
-                self.left_intrinsic_mat = np.array(
-                    [
-                        [params.left_cam.fx * scale_x, 0, params.left_cam.cx * scale_x],
-                        [0, params.left_cam.fy * scale_y, params.left_cam.cy * scale_y],
-                        [0, 0, 1],
-                    ]
-                )
-                self.right_intrinsic_mat = np.array(
-                    [
-                        [params.right_cam.fx * scale_x, 0, params.right_cam.cx * scale_x],
-                        [0, params.right_cam.fy * scale_y, params.right_cam.cy * scale_y],
-                        [0, 0, 1],
-                    ]
-                )
-
-        except ModuleNotFoundError:
-            # pyzed isn't installed we can't find its intrinsic parameters
-            # so we will have to make a guess.
-            self.left_intrinsic_mat = np.array([
-                [733.37261963,   0.,         625.26251221],
-                [  0.,         733.37261963,  361.92279053],
-                [  0.,           0.,           1.,        ]
-            ])
-            self.right_intrinsic_mat = self.left_intrinsic_mat
+        # except ModuleNotFoundError:
+        #     # pyzed isn't installed we can't find its intrinsic parameters
+        #     # so we will have to make a guess.
+        #     self.left_intrinsic_mat = np.array([
+        #         [733.37261963,   0.,         625.26251221],
+        #         [  0.,         733.37261963,  361.92279053],
+        #         [  0.,           0.,           1.,        ]
+        #     ])
+        #     self.right_intrinsic_mat = self.left_intrinsic_mat
             
-            mp4_path = recordings / "MP4" / f'{serial}-stereo.mp4'
-            if (recordings / "MP4" / f'{serial}-stereo.mp4').exists():
-                mp4_path = recordings / "MP4" / f'{serial}-stereo.mp4'
-            elif (recordings / "MP4" / f'{serial}.mp4').exists():
-                # Sometimes they don't have the '-stereo' suffix
-                mp4_path = recordings / "MP4" / f'{serial}.mp4'
-            else:
-                raise Exception(f"unable to video file for camera {serial}")
+        #     mp4_path = recordings / "MP4" / f'{serial}-stereo.mp4'
+        #     if (recordings / "MP4" / f'{serial}-stereo.mp4').exists():
+        #         mp4_path = recordings / "MP4" / f'{serial}-stereo.mp4'
+        #     elif (recordings / "MP4" / f'{serial}.mp4').exists():
+        #         # Sometimes they don't have the '-stereo' suffix
+        #         mp4_path = recordings / "MP4" / f'{serial}.mp4'
+        #     else:
+        #         raise Exception(f"unable to video file for camera {serial}")
 
-            self.cap = cv2.VideoCapture(str(mp4_path))
-            print(f"opening {mp4_path}")
+        #     self.cap = cv2.VideoCapture(str(mp4_path))
+        #     print(f"opening {mp4_path}")
 
 
     def get_next_frame(self) -> tuple[np.ndarray, np.ndarray, np.ndarray | None] | None:
@@ -882,13 +882,16 @@ def main():
                     
                 # 为每个相机创建任务
                 for cam_name, serial in cam_serials.items():
-                    if cam_name != 'ext1':
+                    # if cam_name != 'ext1':
+                    #     continue
+                    try:
+                        camera = StereoCamera(
+                            ts_dir / "recordings",
+                            serial,
+                            device_id=0
+                        )
+                    except:
                         continue
-                    camera = StereoCamera(
-                        ts_dir / "recordings",
-                        serial,
-                        device_id=0
-                    )
                     K = camera.left_intrinsic_mat
                     try:
                         mp4 = ts_dir / "recordings" / "MP4"
@@ -906,12 +909,12 @@ def main():
 
                     out_root = args.output_dir / scene_name / split / date_dir.name / ts_dir.name
                     ensure_dir(out_root)
-
+                    
                     tasks.append(dict(
                         mp4_path=video_path,
                         out_root=out_root,
                         nice_stem=nice_stem,
-                        task_lang=meta_agg[meta['uuid']],
+                        task_lang=meta_agg.get(meta['uuid'], ""),
                         e_params_orig=e_params,
                         k_params=K,
                         action=action,
@@ -922,12 +925,12 @@ def main():
                         crf=args.crf,
                         preset=args.preset
                     ))
-                    break
+                    # break
                 
             if not tasks:
                 continue
             
-            process_one_camera_episode(**tasks[1])
+            # process_one_camera_episode(**tasks[1])
             # 并行跑
             items_all: List[Dict[str,Any]] = []
             print(f"[{split}/{date_dir.name}] start {len(tasks)} camera-episodes with {args.jobs} workers...")
