@@ -547,7 +547,7 @@ def main_processing_loop(videos, eval_folder, args):
 
     # 设置工作进程数，通常设置为 CPU 核心数，或者可以由 args 控制
     num_workers = args.max_workers if hasattr(args, 'max_workers') else os.cpu_count()
-    num_workers = 1
+    num_workers = 32
     # num_workers = os.cpu_count() # 使用所有CPU核心
     print(f"使用 {num_workers} 个进程进行并行处理...")
 
@@ -648,28 +648,30 @@ def main():
         return
 
     vlac_model = get_vlac_model(args)
+    value_list_all = []
     for i, task in tqdm(enumerate(tasks)):
-        # if i >= 10:
-        #     break
+        if i >= 10:
+            break
         critic_list, value_list = vlac_model.eval_trajectory(
             task,
-            batch_num=50,
+            batch_num=10,
             ref_num=10,
             skip=1,
             frame_skip=True, #whether to skip frames(if false, each frame while be evaluated, cost more time)
-            done_threshold=0.9,#done threshold
+            done_threshold=0.9, #done threshold
             video_output=False,
             output_path=str(out_dir).replace(args.tag, f"{args.tag}_saved_video")
         )
-        # print(value_list)        
+        # print(value_list)     
+        value_list_all.append(value_list)   
 
         T = len(value_list)
         max_steps = 256
         finish_step = None
         consec = 0
-        success_thresh = 95
+        success_thresh = 92
         success_window = 3
-        for i in range(1, T):  # value[i] 对应“完成第 i 步后的进度”
+        for i in range(1, T):
             if value_list[i] >= success_thresh:
                 consec += 1
             else:
