@@ -83,7 +83,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.benchmark_dict = benchmark.get_benchmark_dict()
         self.task_suite = self.benchmark_dict[self.task_suite_name]()
 
-    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None) -> List[Dict[str, Any]]:
+    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None, init_state = None) -> List[Dict[str, Any]]:
         """Synchronous implementation of the reset logic."""
 
         # Use provided task_ids or sample new ones
@@ -103,7 +103,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
         task_descriptions = []
         initial_states_list = []
         env_creators = []
-        resolution = 256
+        # resolution = 256
+        resolution = 128
 
         for i, task_id in enumerate(task_ids):
             task = self.task_suite.get_task(task_id)
@@ -138,7 +139,10 @@ class LIBEROAdapter(BaseVLAEnvironment):
         for i in range(len(trial_ids)):
             state_id = trial_ids[i]
             initial_state_ids.append(state_id)
-            initial_states_to_set.append(initial_states_list[i][state_id])
+            if init_state is not None:
+                initial_states_to_set.append(init_state[i])
+            else:
+                initial_states_to_set.append(initial_states_list[i][state_id])
 
         # Set initial state only for the active environments.
         obs_np_list = self.env.set_init_state(initial_states_to_set, id=active_env_ids)
@@ -159,7 +163,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 'type': 'init',
                 'obs': obs_np_list[i],
                 "task_description": task_descriptions[i],
-                'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
+                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
+                'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
                 'task_file_name': f"{self.task_suite_name}_task_{task_id}_trial_{trial_id}",
                 'active': True,
                 'complete': False,
@@ -207,7 +212,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 act_idx = active_indices_list[i]
                 if step_images[act_idx] is None:
                     step_images[act_idx] = []
-                step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
+                # step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
+                step_images[act_idx].append(obs[i]["agentview_image"][::-1])
             
                 if dones[i] or self.step_count[act_idx] >= self.max_steps:
                     results[act_idx] = {

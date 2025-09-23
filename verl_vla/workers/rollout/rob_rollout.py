@@ -1169,7 +1169,9 @@ class RobHFRollout(BaseRollout):
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy(),
         )
+        
         
         
         inputs = []
@@ -1307,6 +1309,7 @@ class RobHFRollout(BaseRollout):
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy()
         )
         
         # ctx = mp.get_context("spawn")
@@ -1406,8 +1409,8 @@ class RobHFRollout(BaseRollout):
                 assert result['type'] == 'step'
                 new_inputs[idx] = self._obs_to_input(result['obs'])
                 task_records[idx]['active'] = result['active']
-                task_records[idx]['complete_raw'] = result['complete_raw']
-                task_records[idx]['finish_step_raw'] = result['finish_step_raw']
+                task_records[idx]['complete_raw'] = result['complete']
+                task_records[idx]['finish_step_raw'] = result['finish_step']
                 task_records[idx]['step_images'].extend(result['valid_images']) 
                 if is_valid:
                     valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
