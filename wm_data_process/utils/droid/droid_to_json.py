@@ -901,8 +901,11 @@ def main():
                         continue
                         
                     # 每个相机的 per-frame extrinsics
-                    with h5py.File(str(traj_path), "r") as H:
-                        e_params = build_extrinsics_per_frame(H, serial)  # (N,4,4)
+                    try:
+                        with h5py.File(str(traj_path), "r") as H:
+                            e_params = build_extrinsics_per_frame(H, serial)  # (N,4,4)
+                    except:
+                        continue
 
                     # nice stem：<date>_<timestamp>_<split>_<cam>
                     nice_stem = f"{date_dir.name}_{ts_dir.name}_{split}_{cam_name}"

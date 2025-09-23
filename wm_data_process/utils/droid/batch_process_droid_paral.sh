@@ -10,7 +10,8 @@ SCRIPT_PATH="${SCRIPT_PATH:-utils/droid/droid_to_json.py}"
 DROID_ROOT="${DROID_ROOT:-/inspire/ssd/project/robotsimulation/public/data/droid_raw/1.0.1}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid}"
 
-LABS=( AUTOLab GuptaLab IPRL PennPAL RAIL RPL WEIRD CLVR ILIAD IRIS RAD REAL TRI )
+# LABS=( AUTOLab GuptaLab IPRL PennPAL RAIL RPL WEIRD CLVR ILIAD IRIS RAD REAL TRI )
+LABS=( TRI )
 
 FPS="${FPS:-10}"
 CLIP_LEN="${CLIP_LEN:-30}"

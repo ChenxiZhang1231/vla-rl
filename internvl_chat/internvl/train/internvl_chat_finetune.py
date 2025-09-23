@@ -38,7 +38,8 @@ from internvl.patch import (concat_pad_data_collator,
                             replace_llama_rmsnorm_with_fused_rmsnorm,
                             replace_phi3_attention_class,
                             replace_qwen2_attention_class,
-                            replace_train_dataloader, replace_train_sampler)
+                            replace_train_dataloader, replace_train_sampler
+                            )
 from internvl.train.constants import (BOX_END_TOKEN, BOX_START_TOKEN,
                                       IMG_CONTEXT_TOKEN, IMG_END_TOKEN,
                                       IMG_START_TOKEN, QUAD_END_TOKEN,
