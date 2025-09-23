@@ -103,8 +103,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
         task_descriptions = []
         initial_states_list = []
         env_creators = []
-        # resolution = 256
-        resolution = 128
+        resolution = 256
+        # resolution = 128
 
         for i, task_id in enumerate(task_ids):
             task = self.task_suite.get_task(task_id)
