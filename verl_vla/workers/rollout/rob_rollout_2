@@ -314,17 +314,17 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         
     
 
-def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps, gpu_id):
+def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
 
     env = None
     while True:
-        # os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
+        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
         # env, task_description = get_libero_env(task, config.model_family, resolution=256)
         try:
-            env, task_description = get_libero_env(task, config.model_family, resolution=256, gpu_id=gpu_id)
+            env, task_description = get_libero_env(task, config.model_family, resolution=256)
             break  
         except:
             print(f"*** env initialization failed ***")
@@ -420,17 +420,17 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
         }
         output_queue.put(output_data)
         
-def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps, gpu_id):
+def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
 
     env = None
     while True:
-        os.environ["MUJOCO_EGL_DEVICE_ID"] = f"{gpu_id}" 
+        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
         # env, task_description = get_libero_env(task, config.model_family, resolution=256)
         try:
-            env, task_description = get_libero_env(task, config.model_family, resolution=256, gpu_id=gpu_id)
+            env, task_description = get_libero_env(task, config.model_family, resolution=256)
             break  
         except:
             print(f"*** env initialization failed ***")
@@ -748,7 +748,7 @@ def pad_dataprotos_step_images(
         
     return padded_videos, attention_mask
 
-def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id):
+def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps):
     # 无头渲染（robosuite/mujoco）
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.pop("DISPLAY", None)
@@ -762,10 +762,10 @@ def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_v
 
     # 延迟导入/创建 env & 模型，避免父进程提前初始化 CUDA
     return env_worker_smolvla(
-        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id
+        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
     )
     
-def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id):
+def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps):
     # 无头渲染（robosuite/mujoco）
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.pop("DISPLAY", None)
@@ -779,7 +779,7 @@ def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, out
 
     # 延迟导入/创建 env & 模型，避免父进程提前初始化 CUDA
     return env_worker_smolvla_vlm_reward(
-        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id=gpu_id
+        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
     )  
 
 SUCCESS_VALUE_THRESH = 95.0      # 认为成功的 value 阈值
@@ -1163,10 +1163,10 @@ class RobHFRollout(BaseRollout):
 
             input_q = ctx.Queue()
             output_q = ctx.Queue()
-            gpu_id = torch.distributed.get_rank() 
+
             p = ctx.Process(
                 target=_env_entry,
-                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id),
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
                 daemon=True,   # 可选：随父进程退出
             )
             p.start()
@@ -1332,10 +1332,10 @@ class RobHFRollout(BaseRollout):
 
             input_q = ctx.Queue()
             output_q = ctx.Queue()
-            gpu_id = torch.distributed.get_rank() 
+
             p = ctx.Process(
                 target=_env_entry_vlm_reward,
-                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id),
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
                 daemon=True,   # 可选：随父进程退出
             )
             p.start()

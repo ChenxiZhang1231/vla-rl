@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b_5k-trainset-7-bf16-sii'
+EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b_5k-trainset-7-bf16-sii-2'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -110,6 +110,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
