@@ -141,6 +141,7 @@ def video_trajectory(traj_id, view, image_paths, image_objects, done_list, criti
     for img in image_objects:
         # 获取原始图片的宽度和高度
         img_width, img_height = img.size
+        # img_width, img_height = img.shape[:2]
         
         # 计算缩放比例
         scale_factor = 480 / img_height

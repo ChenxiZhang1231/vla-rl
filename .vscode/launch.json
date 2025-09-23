@@ -437,7 +437,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-              "--debug"
+              // "--debug"
             ],
             "env": {
                 // "CUDA_VISIBLE_DEVICES": "0" 
