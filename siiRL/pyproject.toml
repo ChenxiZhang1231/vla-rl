@@ -1,0 +1,160 @@
+# ===================================================================
+# pyproject.toml for siirl
+#
+# PEP 621-compliant configuration file for project metadata,
+# build system, and tool configurations. This file works in
+# conjunction with a minimal setup.py shim.
+# ===================================================================
+
+
+# -------------------------------
+# Build System
+# -------------------------------
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "setuptools_scm[toml]>=6.2",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+
+# -------------------------------
+# Project Metadata (PEP 621)
+# -------------------------------
+[project]
+name = "siirl"
+# Version is loaded dynamically from a file. See [tool.setuptools.dynamic].
+dynamic = ["version"]
+
+description = "siirl: A Decentralized Multi-Agent Reinforcement Learning Framework"
+license = {file = "LICENSE"}
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.8"
+
+# --- Author & URL Information ---
+authors = [
+  { name = "Shanghai Innovation Institute - AI Infra Team", email = "llm19900326@gmail.com" },
+]
+
+# --- Project Discovery ---
+keywords = ["reinforcement learning", "multi-agent", "decentralized", "rl", "ai"]
+
+# Standardized classifiers from https://pypi.org/classifiers/
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+
+# --- Dependencies ---
+# Runtime dependencies required by the project.
+dependencies = [
+    "accelerate",
+    "codetiming",
+    "datasets>=4.0.0",
+    "dill",
+    "hydra-core",
+    "numpy",
+    "pandas",
+    "peft",
+    "pyarrow>=19.0.0",
+    "pybind11",
+    "pylatexenc",
+    "ray[default]>=2.47.1",
+    "torchdata",
+    "tensordict>=0.8.0,<=0.9.1,!=0.9.0",
+    "wandb",
+    "tensorboard",
+    "mathruler",
+    "math_verify",
+    "timm",
+    "imageio",
+    "loguru",
+    "packaging>=20.0",
+    "dacite",
+    "qwen_vl_utils",
+    "scipy",
+    "fastapi",
+    "transformers",
+    "math-verify",
+    "vllm>=0.8.5.post1",
+]
+
+
+# --- Optional Dependencies ---
+# Corresponds to 'extras_require' in setup.py.
+# Install with: pip install "siirl[gpu]"
+[project.optional-dependencies]
+# For core development and releasing
+dev = [
+    "ruff",
+    "pytest",
+    "build",
+    "twine",
+    "pre-commit",
+    "py-spy",
+]
+test = [
+    "pytest",
+    "pre-commit",
+    "py-spy",
+    "pyext",
+]
+
+geo = ["mathruler"]
+gpu = ["liger-kernel", "flash-attn"]
+sglang = [
+    "tensordict>=0.8.0,<=0.9.1,!=0.9.0",
+    "sglang[all]>=0.4.6.post5",
+    "torch-memory-saver>=0.0.5",
+    "torch>=2.6.0",
+]
+
+
+# --- Project URLs ---
+# This table should only contain string key-value pairs for URLs.
+[project.urls]
+"Homepage" = "https://github.com/sii-research/siiRL"
+"Bug Tracker" = "https://github.com/sii-research/siiRL/issues"
+"Repository" = "https://github.com/sii-research/siiRL"
+
+
+# -------------------------------
+# Tool: Ruff (Linting)
+# -------------------------------
+[tool.ruff]
+line-length = 120 # TODO: Reduce this to a more reasonable value
+
+[tool.ruff.lint]
+isort = {known-first-party = ["siirl"]}
+select = [ "E", "F", "UP", "B", "I", "G" ]
+ignore = [ "F405", "F403", "E731", "B007", "UP032", "UP007", "G004" ]
+
+
+# -------------------------------
+# Tool: Setuptools
+# -------------------------------
+[tool.setuptools]
+include-package-data = true
+# Modern equivalent of find_packages()
+packages = { find = {} }
+
+[tool.setuptools_scm]
+write_to = "siirl/_version.py"
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+siirl = [
+  "client/config/*.yaml"
+]
