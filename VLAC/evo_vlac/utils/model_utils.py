@@ -269,6 +269,46 @@ class GAC_model():
         else:
             self.system_prompt='You are a visual-language assistant designed to interpret spatial and task-related information from images and text. Provide precise, context-aware responses and actionable guidance to assist in achieving task objectives.'
     
+    # def _process_image_to_pil(self, image_input: Union[str, Image.Image]) -> Image.Image:
+    #     """
+    #     将各种格式的图像输入转换为448x448的PIL.Image
+        
+    #     Args:
+    #         image_input: 图像URL、文件路径、base64编码字符串或PIL.Image对象
+        
+    #     Returns:
+    #         PIL.Image: 调整为448x448尺寸的PIL图像
+    #     """
+    #     pil_image = None
+        
+    #     if isinstance(image_input, Image.Image):
+    #         pil_image = image_input
+    #     elif isinstance(image_input, str):
+    #         if image_input.startswith(('http://', 'https://')):
+    #             response = requests.get(image_input)
+    #             pil_image = Image.open(BytesIO(response.content))
+    #         elif image_input.startswith('data:image'):
+    #             header, encoded = image_input.split(',', 1)
+    #             image_data = base64.b64decode(encoded)
+    #             pil_image = Image.open(BytesIO(image_data))
+    #         elif len(image_input) > 100 and not '/' in image_input and not '\\' in image_input:
+    #             try:
+    #                 image_data = base64.b64decode(image_input)
+    #                 pil_image = Image.open(BytesIO(image_data))
+    #             except:
+    #                 pil_image = Image.open(image_input)
+    #         else:
+    #             pil_image = Image.open(image_input)
+    #     else:
+    #         raise ValueError(f"不支持的图像输入类型: {type(image_input)}")
+        
+    #     if pil_image.mode != 'RGB':
+    #         pil_image = pil_image.convert('RGB')
+        
+    #     pil_image = pil_image.resize((448, 448), Image.Resampling.LANCZOS)
+        
+    #     return pil_image
+    
     def _process_image_to_pil(self, image_input: Union[str, Image.Image]) -> Image.Image:
         """
         将各种格式的图像输入转换为448x448的PIL.Image
@@ -299,6 +339,40 @@ class GAC_model():
                     pil_image = Image.open(image_input)
             else:
                 pil_image = Image.open(image_input)
+                
+        elif isinstance(image_input, np.ndarray):
+            arr = image_input
+            if arr.dtype != np.uint8:
+                # 支持 [0,1] 或 [0,255] 浮点
+                arr = np.asarray(arr)
+                if arr.dtype.kind in ('f', 'c'):  # float/complex
+                    # 先clip再归一化到 [0,255]
+                    a = np.clip(arr.real, 0, 1) if arr.max() <= 1.0 else np.clip(arr.real, 0, 255) / 255.0
+                    arr = (a * 255.0).round().astype(np.uint8)
+                else:
+                    arr = arr.astype(np.uint8)
+
+            # 形状处理: HxW、HxWxC 或 CxHxW
+            if arr.ndim == 2:
+                # 灰度
+                pil_image = Image.fromarray(arr, mode='L').convert('RGB')
+            elif arr.ndim == 3:
+                if arr.shape[0] in (1, 3, 4) and arr.shape[0] < 8:
+                    # CxHxW -> HxWxC
+                    arr = np.transpose(arr, (1, 2, 0))
+                # 现在应是 HxWxC
+                c = arr.shape[2]
+                if c == 1:
+                    pil_image = Image.fromarray(arr.squeeze(-1), mode='L').convert('RGB')
+                elif c == 3:
+                    # 默认按 RGB 解释（如果来源是 OpenCV 的 BGR，你可在上游转换或在此处反转通道）
+                    pil_image = Image.fromarray(arr, mode='RGB')
+                elif c == 4:
+                    pil_image = Image.fromarray(arr, mode='RGBA').convert('RGB')
+                else:
+                    raise ValueError(f"不支持的通道数: {c}, 期望 1/3/4")
+            else:
+                raise ValueError(f"不支持的 ndarray 维度: {arr.ndim}, 期望 2 或 3")
         else:
             raise ValueError(f"不支持的图像输入类型: {type(image_input)}")
         
@@ -426,18 +500,36 @@ class GAC_model():
         list_video = task.frames
         ref_list = task.ref_frames
         done_ref = ref_list
-        done_list = self.get_trajectory_done(
-            task=task.description, 
-            image_list=list_video, 
-            ref_image_list=done_ref, 
-            batch_num=batch_num, 
-            rich=True, 
-            ref_num=ref_num, 
-            threshold=done_threshold
+        # done_list = self.get_trajectory_done(
+        #     task=task.description, 
+        #     image_list=list_video, 
+        #     ref_image_list=done_ref, 
+        #     batch_num=batch_num, 
+        #     rich=True, 
+        #     ref_num=ref_num, 
+        #     threshold=done_threshold
+        # )
+        critic_list, think_value_list=self.get_trajectory_critic(
+            task=task.description,
+            image_list=list_video,
+            ref_image_list=ref_list,
+            batch_num=batch_num,
+            ref_num=ref_num,
+            think=False,
+            skip=skip,
+            rich=False,
+            reverse_eval=False,
+            frame_skip=frame_skip,
+            addition_scale=1,
+            bias=0,
+            positive_clip=0,
+            negative_clip=0,
+            related_critic=False,
         )
+        value_list = think_value_list
         # if frame_skip:
         #     done_list = [done_list[i] for i in range(0,len(done_list),skip)]
-        
+        done_list = value_list
         if video_output:
             if ref_num>0:
                 ref_image_paths=ref_list
@@ -450,8 +542,8 @@ class GAC_model():
                 image_paths=[],
                 image_objects=list_video,
                 done_list=done_list,
-                critic_list=done_list,
-                value_list=done_list,
+                critic_list=critic_list,
+                value_list=value_list,
                 task=task.description,
                 output_path=output_path,
                 fps=fps,
@@ -459,7 +551,7 @@ class GAC_model():
                 n_num=ref_num
             )
         
-        return done_list
+        return critic_list, value_list
             
     def web_trajectory_critic(self, task_description, main_video_path, reference_video_path=None, 
                             batch_num=20, ref_num=9, think=False, skip=1, rich=False, reverse_eval=False,output_path=None,fps=None,frame_skip=False,addition_scale=1,bias=0,positive_clip=0,negative_clip=0,related_critic=False,done_flag=False,in_context_done=False,done_threshold=False,video_output=True):

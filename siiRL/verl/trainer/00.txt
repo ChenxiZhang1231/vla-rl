@@ -1,0 +1,116 @@
+def new_reward_cal(self, data):
+    completes = data.batch['complete'].tolist()
+    batch_size = data.batch['responses'].size(0)
+    assert len(completes) == batch_size
+    score = [float(item) for item in completes]
+    format = [1.0 for _ in range(len(completes))]
+    
+    embeddings = data.batch['vjepa_embedding'].cpu().numpy()
+    task_file_names = data.batch['task_file_name']
+
+    # 1. 解析 task_name（去掉 trial 部分）
+    def extract_task_name(task_file_name):
+        m = re.match(r"(libero_\w+_task_\d+)_trial_\d+", task_file_name)
+        return m.group(1) if m else task_file_name
+
+    task_names = [extract_task_name(name) for name in task_file_names]
+
+    # 2. 按 task 分组
+    task_to_indices = {}
+    for idx, tname in enumerate(task_names):
+        task_to_indices.setdefault(tname, []).append(idx)
+
+    # 3. 计算 reward
+    reward = [0.0] * batch_size
+    for tname, indices in task_to_indices.items():
+        # 找到所有成功和失败的索引
+        succ_idx = [i for i in indices if completes[i]]
+        fail_idx = [i for i in indices if not completes[i]]
+        
+        # 处理全零embedding
+        for i in indices:
+            if np.all(embeddings[i] == 0):
+                reward[i] = 0.0
+                continue
+        
+        # 没有成功数据，全部给0
+        if not succ_idx:
+            for i in fail_idx:
+                reward[i] = 0.0
+            continue
+        
+        # 成功数据直接给1.0
+        for i in succ_idx:
+            reward[i] = 1.0
+        
+        # 没有失败数据则跳过后续处理
+        if not fail_idx:
+            continue
+        
+        # ============== DBSCAN聚类改进 ==============
+        succ_embeddings = embeddings[succ_idx]
+        
+        # 标准化数据（DBSCAN对尺度敏感）
+        scaler = StandardScaler()
+        scaled_succ = scaler.fit_transform(succ_embeddings)
+        
+        # 执行DBSCAN聚类（参数可调整）
+        clustering = DBSCAN(eps=0.5, min_samples=2).fit(scaled_succ)
+        
+        # 获取聚类中心
+        cluster_centers = []
+        unique_labels = set(clustering.labels_)
+        
+        for label in unique_labels:
+            if label == -1:  # 跳过噪声点
+                continue
+            cluster_mask = (clustering.labels_ == label)
+            cluster_points = scaled_succ[cluster_mask]
+            cluster_center = scaler.inverse_transform(cluster_points.mean(axis=0))
+            cluster_centers.append(cluster_center)
+        
+        # 如果没有找到有效簇，使用所有成功轨迹的均值作为中心
+        if not cluster_centers:
+            overall_center = scaler.inverse_transform(scaled_succ.mean(axis=0))
+            cluster_centers = [overall_center]
+        
+        # ============== 非线性奖励映射 ==============
+        # 计算每个失败轨迹到所有簇中心的最小距离
+        min_dists = []
+        for i in fail_idx:
+            fail_emb = embeddings[i]
+            dists = [np.linalg.norm(fail_emb - center) for center in cluster_centers]
+            min_dists.append(min(dists))
+        
+        # 计算距离范围
+        max_dist = max(min_dists) if min_dists else 0
+        min_dist = min(min_dists) if min_dists else 0
+        
+        # 非线性映射参数
+        sigmoid_steepness = 10.0  # 控制曲线陡峭度
+        sigmoid_offset = 0.5      # 控制奖励分布中心
+        
+        for i, dist in zip(fail_idx, min_dists):
+            if max_dist - min_dist < 1e-6:
+                normalized_dist = 0.5  # 避免除零
+            else:
+                normalized_dist = (dist - min_dist) / (max_dist - min_dist)
+            
+            # Sigmoid非线性映射（expit即1/(1 + e^(-x))）
+            sigmoid_input = sigmoid_steepness * (sigmoid_offset - normalized_dist)
+            reward_val = 0.6 * expit(sigmoid_input)  # 固定最大奖励0.6
+            
+            reward[i] = float(reward_val)
+    
+    # 保存奖励到batch
+    device = data.batch['responses'].device
+    data.batch['acc'] = torch.tensor(reward, dtype=torch.float32, device=device)
+    data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=device)
+    data.batch['new_reward'] = torch.tensor(reward, dtype=torch.float32, device=device)
+    
+    # 计算指标
+    reward_metrics = {'all': data.batch['new_reward'].mean().item()}
+    format_metrics = {'all': data.batch['format_correctness'].mean().item()}
+    reward_format_metrics = {'all': data.batch['new_reward'].mean().item()}
+    
+    return reward, reward_metrics, format_metrics, reward_format_metrics

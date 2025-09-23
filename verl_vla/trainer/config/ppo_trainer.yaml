@@ -109,6 +109,7 @@ actor_rollout_ref:
     ulysses_sequence_parallel_size: ${actor_rollout_ref.actor.ulysses_sequence_parallel_size} # sp size
   rollout:
     reward_type: env
+    n_gpus_per_node: 8
     only_for_gen_rm_data: False
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
@@ -202,6 +203,7 @@ reward_model:
   type: rule
   strategy: fsdp
   vlm_input_num_frames: 10
+  rm_step_interval: 1
   vote_n: 1
   vote_m: 1
   temperature: 0.0

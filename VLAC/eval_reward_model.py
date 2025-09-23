@@ -57,8 +57,6 @@ REF_DICT = {
         7: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_7_trial_16--success=True--ran=6198.mp4",
         8: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_8_trial_46--success=True--ran=6438.mp4",
         9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
-        
-
     }
 }
 # =========================
@@ -197,6 +195,62 @@ def process_video_to_base64_frames_with_indices(video_path: Path, num_frames: in
     # 若读帧失败导致数量不一致，截齐
     L = min(len(base64_frames), len(frame_indices))
     return base64_frames[:L], frame_indices[:L]
+
+def process_video_to_frames_step(
+    video_path: Path,
+    step: int = 5,                 # 间隔帧数：每 step 取一帧
+    finish_step: int = -1,
+    max_frames: int | None = None, # 可选：最多取多少帧
+    resize_hw: tuple[int, int] = (128, 128),
+):
+    """
+    按固定间隔采样视频帧（默认每 5 帧取 1 帧），返回 (frames, frame_indices)
+
+    frames: list[np.ndarray]，每帧为 BGR 128x128
+    frame_indices: np.ndarray[int]，对应原视频中的帧号
+    """
+    if step <= 0:
+        raise ValueError("step 必须为正整数")
+    if not video_path.exists():
+        raise FileNotFoundError(f"视频文件未找到: {video_path}")
+
+    cap = cv2.VideoCapture(str(video_path))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # if total_frames <= 0 or not cap.isOpened():
+    #     cap.release()
+    #     return [], np.array([], dtype=int)
+    # total_frames = finish_step
+
+    # 计划采样的索引
+    # indices = np.arange(0, total_frames, step, dtype=int)
+    indices = np.arange(0, total_frames, step, dtype=int)
+    last = total_frames - 1
+    if last >= 0:
+        indices = np.unique(np.append(indices, last)) 
+        
+    if max_frames is not None:
+        indices = indices[:max_frames]
+
+    frames: list[np.ndarray] = []
+    target_ptr = 0  # 指向下一个需要的索引
+    cur_idx = 0
+
+    # 顺序读取，遇到需要的帧就保存（避免反复 seek）
+    while target_ptr < len(indices):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if cur_idx == indices[target_ptr]:
+            resized_frame = cv2.resize(frame, resize_hw)
+            rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb_frame)
+            frames.append(pil_image)
+            target_ptr += 1
+        cur_idx += 1
+
+    cap.release()
+    # 实际返回的索引（防止读到中途断流）
+    return frames, indices[:len(frames)]
 
 def process_video_to_PIL_frames_with_indices(video_path: Path, num_frames: int = 10) -> Tuple[List[str], List[int]]:
     """
@@ -449,7 +503,8 @@ def process_single_video(name, eval_folder, task_name, num_frames, ref_num_frame
             pass  # 保持 task_lang 为空字符串
 
     # 瓶颈所在：I/O 和 CPU 密集型操作
-    frames, frame_indices = process_video_to_PIL_frames_with_indices(video_path, num_frames=num_frames)
+    # frames, frame_indices = process_video_to_PIL_frames_with_indices(video_path, num_frames=num_frames)
+    frames, frame_indices = process_video_to_frames_step(video_path, step=5)
 
     finish_raw = parse_finish_step_from_name(name)
     finish_mapped = map_finish_step_to_sampled_idx(finish_raw, frame_indices) if finish_raw is not None else -1
@@ -492,7 +547,7 @@ def main_processing_loop(videos, eval_folder, args):
 
     # 设置工作进程数，通常设置为 CPU 核心数，或者可以由 args 控制
     num_workers = args.max_workers if hasattr(args, 'max_workers') else os.cpu_count()
-    num_workers = 1
+    num_workers = 32
     # num_workers = os.cpu_count() # 使用所有CPU核心
     print(f"使用 {num_workers} 个进程进行并行处理...")
 
@@ -565,7 +620,7 @@ def main():
     parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")
-    parser.add_argument("--ref_num_frames", type=int, default=20, help="每段视频抽帧数")
+    parser.add_argument("--ref_num_frames", type=int, default=10, help="每段视频抽帧数")
     parser.add_argument("--max_workers", type=int, default=128, help="judge 并行线程数")
     parser.add_argument("--debug", action="store_true", help="")
     parser.add_argument("--dry_run", action="store_true", help="只做解析不过 judge（用于快速检查）")
@@ -593,22 +648,47 @@ def main():
         return
 
     vlac_model = get_vlac_model(args)
-    for i, task in enumerate(tasks):
+    value_list_all = []
+    for i, task in tqdm(enumerate(tasks)):
         if i >= 10:
             break
-        done_list = vlac_model.eval_trajectory(
+        critic_list, value_list = vlac_model.eval_trajectory(
             task,
             batch_num=10,
             ref_num=10,
-            skip=5,
+            skip=1,
             frame_skip=True, #whether to skip frames(if false, each frame while be evaluated, cost more time)
-            done_threshold=0.9,#done threshold
-            video_output=True,
+            done_threshold=0.9, #done threshold
+            video_output=False,
             output_path=str(out_dir).replace(args.tag, f"{args.tag}_saved_video")
         )
-        print(done_list)        
-    
-    
+        # print(value_list)     
+        value_list_all.append(value_list)   
+
+        T = len(value_list)
+        max_steps = 256
+        finish_step = None
+        consec = 0
+        success_thresh = 92
+        success_window = 3
+        for i in range(1, T):
+            if value_list[i] >= success_thresh:
+                consec += 1
+            else:
+                consec = 0
+            if consec >= success_window:
+                finish_step = i  # 首次满足窗口的步
+                break
+
+        if finish_step is not None:
+            complete = 1.0
+        else:
+            complete = 0.0
+            finish_step = max_steps
+        task.pred_success = complete
+        task.pred_finish_step = finish_step
+        
+                
     y_true = [t.score_gt for t in tasks]
     y_pred = [t.pred_success for t in tasks]
     cls_stat = compute_all_metrics(y_true, y_pred)

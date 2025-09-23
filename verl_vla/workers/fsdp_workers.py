@@ -41,6 +41,7 @@ from verl_vla.utils.fsdp_utils import (
     get_fsdp_wrap_policy_vla,
     get_fsdp_wrap_policy_smolvla,
     get_fsdp_wrap_policy_wm,
+    get_fsdp_wrap_policy_rm,
 )
 from verl_vla.utils.fsdp_utils import offload_fsdp_optimizer, offload_fsdp_param_and_grad, load_fsdp_optimizer, load_fsdp_param_and_grad
 from verl_vla.utils.import_utils import import_external_libs
@@ -142,6 +143,7 @@ class RobActorRolloutRefWorker(Worker):
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.shape[0]
         
         self.use_world_model = self.config.world_model.dit_path != ""
+        self.use_reward_model = self.config.rollout.reward_type == "vlac"
 
     def _build_model_optimizer(self,
                                model_path,
@@ -551,6 +553,55 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After actor optimizer init', logger=logger)
         return wm_module_fsdp
+    
+    
+    def _build_model_optimizer_rm(self,
+                               model_path,
+                               fsdp_config,
+                               optim_config,
+                               override_model_config,
+                               enable_gradient_checkpointing=False,
+                               trust_remote_code=False):
+        from verl_vla.utils.model import print_model_size, update_model_config
+        from verl_vla.utils.torch_dtypes import PrecisionType
+        from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, MixedPrecision, \
+            CPUOffload
+        from torch import optim
+        log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
+
+        torch_dtype = fsdp_config.get('model_dtype', None)
+        if torch_dtype is None:
+            torch_dtype = torch.float32 if self._is_actor else torch.bfloat16
+        else:
+            torch_dtype = PrecisionType.to_dtype(torch_dtype)
+        
+        # breakpoint()
+        from verl_vla.utils.rm_utils.evo_vlac import GAC_model_client
+        rm_module = GAC_model_client(tag='critic')
+        rm_module.init_model(model_path=model_path, model_type='internvl2', use_server=True, device_map=f'cuda:0')
+        rm_module.temperature=0.5
+        rm_module.top_k=1
+        rm_module.set_config()
+        rm_module.set_system_prompt()
+        try:
+            rm_gateway = ray.get_actor("rm_gateway")
+        except ValueError:
+            # 可选：如果你在 rank0 创建，则这里获取前先 barrier 等待
+            import torch.distributed as dist
+            if dist.is_initialized():
+                dist.barrier()
+            rm_gateway = ray.get_actor("rm_gateway")
+        rm_module.bind_gateway(rm_gateway)
+        
+        if self._is_lora:
+            raise
+                
+                
+        torch.distributed.barrier()
+
+        return rm_module
+    
 
     def _build_rollout(self):
         if self.config.rollout.name == 'hf':
@@ -670,6 +721,18 @@ class RobActorRolloutRefWorker(Worker):
                 self.rollout.use_world_model = True
             else:
                 self.rollout.use_world_model = False
+
+            # breakpoint()
+            # if self.use_reward_model:
+            #     self.reward_model = self._build_model_optimizer_rm(model_path=self.config.reward_model.model_path,
+            #                                                     fsdp_config=self.config.reward_model.fsdp_config,
+            #                                                     optim_config=None,
+            #                                                     override_model_config=override_model_config,
+            #                                                     trust_remote_code=True) #self.config.model.get('trust_remote_code', False)
+            #     self.rollout.reward_model = self.reward_model
+            #     self.rollout.use_reward_model = True
+            # else:
+            #     self.rollout.use_reward_model = False
         
         torch.cuda.synchronize()
         torch.distributed.barrier()
