@@ -44,9 +44,6 @@ from verl_vla.utils.libero_utils import get_libero_env, get_libero_dummy_action,
 import numpy as np
 from PIL import Image
 import tensorflow as tf
-import sys
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/siiRL")
-from siirl.workers.environment.vla import LIBEROAdapter
 
 # 获取所有物理上的GPU设备
 gpus = tf.config.list_physical_devices('GPU')
@@ -317,17 +314,17 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         
     
 
-def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
+def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps, gpu_id):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
 
     env = None
     while True:
-        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
+        # os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
         # env, task_description = get_libero_env(task, config.model_family, resolution=256)
         try:
-            env, task_description = get_libero_env(task, config.model_family, resolution=256)
+            env, task_description = get_libero_env(task, config.model_family, resolution=256, gpu_id=gpu_id)
             break  
         except:
             print(f"*** env initialization failed ***")
@@ -423,17 +420,17 @@ def env_worker_smolvla(task_name, task_id, trial_id, init_state, config, input_q
         }
         output_queue.put(output_data)
         
-def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps):
+def env_worker_smolvla_vlm_reward(task_name, task_id, trial_id, init_state, config, input_queue, output_queue, is_valid, global_steps, max_steps, gpu_id):
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[task_name]()
     task = task_suite.get_task(task_id)
 
     env = None
     while True:
-        os.environ["MUJOCO_EGL_DEVICE_ID"] = "0" 
+        os.environ["MUJOCO_EGL_DEVICE_ID"] = f"{gpu_id}" 
         # env, task_description = get_libero_env(task, config.model_family, resolution=256)
         try:
-            env, task_description = get_libero_env(task, config.model_family, resolution=256)
+            env, task_description = get_libero_env(task, config.model_family, resolution=256, gpu_id=gpu_id)
             break  
         except:
             print(f"*** env initialization failed ***")
@@ -751,7 +748,7 @@ def pad_dataprotos_step_images(
         
     return padded_videos, attention_mask
 
-def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps):
+def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id):
     # 无头渲染（robosuite/mujoco）
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.pop("DISPLAY", None)
@@ -765,10 +762,10 @@ def _env_entry(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_v
 
     # 延迟导入/创建 env & 模型，避免父进程提前初始化 CUDA
     return env_worker_smolvla(
-        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
+        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id
     )
     
-def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps):
+def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id):
     # 无头渲染（robosuite/mujoco）
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.pop("DISPLAY", None)
@@ -782,7 +779,7 @@ def _env_entry_vlm_reward(task_name, t_id, tr_id, in_state, config, input_q, out
 
     # 延迟导入/创建 env & 模型，避免父进程提前初始化 CUDA
     return env_worker_smolvla_vlm_reward(
-        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps
+        task_name, t_id, tr_id, in_state, config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id=gpu_id
     )  
 
 SUCCESS_VALUE_THRESH = 95.0      # 认为成功的 value 阈值
@@ -809,20 +806,6 @@ class RobHFRollout(BaseRollout):
         else:
             self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
         self.vla_preprocess()
-        # breakpoint()
-        self._rank = torch.distributed.get_rank(
-        ) if torch.distributed.is_initialized() else 0
-        self._num_gpus_per_node = config.n_gpus_per_node
-
-        self.num_workers = self.config.get('num_env_workers', 16)
-        self.adapter = LIBEROAdapter(
-            task_suite_name=self.config.task_suite_name,
-            num_envs=self.num_workers,
-            max_steps=self.max_steps[self.config.task_suite_name],
-            num_steps_wait=self.config.num_steps_wait,
-            model_family=self.config.model_family,
-            gpu_ids=[self._rank % self._num_gpus_per_node] # Run all workers on the same assigned GPU
-        )
         #oft add
         # unnorm_key=config.unnorm_key
         # if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
@@ -835,15 +818,6 @@ class RobHFRollout(BaseRollout):
         #     for gpu in gpus:  
         #         tf.config.experimental.set_memory_growth(gpu, True)
     
-    def close(self):
-        """Gracefully shuts down the environment adapter."""
-        if hasattr(self, 'adapter') and self.adapter:
-            self.adapter.close()
-
-    def __del__(self):
-        # Ensure workers are closed when the object is garbage collected
-        self.close()
-
     def vla_preprocess(self):
         if self.config.vla in ["openvla","openvla-oft"]:
             gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -1165,22 +1139,49 @@ class RobHFRollout(BaseRollout):
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         is_train = meta_info.get('is_train', False)
 
-        # This is a blocking call
-        init_data_list = self.adapter._blocking_reset(
-            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
-            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
-            init_state=init_state.cpu().numpy(),
-        )
-        
-        
+
+        ctx = mp.get_context("spawn")
+
+        processes = []
+        input_queues = []
+        output_queues = []
+
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
+
+            # 这些如果是 torch 张量，转成 Python 标量更稳妥
+            t_id = int(task_id[idx][0].item())
+            tr_id = int(trial_id[idx][0].item())
+
+            # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
+            in_state = (init_state[idx]
+                        .detach()
+                        .cpu()
+                        .contiguous()
+                        .numpy()
+                        .copy())
+
+            input_q = ctx.Queue()
+            output_q = ctx.Queue()
+            gpu_id = torch.distributed.get_rank() 
+            p = ctx.Process(
+                target=_env_entry,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id),
+                daemon=True,   # 可选：随父进程退出
+            )
+            p.start()
+
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
+            
         
         inputs = []
         task_descriptions = []
         task_records = []
         valid_video = defaultdict(list)
         for idx in range(batch_size):
-            # init_data = output_queues[idx].get(timeout=120)
-            init_data = init_data_list[idx]
+            init_data = output_queues[idx].get(timeout=120)
             assert init_data['type'] == 'init'
             task_descriptions.append(init_data["task_description"])
             inputs.append(self._obs_to_input(init_data['obs'], is_train))
@@ -1220,16 +1221,12 @@ class RobHFRollout(BaseRollout):
 
             vla_history.append(step_data)
             
-            # for idx in active_indices:
-            #     input_queues[idx].put(actions[idx])
-            step_results_list = self.adapter._blocking_step({
-                "indices": active_indices,
-                "actions": actions,
-            })
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
             
             new_inputs = inputs.copy()
             for idx in active_indices:
-                result = step_results_list[idx]
+                result = output_queues[idx].get(timeout=30)
                 assert result['type'] == 'step'
                 new_inputs[idx] = self._obs_to_input(result['obs'], is_train)
                 task_records[idx]['active'] = result['active']
@@ -1241,6 +1238,12 @@ class RobHFRollout(BaseRollout):
             inputs = new_inputs
             step += self.config.action_chunks_len
             
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
         torch.cuda.empty_cache()
         if is_valid:
             for task_file, images in valid_video.items():
@@ -1306,54 +1309,47 @@ class RobHFRollout(BaseRollout):
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         is_train = meta_info.get('is_train', False)
             
-        init_data_list = self.adapter._blocking_reset(
-            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
-            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
-            init_state=init_state.cpu().numpy()
-        )
-        
-        # ctx = mp.get_context("spawn")
+        ctx = mp.get_context("spawn")
 
-        # processes = []
-        # input_queues = []
-        # output_queues = []
+        processes = []
+        input_queues = []
+        output_queues = []
 
-        # for idx in range(batch_size):
-        #     task_name = task_suite_name[idx]
+        for idx in range(batch_size):
+            task_name = task_suite_name[idx]
 
-        #     # 这些如果是 torch 张量，转成 Python 标量更稳妥
-        #     t_id = int(task_id[idx][0].item())
-        #     tr_id = int(trial_id[idx][0].item())
+            # 这些如果是 torch 张量，转成 Python 标量更稳妥
+            t_id = int(task_id[idx][0].item())
+            tr_id = int(trial_id[idx][0].item())
 
-        #     # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
-        #     in_state = (init_state[idx]
-        #                 .detach()
-        #                 .cpu()
-        #                 .contiguous()
-        #                 .numpy()
-        #                 .copy())
+            # 彻底拷贝到普通 CPU 内存，避免继承父进程的 pinned 区域
+            in_state = (init_state[idx]
+                        .detach()
+                        .cpu()
+                        .contiguous()
+                        .numpy()
+                        .copy())
 
-        #     input_q = ctx.Queue()
-        #     output_q = ctx.Queue()
+            input_q = ctx.Queue()
+            output_q = ctx.Queue()
+            gpu_id = torch.distributed.get_rank() 
+            p = ctx.Process(
+                target=_env_entry_vlm_reward,
+                args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps, gpu_id),
+                daemon=True,   # 可选：随父进程退出
+            )
+            p.start()
 
-        #     p = ctx.Process(
-        #         target=_env_entry_vlm_reward,
-        #         args=(task_name, t_id, tr_id, in_state, self.config, input_q, output_q, is_valid, global_steps, max_steps),
-        #         daemon=True,   # 可选：随父进程退出
-        #     )
-        #     p.start()
-
-        #     processes.append(p)
-        #     input_queues.append(input_q)
-        #     output_queues.append(output_q)
+            processes.append(p)
+            input_queues.append(input_q)
+            output_queues.append(output_q)
         
         inputs = []
         task_descriptions = []
         task_records = []
         valid_video = defaultdict(list)
         for idx in range(batch_size):
-            # init_data = output_queues[idx].get(timeout=120)
-            init_data = init_data_list[idx]
+            init_data = output_queues[idx].get(timeout=120)
             assert init_data['type'] == 'init'
             task_descriptions.append(init_data["task_description"])
             inputs.append(self._obs_to_input(init_data['obs']))
@@ -1395,22 +1391,17 @@ class RobHFRollout(BaseRollout):
 
             vla_history.append(step_data)
             
-            # for idx in active_indices:
-            #     input_queues[idx].put(actions[idx])
-            step_results_list = self.adapter._blocking_step({
-                "indices": active_indices,
-                "actions": actions,
-            })
+            for idx in active_indices:
+                input_queues[idx].put(actions[idx])
             
             new_inputs = inputs.copy()
             for idx in active_indices:
-                # result = output_queues[idx].get(timeout=30)
-                result = step_results_list[idx]
+                result = output_queues[idx].get(timeout=30)
                 assert result['type'] == 'step'
                 new_inputs[idx] = self._obs_to_input(result['obs'])
                 task_records[idx]['active'] = result['active']
-                task_records[idx]['complete_raw'] = result['complete']
-                task_records[idx]['finish_step_raw'] = result['finish_step']
+                task_records[idx]['complete_raw'] = result['complete_raw']
+                task_records[idx]['finish_step_raw'] = result['finish_step_raw']
                 task_records[idx]['step_images'].extend(result['valid_images']) 
                 if is_valid:
                     valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
@@ -1418,12 +1409,12 @@ class RobHFRollout(BaseRollout):
             inputs = new_inputs
             step += self.config.action_chunks_len
             
-        # for q in input_queues:
-        #     q.put(None)
-        # for p in processes:
-        #     p.join(timeout=20)
-        #     if p.is_alive():
-        #         p.terminate()
+        for q in input_queues:
+            q.put(None)
+        for p in processes:
+            p.join(timeout=20)
+            if p.is_alive():
+                p.terminate()
         torch.cuda.empty_cache()
         if is_valid:
             for task_file, images in valid_video.items():

@@ -176,16 +176,19 @@ class LIBEROAdapter(BaseVLAEnvironment):
         """Asynchronously resets all parallel environments."""
         return await asyncio.to_thread(self._blocking_reset, task_ids=task_ids, trial_ids=trial_ids)
 
-    def _blocking_step(self, action: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _blocking_step(self, action: Dict[str, Any], use_vlm_rm=False) -> List[Dict[str, Any]]:
         """Synchronous implementation of the step logic for an action chunk."""
 
         actions = action["actions"]
         active_indices_set = set(action["indices"])
+        active_indices_set_step = set(action["indices"])
         batch_size = actions.shape[0]
         results = [None] * batch_size
         step_images = [None] * batch_size
+        done_raw = [False] * batch_size
         
         active_indices_list = sorted(list(active_indices_set))
+        active_indices_list_step = sorted(list(active_indices_set_step))
 
         for j in range(actions.shape[1]):
             normalized_actions = []
@@ -199,14 +202,14 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 normalized_actions.append(inverted_action.tolist())
 
             step_return = self.env.step(normalized_actions, active_indices_list)
-
+            # breakpoint()
             if len(step_return) == 4:
                 obs, rew, dones, infos = step_return
             else:  # new API
                 obs, rew, terminateds, truncateds, infos = step_return
                 dones = np.logical_or(terminateds, truncateds)
 
-            self.step_count[active_indices_list] += 1
+            self.step_count[active_indices_list_step] += 1
 
             for i in range(len(active_indices_list)):
                 act_idx = active_indices_list[i]
@@ -214,17 +217,24 @@ class LIBEROAdapter(BaseVLAEnvironment):
                     step_images[act_idx] = []
                 # step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
                 step_images[act_idx].append(obs[i]["agentview_image"][::-1])
-            
-                if dones[i] or self.step_count[act_idx] >= self.max_steps:
-                    results[act_idx] = {
-                        'type': 'step',
-                        'obs': obs[i],
-                        'active': False,
-                        'complete': dones[i],
-                        'finish_step': self.step_count[act_idx],
-                        'valid_images': step_images[act_idx]
-                    }
-                    active_indices_set.remove(act_idx)
+
+                if use_vlm_rm:
+                    if dones[i] or self.step_count[act_idx] >= self.max_steps:
+                        if act_idx in active_indices_list_step:
+                            done_raw[i] = dones[i]
+                            active_indices_list_step.remove(act_idx)
+                        
+                else:
+                    if dones[i] or self.step_count[act_idx] >= self.max_steps:
+                        results[act_idx] = {
+                            'type': 'step',
+                            'obs': obs[i],
+                            'active': False,
+                            'complete': dones[i],
+                            'finish_step': self.step_count[act_idx],
+                            'valid_images': step_images[act_idx]
+                        }
+                        active_indices_set.remove(act_idx)
 
         for i in range(len(active_indices_list)):
             act_idx = active_indices_list[i]
@@ -233,7 +243,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
                     'type': 'step',
                     'obs': obs[i],
                     'active': not(dones[i] or self.step_count[act_idx] >= self.max_steps),
-                    'complete': dones[i],
+                    'complete': dones[i] if not use_vlm_rm else done_raw[i],
                     'finish_step': self.step_count[act_idx],
                     'valid_images': step_images[act_idx]
                 }
