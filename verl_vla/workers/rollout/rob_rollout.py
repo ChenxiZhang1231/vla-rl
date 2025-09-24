@@ -815,7 +815,7 @@ class RobHFRollout(BaseRollout):
         self._num_gpus_per_node = config.n_gpus_per_node
 
         # self.num_workers = self.config.get('num_env_workers', 8)
-        self.num_workers = 8
+        self.num_workers = 16
         self.adapter = LIBEROAdapter(
             task_suite_name=self.config.task_suite_name,
             num_envs=self.num_workers,
