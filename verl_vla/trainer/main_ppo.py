@@ -904,7 +904,7 @@ class RobVLMRewardManager():
         else:
             self.data_key = 'responses'
         self.client = openai.OpenAI(
-            base_url="http://localhost:18901/v1", # 请确保这是您的服务地址
+            base_url="http://localhost:18901/v1",
             api_key="not-needed"
         )
         self.vote_n = self.config.reward_model.vote_n
