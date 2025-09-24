@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b-wm-trainset-3-sii'
+EXPERIMENT_NAME='smolvla-bs32-n8-mb256-lr5e6-kl004-rm7b-wm-trainset-3-sii-bf16'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -61,7 +61,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.grad_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
-    actor_rollout_ref.actor.fsdp_config.model_dtype=float32 \
+    actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.actor.grad_clip=0.5 \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
@@ -95,7 +95,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size=16 \
     actor_rollout_ref.ref.fsdp_config.param_offload=False \
     actor_rollout_ref.ref.vla=$VLA_NAME \
-    actor_rollout_ref.ref.fsdp_config.model_dtype=float32 \
+    actor_rollout_ref.ref.fsdp_config.model_dtype=bfloat16 \
     reward_model.type=vlm_serve \
     reward_model.vlm_input_num_frames=50 \
     reward_model.vote_n=5 \

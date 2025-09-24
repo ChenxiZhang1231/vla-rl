@@ -440,6 +440,8 @@ class RobDataParallelPPOActor(BasePPOActor):
         """
         
         self.actor_module.eval()
+        if 'step_images' in data.batch:
+            del data.batch['step_images']
 
         micro_batch_size = data.meta_info['micro_batch_size'] #256
         temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error # 1
@@ -506,6 +508,8 @@ class RobDataParallelPPOActor(BasePPOActor):
 
     def update_policy_smolvla(self, data: DataProto):
         self.actor_module.train()
+        if 'step_images' in data.batch:
+            del data.batch['step_images']
         
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size

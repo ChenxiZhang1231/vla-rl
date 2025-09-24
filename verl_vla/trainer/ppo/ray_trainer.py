@@ -679,7 +679,8 @@ class RayTrainer(object):
                             metrics['train_verify_score_wo_format/' + k].append(v)    
                             
                     metrics['timing/verify'] += timer.last
-                    
+                    if 'step_images' in roll_batch.batch:
+                        del roll_batch.batch['step_images']
                     # do accuracy filtering and score logging
                     with Timer(name='acc&trunc_filter', text="{name}: {seconds:.1f} seconds") as timer:
                         if self.config.data.filter_accuracy or self.config.data.filter_truncated:
@@ -687,7 +688,6 @@ class RayTrainer(object):
                             filtered_roll_batch = self.filter(roll_batch.batch['acc'].unsqueeze(1), roll_batch, n_samples)
                             print(f"after filtering: {len(filtered_roll_batch)}")
                     metrics['timing/acc&trunc_filter'] += timer.last
-
                     
                     if self.config.data.filter_warmup:
                         raise ValueError
@@ -851,7 +851,7 @@ class RayTrainer(object):
                     logger.log(data=val_metrics, step=global_steps)
 
                 # collect metrics
-                # breakpoint()
+                breakpoint()
                 with Timer(name='logging1', text="{name}: {seconds:.1f} seconds") as timer:
                     data_metrics = compute_data_metrics(batch=batch, config=self.config, model_name=self.config.actor_rollout_ref.model.vla)
                 with Timer(name='logging2', text="{name}: {seconds:.1f} seconds") as timer:

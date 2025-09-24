@@ -844,6 +844,12 @@ class RobActorRolloutRefWorker(Worker):
         # with Timer(name=f'gen seq end ,  old log will begin', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print("gen seq end ,  old log will begin")
         if self._is_actor and recompute_log_prob:
+            if 'step_images' in output.batch:
+                has_step_images = True
+                step_images = output.batch['step_images']
+                del output.batch['step_images']
+            else:
+                has_step_images = False
             # we should always recompute old_log_probs when it is HybridEngine
 
             output.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
@@ -859,6 +865,8 @@ class RobActorRolloutRefWorker(Worker):
                 output.batch['old_std'] = old_std
             else:
                 output.batch['old_log_probs'] = logp_output
+            if has_step_images:
+                output.batch['step_images'] = step_images
         output = output.to('cpu')
         # breakpoint()
         if self._is_offload_param:
