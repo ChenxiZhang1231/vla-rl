@@ -5,10 +5,10 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=true
 export ACCELERATE_USE_FSDP=true
 export FSDP_CPU_RAM_EFFICIENT_LOADING=true
-export MUJOCO_GL="osmesa"
-# export MUJOCO_GL="egl"
+# export MUJOCO_GL="osmesa"
+export MUJOCO_GL="egl"
 # export MUJOCO_GL="glx"
-export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
+# export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6
 
 # export CUDA_LAUNCH_BLOCKING=1
 # export TORCH_USE_CUDA_DSA=1
@@ -31,7 +31,8 @@ ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-13_12-36-12/checkpoints/model/iter_000042000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000080000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000118000.pt"
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
+# DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
+DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-23_17-05-47/checkpoints/model/iter_000024000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000292000.pt"
 VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
 

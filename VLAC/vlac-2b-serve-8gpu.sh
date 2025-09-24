@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # ===== 可配置参数 =====
-MODEL_DIR="/inspire/ssd/project/robotsimulation/public/huggingface_models/VLAC"
+# MODEL_DIR="/inspire/ssd/project/robotsimulation/public/huggingface_models/VLAC"
+MODEL_DIR="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/work_dirs/internvl2_2b_vlac_finetune_lora/checkpoint-1891-merge"
 HOST="0.0.0.0"
 BASE_PORT=8000               # 最终端口 = BASE_PORT + GPU_ID
 NUM_GPUS=8                   # 启动 8 个进程：GPU 0..7
@@ -41,6 +42,7 @@ start_one () {
   CUDA_VISIBLE_DEVICES="${gpu_id}" \
   swift deploy \
     --model "${MODEL_DIR}" \
+    --model_type "internvl2" \
     --host "${HOST}" \
     --port "${port}" \
     --infer_backend "${INFER_BACKEND}" \
@@ -58,3 +60,5 @@ for gid in $(seq 0 $((NUM_GPUS-1))); do
 done
 
 echo "[DONE] Started ${NUM_GPUS} serve processes on ports ${BASE_PORT}..$((BASE_PORT+NUM_GPUS-1))"
+
+

@@ -147,3 +147,5 @@ VLAC/evo_vlac/examples/videos
 wm_data_process/data
 wm_data_process/data_output_debug
 wm_data_process/WM-data-processed
+*.pid
+VLAC/result

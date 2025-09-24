@@ -10,7 +10,7 @@ from . import utils
 # 修复导入路径
 from .utils import data_processing_vlm
 from .utils import model_utils
-from .utils.model_utils import GAC_model
+from .utils.model_utils import GAC_model, GAC_model_client
 from .utils import video_tool
 # 包级别的便捷函数
 def get_version():

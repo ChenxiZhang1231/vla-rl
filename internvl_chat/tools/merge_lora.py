@@ -5,8 +5,8 @@ from internvl.model.internvl_chat import InternVLChatModel
 from transformers import AutoTokenizer
 
 argparse = argparse.ArgumentParser()
-argparse.add_argument('input_path', type=str, help='Path to the input model')
-argparse.add_argument('output_path', type=str, help='Path to the output model')
+argparse.add_argument('--input_path', type=str, default="work_dirs/internvl2_2b_vlac_finetune_lora/checkpoint-9455", help='Path to the input model')
+argparse.add_argument('--output_path', type=str, default="work_dirs/internvl2_2b_vlac_finetune_lora/checkpoint-9455-merge", help='Path to the output model')
 args = argparse.parse_args()
 
 print('Loading model...')

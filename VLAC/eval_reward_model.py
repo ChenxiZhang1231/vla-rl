@@ -12,14 +12,20 @@ from collections import Counter
 
 import base64
 import cv2
+import copy
 import numpy as np
 from tqdm import tqdm
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import concurrent.futures
 from functools import partial
 from PIL import Image
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from swift.llm import InferClient, InferRequest
+from swift.llm.infer.protocol import RequestConfig
+from swift.plugin import InferStats
 
-from evo_vlac import GAC_model
+from evo_vlac import GAC_model, GAC_model_client
 from evo_vlac.utils.video_tool import compress_video
 import os
 
@@ -44,6 +50,7 @@ class RewardTask:
     pred_success: Optional[int] = None
     pred_finish_step: Optional[int] = None
     score_text: str = ""
+    value_list = None
 
 REF_DICT = {
     "libero_spatial": {
@@ -602,7 +609,7 @@ def aggregate_success_and_finish(pred_success_list: List[int], pred_finish_list:
     
     
 def get_vlac_model(args):
-    Critic=GAC_model(tag='critic')
+    Critic=GAC_model_client(tag='critic')
     Critic.init_model(model_path=args.rm_model_path, model_type='internvl2', device_map=f'cuda:0')
     Critic.temperature=0.5
     Critic.top_k=1
@@ -610,13 +617,19 @@ def get_vlac_model(args):
     Critic.set_system_prompt()
     return Critic
 
+def round_robin_shards(n_items: int, n_shards: int):
+    shards = [[] for _ in range(n_shards)]
+    for i in range(n_items):
+        shards[i % n_shards].append(i)
+    return shards
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate SFT-style reward model (JSON success + finish_step).")
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_val",
                         help="存放评测视频的目录")
     parser.add_argument("--output_dir", type=str, default="work_dirs/vlac-oneshot", help="结果保存目录")
     parser.add_argument("--rm_model_path", type=str, default="/inspire/ssd/project/robotsimulation/public/huggingface_models/VLAC", help="")
-    parser.add_argument("--tag", type=str, default="sft-7b-lora64-60steps-vote5-pass3", help="子目录名")
+    parser.add_argument("--tag", type=str, default="1891step", help="子目录名")
     parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")
@@ -648,28 +661,80 @@ def main():
         return
 
     vlac_model = get_vlac_model(args)
+    
+    endpoints = [( "0.0.0.0", p) for p in range(8000, 8008)]
+    num_eps = len(endpoints)
+
+    shard_indices = round_robin_shards(len(tasks), num_eps)
+    def _run_shard(ep_id: int, idxs: list[int]):
+        """在线程内：克隆 RM、指定 engine、跑 reward_step，返回 (idxs, critics)"""
+        if not idxs:
+            return [], []
+        rm_local = copy.copy(vlac_model)     # 浅拷贝：共享只读配置，替换 engine
+        host, port = endpoints[ep_id]
+        rm_local.engine = InferClient(host=host, port=port)
+        rm_local.infer_stats = InferStats()
+        # 如果你在 RM 里有 request_config，可复用；否则给个默认
+        if not hasattr(rm_local, "request_config") or rm_local.request_config is None:
+            rm_local.request_config = RequestConfig(max_tokens=256, temperature=0.0, stream=False)
+
+        sub_pairs = [tasks[i] for i in idxs]
+        for pair in sub_pairs:
+            value_list = rm_local.eval_trajectory(
+                pair,
+                batch_num=50,
+                ref_num=10,
+                skip=1,
+                frame_skip=True, #whether to skip frames(if false, each frame while be evaluated, cost more time)
+                done_threshold=0.9, #done threshold
+                video_output=False,
+                output_path=str(out_dir).replace(args.tag, f"{args.tag}_saved_video")
+            )
+            pair.value_list = value_list
+            T = len(value_list)
+            max_steps = 256
+            finish_step = None
+            consec = 0
+            success_thresh = 92
+            success_window = 3
+            for i in range(1, T):
+                if value_list[i] >= success_thresh:
+                    consec += 1
+                else:
+                    consec = 0
+                if consec >= success_window:
+                    finish_step = i  # 首次满足窗口的步
+                    break
+
+            if finish_step is not None:
+                complete = 1.0
+            else:
+                complete = 0.0
+                finish_step = max_steps
+            pair.pred_success = complete
+            pair.pred_finish_step = finish_step
+            
+
+    # critic_chunks = [None] * len(tasks)
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=num_eps) as ex:
+        futs = [ex.submit(_run_shard, ep, idxs) for ep, idxs in enumerate(shard_indices) if idxs]
+        for fut in as_completed(futs):
+            fut.result()
+            # idxs, critics = fut.result()
+            # for j, i in enumerate(idxs):
+            #     critic_chunks[i] = critics[j]
+    end_time = start_time - time.time()
+    print(f"eval time: {end_time}")        
     value_list_all = []
     for i, task in tqdm(enumerate(tasks)):
-        if i >= 10:
-            break
-        critic_list, value_list = vlac_model.eval_trajectory(
-            task,
-            batch_num=10,
-            ref_num=10,
-            skip=1,
-            frame_skip=True, #whether to skip frames(if false, each frame while be evaluated, cost more time)
-            done_threshold=0.9, #done threshold
-            video_output=False,
-            output_path=str(out_dir).replace(args.tag, f"{args.tag}_saved_video")
-        )
-        # print(value_list)     
-        value_list_all.append(value_list)   
+        value_list = task.value_list
 
         T = len(value_list)
         max_steps = 256
         finish_step = None
         consec = 0
-        success_thresh = 92
+        success_thresh = 80
         success_window = 3
         for i in range(1, T):
             if value_list[i] >= success_thresh:
@@ -692,9 +757,10 @@ def main():
     y_true = [t.score_gt for t in tasks]
     y_pred = [t.pred_success for t in tasks]
     cls_stat = compute_all_metrics(y_true, y_pred)
-
     step_stat = compute_finish_step_metrics(tasks)
-
+    print(cls_stat)
+    print(step_stat)
+    
     import csv
     csv_path = out_dir / "reward_eval_details.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:

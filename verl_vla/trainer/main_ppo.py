@@ -1309,7 +1309,7 @@ class RobVLMRewardManager():
         return {"confusion": cm, "metrics": basic}
 
     def verify(self, data, global_steps=-1):
-        # breakpoint()
+        breakpoint()
         if self.return_env_score and ('complete' in data.batch):
             score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
         else:
