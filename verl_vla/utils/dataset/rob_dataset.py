@@ -101,7 +101,8 @@ class LIBERO_Dataset(Dataset):
                         orig_data_file = h5py.File(orig_data_path, "r")
                         orig_data = orig_data_file["data"]
                         init_state_list, task_name_list = [], []
-                        if not self.use_world_model:
+                        # if not self.use_world_model:
+                        if True:
                             for i in range(len(orig_data.keys())):
                                 demo_data = orig_data[f"demo_{i}"]
                                 orig_states = demo_data["states"][()]
@@ -115,6 +116,7 @@ class LIBERO_Dataset(Dataset):
                                 init_state = demo_data['obs']['agentview_rgb'][0][::-1, :, :]
                                 init_state_list.append(init_state)
                                 task_name_list.append(task.language)
+                                breakpoint()
                         
                         trials_range = list(range(0, len(orig_data.keys())))
                     

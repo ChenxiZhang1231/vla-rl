@@ -2459,8 +2459,16 @@ class RobHFRollout(BaseRollout):
         max_steps = self.max_steps[self.config.task_suite_name]
         batch_size = task_id.size(0)
         is_train = meta_info.get('is_train', False)
-        current_obs_batch_np = init_state.cpu().numpy()
-        
+        init_data_list = self.adapter._blocking_reset(
+            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
+            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy(),
+        )
+        current_obs_batch_np_list = []
+        for idx in range(len(init_data_list)):
+            current_obs_batch_np_list.append(init_data_list[idx]['obs']['agentview_image'][::-1])
+        current_obs_batch_np = np.stack(current_obs_batch_np_list)
+            
 
         task_records = []
         for idx in range(batch_size):
