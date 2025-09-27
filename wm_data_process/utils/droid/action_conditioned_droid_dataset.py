@@ -15,7 +15,8 @@ from torchvision import transforms as T
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R
 from torch.utils.data import ConcatDataset, WeightedRandomSampler
-
+from pathlib import Path
+from glob import glob
 import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel")
 from cosmos_predict2.data.action_conditioned.dataset_utils import (
@@ -232,11 +233,11 @@ class ActionConditionedOpenxDataset(Dataset):
         return frames, temp_cam_id
     
     def _get_robot_states(self, label, frame_ids):
-        # extrinsics = np.array(label['extrinsics']) # (N, 4, 4)
-        # intrinsics = np.array(label['intrinsics']) # (3, 3)
-        end_position = np.array(label['obs_state'])[0:3] # (N, 2, 3)
-        end_rotation = quats_to_euler(np.array(label['obs_state'])[3:7]) # (N, 2, 4) -> (N, 2, 3)
-        effector_position = np.array(label['obs_state'])[..., 7] # (N, 2)
+        extrinsics = np.array(label['extrinsics']) # (N, 4, 4)
+        intrinsics = np.array(label['intrinsics']) # (3, 3)
+        end_position = np.array(label['obs_state'])[..., 0:3] # (N, 2, 3)
+        end_rotation = np.array(label['obs_state'])[..., 3:6] # (N, 2, 3)
+        effector_position = np.array(label['obs_state'])[..., 6] # (N, 2)
         effector_position = (effector_position > 0.01) * 1.0
         
         
@@ -306,17 +307,14 @@ class ActionConditionedOpenxDataset(Dataset):
             video_path = ann_file.replace('metadata', 'clips').replace('.npz', '.mp4')
             black_path = ann_file.replace('metadata', 'blacks').replace('.npz', '_black.mp4')
             
-            # openx 数据集很多都是 servo 控制，也就是说 action 并不严格是两帧 state 计算 delta，更偏向于一个力矩，
-            # 但是 openx 很多数据只有 joint 的 state，或者不提供 state。因此这里我们直接用他处理好的 action。
-            actions = np.array(label['action'])[frame_ids][:-1]
-            # openx 默认夹爪松开是1，闭合是0。而我们这里，0是张开。因此这里需要inverse一下。
-            actions[:, 0, 6:7] = 1 - actions[:, 0, 6:7]
-            actions = actions.reshape(self.sequence_length - 1, self.action_dim)
-            actions = torch.from_numpy(actions)
+            # droid 也有 servo 格式的 action。但是他这里提供了更统一的 state。 因此这里用法和 agibot 一样。
+            # actions = np.array(label['action'])[frame_ids][:-1]
+            # actions = actions.reshape(self.sequence_length - 1, self.action_dim)
+            # actions = torch.from_numpy(actions)
             
-            # arm_states, gripper_states = self._get_robot_states(label, frame_ids)
-            # actions = np.concatenate([arm_states, gripper_states[..., None]], axis=-1)[:-1].reshape(self.sequence_length - 1, self.action_dim)
-            # actions = self._get_actions(arm_states, gripper_states, self.accumulate_action)
+            arm_states, gripper_states = self._get_robot_states(label, frame_ids)
+            actions = np.concatenate([arm_states, gripper_states[..., None]], axis=-1)[:-1].reshape(self.sequence_length - 1, self.action_dim)
+            actions = self._get_actions(arm_states, gripper_states, self.accumulate_action)
             # actions *= self.c_act_scaler
 
             data = dict()
@@ -368,26 +366,38 @@ class ActionConditionedOpenxDataset(Dataset):
             self.wrong_number += 1
             print(self.wrong_number)
             return self[np.random.randint(len(self.samples))]
-        
+
 if __name__ == '__main__':
-    dataset_folder = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/openx"
-    data_paths = os.listdir(dataset_folder)
+    # dataset = ActionConditionedOpenxDataset(
+    #     data_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid/AUTOLab/AUTOLab/failure/2023-07-07/Fri_Jul__7_09:48:37_2023",
+    #     mode='val'
+    # )
+    # dataset.__getitem__(0)
+    
+    dataset_folder = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid"
+    patterns = [
+        os.path.join(dataset_folder, "*", "*", "success", "*", "*"),
+        os.path.join(dataset_folder, "*", "*", "failure", "*", "*"),
+        os.path.join(dataset_folder, "*", "success", "*", "*"),
+        os.path.join(dataset_folder, "*", "failure", "*", "*"),
+    ]
+
+    run_dirs = sorted({p for pat in patterns for p in glob(pat) if os.path.isdir(p)})
+    print(f"Found {len(run_dirs)} runs")
     dataset_list = []
-    for data_path in data_paths:
-        # 这些 action 是 joint 格式的，删除
-        if data_path in ['berkeley_mvp_converted_externally_to_rlds', 'berkeley_rpt_converted_externally_to_rlds', 'roboset']:
-            continue
-        dataset = ActionConditionedOpenxDataset(
-            data_path=os.path.join(dataset_folder, data_path),
-            mode='val'
+    for run in run_dirs:
+        print(f"Load run: {run}")
+        ds = ActionConditionedOpenxDataset(
+            data_path=run,
+            mode="val",
         )
-        print(f"Load {data_path}")
-        dataset_list.append(dataset)
+        dataset_list.append(ds)
+
     train_dataset = ConcatDataset(dataset_list)
     # data = dataset[1]
     act_lsit = []
     for i in range(1000):
-        data = dataset.__getitem__(i)
+        data = train_dataset.__getitem__(i)
         act = data['action'][:, 0:7]
         act_lsit.append(act)
     print()
