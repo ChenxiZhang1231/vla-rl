@@ -125,7 +125,8 @@ class RobDataParallelPPOActor(BasePPOActor):
             
         response_length = micro_batch['responses'].size(-1) # 7*8
         
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type='cuda', dtype=torch.float32):
             input_ids = micro_batch['input_ids']
             attention_mask = micro_batch['attention_mask']
             pixel_values = micro_batch["pixel_values"]
@@ -207,7 +208,8 @@ class RobDataParallelPPOActor(BasePPOActor):
         traj_len = micro_batch['action_tensor'].size(1)
         
         # breakpoint()
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type='cuda', dtype=torch.float32):
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk(micro_batch, recompute_log_prob=True)
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
@@ -243,7 +245,8 @@ class RobDataParallelPPOActor(BasePPOActor):
     def _forward_micro_batch_update(self, input_ids, attention_mask, pixel_values, responses, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
        
         
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type='cuda', dtype=torch.float32):
             if self.config.vla == "openvla-oft":
                 
                 input_ids_unpad, _ = self.process_tensor(input_ids, self.pad_token_id)
@@ -306,8 +309,8 @@ class RobDataParallelPPOActor(BasePPOActor):
         """
         
         # breakpoint()
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-        # with torch.autocast(device_type='cuda', dtype=torch.float32):
+        # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+        with torch.autocast(device_type='cuda', dtype=torch.float32):
             # breakpoint()
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk_update(micro_batch, recompute_log_prob=True)
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
@@ -476,7 +479,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                 #     # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
                 #     param_ctx = FSDP.summon_full_params(self.actor_module, writeback=False, recurse=False)
                 # with param_ctx:
-                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                with torch.autocast(device_type='cuda', dtype=torch.float32):
                     if self.config.vla == 'smolvla':
                         ent_outer, logp_action, mean, std = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
                         log_probs = logp_action
@@ -612,7 +616,10 @@ class RobDataParallelPPOActor(BasePPOActor):
                                                                                 advantages=advantages_tmp,
                                                                                 eos_mask=response_mask_tmp,
                                                                                 clip_ratio_high=clip_ratio_high,
-                                                                                clip_ratio_low=clip_ratio_low)
+                                                                                clip_ratio_low=clip_ratio_low,
+                                                                                dlogp_clamp=self.config.dlogp_clamp,
+                                                                                dlogp_clamp_max=self.config.dlogp_clamp_max,
+                                                                                dlogp_clamp_min=self.config.dlogp_clamp_min)
                     
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
                 # breakpoint()
@@ -666,14 +673,15 @@ class RobDataParallelPPOActor(BasePPOActor):
             # breakpoint()
             data = {'actor/grad_norm': grad_norm.detach().item()}
             grad_norm_val = data['actor/grad_norm']
-            # if math.isnan(grad_norm_val):
-            #     print("!!! grad_norm is NaN! Breaking...")
-            #     breakpoint()
+            if math.isnan(grad_norm_val):
+                print("!!! grad_norm is NaN! Breaking...")
+                breakpoint()
             if grad_norm_val == 0:
                 print("!!! grad_norm is zero! Breaking...")
                 breakpoint()
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()
+            breakpoint()
         self.actor_optimizer.zero_grad()
         torch.cuda.synchronize()
         torch.distributed.barrier()

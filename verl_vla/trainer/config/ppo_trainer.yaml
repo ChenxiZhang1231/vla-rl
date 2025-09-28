@@ -39,6 +39,9 @@ actor_rollout_ref:
     target_modules: all-linear  
   actor:
     use_kl_loss: False
+    dlogp_clamp: False
+    dlogp_clamp_max: None
+    dlogp_clamp_min: None
     kl_loss_coef: 0.0
     kl_loss_target: 0.0
     kl_loss_type: kl
@@ -203,7 +206,9 @@ reward_model:
   enable: True
   type: rule
   strategy: fsdp
-  vlm_input_num_frames: 10
+  use_ref: False
+  vlm_input_num_frames: 50
+  vlm_input_num_ref_frames: 20
   rm_step_interval: 1
   vote_n: 1
   vote_m: 1
@@ -264,6 +269,7 @@ algorithm:
   gamma: 1.0
   lam: 1.0
   adv_estimator: gae
+  whiten: False
   # now supports rloo. it treats different source of reward separately.
   # TODO: it should also support different gamma for different rewards.
   adv_params:

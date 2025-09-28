@@ -265,7 +265,8 @@ def compute_grpo_outcome_advantage_smolvla_raw(token_level_rewards: torch.Tensor
 def compute_grpo_outcome_advantage_smolvla(token_level_rewards: torch.Tensor,
                                             eos_mask: torch.Tensor,
                                             index: torch.Tensor,
-                                            epsilon: float = 1e-6):
+                                            epsilon: float = 1e-6,
+                                            whiten: bool = False):
     """
     Compute advantage for GRPO, operating only on Outcome reward 
     (with only one scalar reward for each response).
@@ -304,7 +305,8 @@ def compute_grpo_outcome_advantage_smolvla(token_level_rewards: torch.Tensor,
         for i in range(bsz):
             scores[i] = (scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
         scores = scores.unsqueeze(-1).tile([1, response_length]) * eos_mask
-
+    if whiten:
+        scores = verl_F.masked_whiten(scores, eos_mask)
     return scores, scores
 
 
@@ -360,7 +362,7 @@ def compute_rewards(token_level_scores, old_log_prob, ref_log_prob, kl_ratio):
     return token_level_scores - kl * kl_ratio
 
 
-def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio_high, clip_ratio_low):
+def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio_high, clip_ratio_low, dlogp_clamp=False, dlogp_clamp_max=None, dlogp_clamp_min=None):
     """Adapted from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1122
 
     Args:
@@ -382,8 +384,13 @@ def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio
             a float number indicating the fraction of policy gradient loss being clipped
 
     """
+    
     negative_approx_kl = log_prob - old_log_prob
-    ratio = torch.exp(negative_approx_kl)
+    if dlogp_clamp:
+        negative_approx_kl_clamp = negative_approx_kl.clamp(dlogp_clamp_min, dlogp_clamp_max)
+    else:
+        negative_approx_kl_clamp = negative_approx_kl
+    ratio = torch.exp(negative_approx_kl_clamp)
     ppo_kl = verl_F.masked_mean(-negative_approx_kl, eos_mask)
 
     pg_losses = -advantages * ratio

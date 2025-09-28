@@ -474,7 +474,10 @@ class RobVLACRewardManager():
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
             if ret:
-                resized_frame = cv2.resize(frame, (128, 128))
+                if self.use_ref:
+                    resized_frame = cv2.resize(frame, (112, 112))
+                else:
+                    resized_frame = cv2.resize(frame, (128, 128))
                 rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(rgb_frame)
                 image_list.append(pil_image)
@@ -867,9 +870,12 @@ class RobVLACRewardManager():
 
 @dataclass
 class RewardTask:
+    description: str
     frames: List[str]
     frame_indices: List[int]
-    description: str
+    ref_frames: List[str] = None
+    ref_frame_indices: List[int] = None
+    
 
 PROMPT = """You are a task-conditioned video rollout success judge.
 
@@ -889,6 +895,29 @@ Required Output (JSON only; no extra text):
 {"success": 0 or 1, "finish_step": <int>}
 """
 
+PROMPT_REF = """You are a task-conditioned video rollout success judge.
+
+You will be given two sets of ordered frames:
+1.  **Reference Video:** This video demonstrates a successful completion of the task. Use it to understand what success looks like.
+2.  **Rollout Video:** This is the video you must evaluate.
+
+Your job is to judge the **Rollout Video** and decide:
+(1) whether the task is successfully completed,
+and (2) at which step index (from the provided Rollout Video step_id list) the success is FIRST
+visibly satisfied.
+
+Principles
+- Base your judgment of the Rollout Video on the example of success shown in the Reference Video.
+- Use only the provided frames. Do not assume off-camera facts.
+- Success requires visible, decisive evidence in the Rollout Video frames.
+- Do NOT infer “about to succeed” (e.g., hovering ≠ ON/IN).
+- If a required condition seen in the Reference Video cannot be verified in the Rollout Video, choose Failure.
+- The reported finish_step must be one of the provided Rollout Video step_ids; if Failure, use -1.
+
+Required Output (JSON only; no extra text):
+{"success": 0 or 1, "finish_step": <int>}
+"""
+
 class RobVLMRewardManager():
     """The reward manager.
     """
@@ -897,6 +926,9 @@ class RobVLMRewardManager():
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.config=config
         self.vlm_input_num_frames = self.config.reward_model.vlm_input_num_frames
+        self.use_ref = self.config.reward_model.use_ref
+        if self.use_ref:
+            self.vlm_input_num_ref_frames = self.config.reward_model.vlm_input_num_ref_frames
         self.return_env_score = self.config.reward_model.return_env_score
         self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
         if config.actor_rollout_ref.model.vla == 'smolvla':
@@ -980,8 +1012,16 @@ class RobVLMRewardManager():
             return task_index, 0, -1, "Empty"
 
         step_ids = task.frame_indices[:len(task.frames)]
-        question = self.build_question(task.description, step_ids=step_ids)
+        if self.use_ref:
+            ref_step_ids = task.ref_frame_indices[:len(task.ref_frames)]
+            question = self.build_question_ref(task.description, step_ids=step_ids, ref_step_ids=ref_step_ids)
+        else:
+            question = self.build_question(task.description, step_ids=step_ids)
         user_content = [{"type": "text", "text": question}]
+
+        if self.use_ref:
+            for ref_frame_url in task.ref_frames:
+                user_content.append({"type": "image_url", "image_url": {"url": ref_frame_url}})
         for frame_url in task.frames:
             user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
 
@@ -1043,7 +1083,7 @@ class RobVLMRewardManager():
         j = int(np.argmin(np.abs(arr - finish_step_raw)))
         return int(arr[j])
 
-    def get_reward_tasks(self, step_images, step_images_mask, task_lang):
+    def get_reward_tasks(self, step_images, step_images_mask, task_lang, ref_frames=None, ref_frame_indices=None):
         B, L, H, W, C = step_images.shape
         tasks_to_process = []
         for i in range(B):
@@ -1054,11 +1094,20 @@ class RobVLMRewardManager():
             base64_frames = []
             for idx in frame_indices:
                 frame = valid_images[idx]
-                resized_frame = cv2.resize(frame, (128, 128))
+                if self.use_ref:
+                    resized_frame = cv2.resize(frame, (112, 112))
+                else:
+                    resized_frame = cv2.resize(frame, (128, 128))
                 _, buffer = cv2.imencode('.jpg', resized_frame)
                 base64_str = base64.b64encode(buffer).decode('utf-8')
                 base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
-            reward_task = RewardTask(frames=base64_frames, frame_indices=frame_indices, description=task_lang[i])
+            reward_task = RewardTask(
+                frames=base64_frames, 
+                frame_indices=frame_indices, 
+                ref_frames=ref_frames[i] if self.use_ref else None, 
+                ref_frame_indices=ref_frame_indices[i] if self.use_ref else None, 
+                description=task_lang[i]
+            )
             tasks_to_process.append(reward_task)
         return tasks_to_process
      
@@ -1072,6 +1121,32 @@ class RobVLMRewardManager():
         frame_str = "".join([f"frame_step{sid}-<image>\n" for sid in step_ids])
         return f"{PROMPT}\nTask: {task_lang}\n{frame_str}"
 
+
+    def build_question_ref(self, task_lang: str, step_ids: list[int], ref_step_ids: list[int]) -> str:
+        """
+        构建包含参考视频和执行视频的 prompt 字符串。
+        """
+        # 1. 构建参考视频的帧字符串
+        ref_frame_str = "Reference Video Frames:\n"
+        for step_id in ref_step_ids:
+            ref_frame_str += f"ref_frame_step{step_id}-<image>\n"
+
+        # 2. 构建待评判视频的帧字符串
+        rollout_frame_str = "Rollout Video Frames (to be judged):\n"
+        for step_id in step_ids:
+            rollout_frame_str += f"frame_step{step_id}-<image>\n"
+        
+        # 3. 组合最终的 prompt
+        separator = "\n---\n\n"
+        
+        return (
+            f"{PROMPT_REF}\n"
+            f"Task: {task_lang}\n\n"
+            f"{ref_frame_str}"
+            f"{separator}"
+            f"{rollout_frame_str}"
+        )
+        
     def try_parse_json_response(self, text: str) -> Optional[Dict]:
         """
         从模型输出中尽可能提取 JSON（容错）
@@ -1251,7 +1326,38 @@ class RobVLMRewardManager():
         # --- 6. 释放资源 ---
         video_writer.release()
         print(f"Video saved successfully to {output_path}")
-        
+       
+    def process_video_to_base64_frames_with_indices(self, video_path: Path, num_frames: int = 10) -> Tuple[List[str], List[int]]:
+        """
+        读取视频，均匀下采样到指定帧数，返回 (base64-URL 列表, 采样到的原始帧编号列表)
+        """
+        if not video_path.exists():
+            raise FileNotFoundError(f"视频文件未找到: {video_path}")
+
+        cap = cv2.VideoCapture(str(video_path))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            return [], []
+
+        frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int).tolist()
+        base64_frames = []
+        for idx in frame_indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                # 不缩放，保持原图；如需加速可打开 128x128
+                # resized_frame = cv2.resize(frame, (128, 128))
+                # resized_frame = cv2.resize(frame, (316, 316))
+                resized_frame = cv2.resize(frame, (112, 112))
+                
+                _, buffer = cv2.imencode('.jpg', resized_frame)
+                base64_str = base64.b64encode(buffer).decode('utf-8')
+                base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
+        cap.release()
+        # 若读帧失败导致数量不一致，截齐
+        L = min(len(base64_frames), len(frame_indices))
+        return base64_frames[:L], frame_indices[:L]
+     
     def aggregate_success_and_finish(self, pred_success_list: List[int], pred_finish_list: List[int], m: int, strategy: str="min") -> Tuple[int,int]:
         """
         m-of-n 聚合：
@@ -1308,6 +1414,94 @@ class RobVLMRewardManager():
         basic = self.compute_basic_metrics(cm)
         return {"confusion": cm, "metrics": basic}
 
+    def compute_finish_step_metrics(
+        self,
+        pred_finish: torch.Tensor, 
+        gt_finish: torch.Tensor,
+        failure_value: int = -1
+    ) -> Dict[str, Optional[float]]:
+        """
+        基于预测和真实完成步数的 Tensor 计算相关指标。
+
+        Args:
+            pred_finish (torch.Tensor): 预测的任务完成步数。
+            gt_finish (torch.Tensor): 真实的任务完成步数。
+            failure_value (int): Tensor 中表示任务失败的特殊值，默认为 -1。
+                                如果你的数据用像 256 这样的值表示失败或超时，请传入该值。
+
+        Returns:
+            Dict[str, Optional[float]]: 包含各项指标的字典。
+        """
+        # 确保输入的 tensor 是一维的
+        assert pred_finish.dim() == 1 and gt_finish.dim() == 1
+        assert pred_finish.shape == gt_finish.shape
+
+        # 1. 创建布尔掩码来识别成功/失败的样本
+        # gt_success_mask 为 True 的位置，代表真实情况是成功的
+        gt_success_mask = (gt_finish != failure_value)
+        # pred_success_mask 为 True 的位置，代表模型预测是成功的
+        pred_success_mask = (pred_finish != failure_value)
+
+        # 2. 统计成功样本的数量
+        n_gt_pos = torch.sum(gt_success_mask).item()
+        n_pred_pos = torch.sum(pred_success_mask).item()
+
+        # 3. 找到 GT 和 Pred 都为成功的样本，以便计算误差
+        # 这是计算误差的基础，我们只在双方都认为成功时才计算步数误差
+        both_success_mask = gt_success_mask & pred_success_mask
+        
+        n_both_success = torch.sum(both_success_mask).item()
+
+        # 如果没有任何一个样本是双方都认为成功的，则无法计算误差指标
+        if n_both_success == 0:
+            return {
+                "count": 0,
+                "mae": None,
+                "med_ae": None,
+                "rmse": None,
+                "within_0": None, # 对应精确命中
+                "within_1": None, # 对应误差在1帧内
+                "within_2": None, # 对应误差在2帧内
+                "gt_success_count": n_gt_pos,
+                "pred_success_count": n_pred_pos,
+                "coverage_pred_success_over_gt_success": 0.0 if n_gt_pos > 0 else None,
+            }
+
+        # 4. 仅使用双方都成功的样本来计算绝对误差 (Absolute Error)
+        valid_gt = gt_finish[both_success_mask]
+        valid_pred = pred_finish[both_success_mask]
+        
+        # .float() 确保计算时使用浮点数
+        errs = torch.abs(valid_pred - valid_gt).float()
+
+        # 5. 计算各项指标
+        mae = torch.mean(errs).item()
+        med_ae = torch.median(errs).item()
+        rmse = torch.sqrt(torch.mean(errs**2)).item()
+        
+        # 计算 "within_k" 指标 (误差在 k 帧内的比例)
+        # 注意，这里的误差是离散的步数，所以 arr <= 0.5 等价于 arr == 0
+        within_0 = torch.mean((errs == 0).float()).item()
+        within_1 = torch.mean((errs <= 1).float()).item()
+        within_2 = torch.mean((errs <= 2).float()).item()
+
+        # 覆盖率：在所有真实成功的样本中，被模型正确预测为成功的比例
+        # coverage = ( #(GT=success & pred=success) ) / ( #(GT=success) )
+        cov = (n_both_success / n_gt_pos) if n_gt_pos > 0 else None
+
+        return {
+            "count": n_both_success,
+            "mae": mae,
+            "med_ae": med_ae,
+            "rmse": rmse,
+            "within_0": within_0,
+            "within_1": within_1,
+            "within_2": within_2,
+            "gt_success_count": n_gt_pos,
+            "pred_success_count": n_pred_pos,
+            "coverage_pred_success_over_gt_success": cov,
+        }
+        
     def verify(self, data, global_steps=-1):
         if self.return_env_score and ('complete' in data.batch):
             score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
@@ -1316,8 +1510,20 @@ class RobVLMRewardManager():
         step_images = data.batch["step_images"]
         step_images_mask = data.batch["step_images_mask"]
         task_lang = data.non_tensor_batch['task_lang']
+        task_suite_name = data.non_tensor_batch['task_suite_name']
+        task_id = list(data.batch['task_id'])
         B, N, H, W, C = step_images.shape
-        reward_tasks = self.get_reward_tasks(step_images, step_images_mask, task_lang)
+        if self.use_ref:
+            ref_video_path_list = [Path(REF_DICT[task_suite_name[i]][task_id[i].item()]) for i in range(len(task_id))]
+            ref_frames_list = []
+            ref_frame_indices_list = []
+            for ref_video_path in ref_video_path_list:
+                ref_frames, ref_frame_indices = self.process_video_to_base64_frames_with_indices(ref_video_path, num_frames=self.vlm_input_num_ref_frames)
+                ref_frames_list.append(ref_frames)
+                ref_frame_indices_list.append(ref_frame_indices)
+        else:
+            ref_frames_list, ref_frame_indices_list = None, None
+        reward_tasks = self.get_reward_tasks(step_images, step_images_mask, task_lang, ref_frames_list, ref_frame_indices_list)
         
         if self.vote_n <= 1:
             pred_success, pred_finish, raw_texts = self.get_rewards_from_judge_batch_sync(
@@ -1350,6 +1556,8 @@ class RobVLMRewardManager():
         complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
         if self.return_env_score:
             cls_stat = self.compute_all_metrics(score_env, pred_success)
+            gt_finish = data.batch["finish_step_raw"]
+            step_stat = self.compute_finish_step_metrics(gt_finish, torch.tensor(pred_finish))
         if self.use_world_model and (global_steps != -1):
             # breakpoint()
             ran_id = random.randint(1, 10000)
@@ -1377,6 +1585,8 @@ class RobVLMRewardManager():
         reward_metrics['all'] = data.batch['acc'].mean().item()
         if self.return_env_score:
             reward_metrics['rm'] = cls_stat
+            reward_metrics['rm_step'] = step_stat
+            
         format_metrics['all'] = data.batch['format_correctness'].mean().item()
         reward_format_metrics['all'] = data.batch['acc'].mean().item()
         return scores, reward_metrics, format_metrics, reward_format_metrics
