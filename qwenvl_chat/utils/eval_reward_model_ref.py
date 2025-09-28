@@ -27,26 +27,50 @@ from libero.libero import benchmark
 from verl_vla.utils.prompt_utils.prompt import build_system_prompt
 
 
+
+REF_DICT = {
+    "libero_spatial": {
+        0: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_0_trial_0--success=True--ran=9350.mp4",
+        1: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_1_trial_5--success=True--ran=3448.mp4",
+        2: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_2_trial_0--success=True--ran=4112.mp4",
+        3: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_3_trial_0--success=True--ran=7681.mp4",
+        4: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_4_trial_2--success=True--ran=6921.mp4",
+        5: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_5_trial_0--success=True--ran=2259.mp4",
+        6: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_6_trial_3--success=True--ran=6237.mp4",
+        7: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_7_trial_16--success=True--ran=6198.mp4",
+        8: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_8_trial_46--success=True--ran=6438.mp4",
+        9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
+    }
+}
+
+
 # =========================
 # SFT judge prompt（严格 JSON）
 # =========================
+
 PROMPT = """You are a task-conditioned video rollout success judge.
 
-You are given an ordered sequence of frames from a policy rollout video.
-Your job is to decide (1) whether the task is successfully completed,
-and (2) at which step index (from the provided step_id list) the success is FIRST
+You will be given two sets of ordered frames:
+1.  **Reference Video:** This video demonstrates a successful completion of the task. Use it to understand what success looks like.
+2.  **Rollout Video:** This is the video you must evaluate.
+
+Your job is to judge the **Rollout Video** and decide:
+(1) whether the task is successfully completed,
+and (2) at which step index (from the provided Rollout Video step_id list) the success is FIRST
 visibly satisfied.
 
 Principles
+- Base your judgment of the Rollout Video on the example of success shown in the Reference Video.
 - Use only the provided frames. Do not assume off-camera facts.
-- Success requires visible, decisive evidence in-frame.
-- Do NOT infer “about to succeed” (hovering ≠ ON/IN).
-- If a required condition cannot be verified from the frames, choose Failure.
-- The reported finish_step must be one of the provided step_ids; if Failure, use -1.
+- Success requires visible, decisive evidence in the Rollout Video frames.
+- Do NOT infer “about to succeed” (e.g., hovering ≠ ON/IN).
+- If a required condition seen in the Reference Video cannot be verified in the Rollout Video, choose Failure.
+- The reported finish_step must be one of the provided Rollout Video step_ids; if Failure, use -1.
 
 Required Output (JSON only; no extra text):
 {"success": 0 or 1, "finish_step": <int>}
 """
+
 
 
 # =========================
@@ -56,6 +80,8 @@ Required Output (JSON only; no extra text):
 class RewardTask:
     frames: List[str]
     frame_indices: List[int]
+    ref_frames: List[str]
+    ref_frame_indices: List[int]
     description: str
     score_gt: int            # 0/1
     video_name: str
@@ -195,9 +221,9 @@ def process_video_to_base64_frames_with_indices(video_path: Path, num_frames: in
         ret, frame = cap.read()
         if ret:
             # 不缩放，保持原图；如需加速可打开 128x128
-            resized_frame = cv2.resize(frame, (128, 128))
+            # resized_frame = cv2.resize(frame, (128, 128))
             # resized_frame = cv2.resize(frame, (316, 316))
-            # resized_frame = cv2.resize(frame, (112, 112))
+            resized_frame = cv2.resize(frame, (112, 112))
             
             _, buffer = cv2.imencode('.jpg', resized_frame)
             base64_str = base64.b64encode(buffer).decode('utf-8')
@@ -231,6 +257,31 @@ def build_question(task_lang: str, step_ids: list[int]) -> str:
     return f"{PROMPT}\nTask: {task_lang}\n{frame_str}"
 
 
+def build_question_ref(task_lang: str, step_ids: list[int], ref_step_ids: list[int]) -> str:
+    """
+    构建包含参考视频和执行视频的 prompt 字符串。
+    """
+    # 1. 构建参考视频的帧字符串
+    ref_frame_str = "Reference Video Frames:\n"
+    for step_id in ref_step_ids:
+        ref_frame_str += f"ref_frame_step{step_id}-<image>\n"
+
+    # 2. 构建待评判视频的帧字符串
+    rollout_frame_str = "Rollout Video Frames (to be judged):\n"
+    for step_id in step_ids:
+        rollout_frame_str += f"frame_step{step_id}-<image>\n"
+    
+    # 3. 组合最终的 prompt
+    separator = "\n---\n\n"
+    
+    return (
+        f"{PROMPT}\n"
+        f"Task: {task_lang}\n\n"
+        f"{ref_frame_str}"
+        f"{separator}"
+        f"{rollout_frame_str}"
+    )
+    
 def try_parse_json_response(text: str) -> Optional[Dict]:
     """
     从模型输出中尽可能提取 JSON（容错）
@@ -265,8 +316,11 @@ def fetch_one_reward_sync(client, task: RewardTask, task_index: int, mode: str, 
         return task_index, 0, -1, "Empty"
 
     step_ids = task.frame_indices[:len(task.frames)]
-    question = build_question(task.description, step_ids=step_ids)
+    ref_step_ids = task.ref_frame_indices[:len(task.ref_frames)]
+    question = build_question_ref(task.description, step_ids=step_ids, ref_step_ids=ref_step_ids)
     user_content = [{"type": "text", "text": question}]
+    for ref_frame_url in task.ref_frames:
+        user_content.append({"type": "image_url", "image_url": {"url": ref_frame_url}})
     for frame_url in task.frames:
         user_content.append({"type": "image_url", "image_url": {"url": frame_url}})
 
@@ -396,7 +450,7 @@ def compute_finish_step_metrics(tasks: List[RewardTask]) -> Dict[str, float]:
         "coverage_pred_success_over_gt_success": cov,
     }
 
-def process_single_video(name, eval_folder, task_name, num_frames):
+def process_single_video(name, eval_folder, task_name, num_frames, num_ref_frames):
     """
     处理单个视频文件，提取所有必要信息。
     这个函数将在一个独立的进程中运行。
@@ -432,6 +486,8 @@ def process_single_video(name, eval_folder, task_name, num_frames):
 
     # 瓶颈所在：I/O 和 CPU 密集型操作
     frames, frame_indices = process_video_to_base64_frames_with_indices(video_path, num_frames=num_frames)
+    ref_video_path = Path(REF_DICT[task_name][task_id])
+    ref_frames, ref_frame_indices = process_video_to_base64_frames_with_indices(ref_video_path, num_frames=num_ref_frames)
 
     finish_raw = parse_finish_step_from_name(name)
     finish_mapped = map_finish_step_to_sampled_idx(finish_raw, frame_indices) if finish_raw is not None else -1
@@ -439,6 +495,8 @@ def process_single_video(name, eval_folder, task_name, num_frames):
     task = RewardTask(
         frames=frames,
         frame_indices=frame_indices,
+        ref_frames=ref_frames,
+        ref_frame_indices=ref_frame_indices,
         description=task_lang,
         score_gt=gt,
         video_name=name,
@@ -477,7 +535,8 @@ def main_processing_loop(videos, eval_folder, args):
         process_single_video,
         eval_folder=eval_folder,
         task_name=args.task_name,
-        num_frames=args.num_frames
+        num_frames=args.num_frames,
+        num_ref_frames=args.num_ref_frames
     )
 
     # 创建一个进程池
@@ -524,11 +583,12 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate SFT-style reward model (JSON success + finish_step).")
     parser.add_argument("--eval_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_val",
                         help="存放评测视频的目录")
-    parser.add_argument("--output_dir", type=str, default="work_dirs/sft-32b-lora64", help="结果保存目录")
-    parser.add_argument("--tag", type=str, default="sft-7b-lora64-60steps-vote5-pass3", help="子目录名")
+    parser.add_argument("--output_dir", type=str, default="work_dirs/debug", help="结果保存目录")
+    parser.add_argument("--tag", type=str, default="513steps_vote5_pass3_336", help="子目录名")
     parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=50, help="每段视频抽帧数")
+    parser.add_argument("--num_ref_frames", type=int, default=20, help="每段视频抽帧数")
     parser.add_argument("--max_workers", type=int, default=128, help="judge 并行线程数")
     parser.add_argument("--debug", action="store_true", help="")
     parser.add_argument("--dry_run", action="store_true", help="只做解析不过 judge（用于快速检查）")
