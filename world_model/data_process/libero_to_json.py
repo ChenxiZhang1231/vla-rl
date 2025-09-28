@@ -119,145 +119,147 @@ def indices_for_resampled(num_resampled: int, orig_fps: float, new_fps: float, n
 
 # ---------------- Core processing and Visualization Functions ----------------
 # (These are copied directly from your first script)
-def draw_overlay_on_clip(clip_path: Path, out_path: Path, K: np.ndarray, e_clip: np.ndarray, end_pos_clip: np.ndarray, end_quat_clip: np.ndarray) -> None:
+
+
+def draw_overlay_on_clip(clip_path: Path, out_path: Path,
+                         K: np.ndarray,
+                         e_clip: np.ndarray,           # (F, 4, 4)
+                         end_pos_clip: np.ndarray,     # (F, 2, 3)
+                         end_quat_clip: np.ndarray,    # (F, 2, 4)
+                         end_eff_clip: np.ndarray,     # (F, 2),
+                         *,
+                         vmin: float = 35.0,
+                         vmax: float = 125.0,
+                         radius_at_z_ref: int = 40,    # 在 z_ref 时的像素半径
+                         z_ref: float = 1.0,           # 参考深度（与你场景单位一致，常见是米）
+                         radius_min: int = 8,
+                         radius_max: int = 140,
+                         circle_alpha: float = 0.35
+                         ) -> None:
     cap = cv2.VideoCapture(str(clip_path))
-    if not cap.isOpened(): raise RuntimeError(f"Failed to open {clip_path}")
-    width, height, fps = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), cap.get(cv2.CAP_PROP_FPS)
-    writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open {clip_path}")
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps    = cap.get(cv2.CAP_PROP_FPS)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    ensure_dir(out_path.parent)
+    writer = cv2.VideoWriter(str(out_path), fourcc, fps, (width, height))
+
     F = e_clip.shape[0]
-    axis = np.eye(3) * AXIS_LEN_UNITS
+    axis = np.eye(3) * AXIS_LEN_UNITS  # 3 axis unit vectors scaled
+
     f = 0
     while True:
         ret, frame = cap.read()
-        if not ret or f >= F: break
-        for ee in range(end_pos_clip.shape[1]): # Iterate over available arms
-            pos_w, quat = end_pos_clip[f, ee, :], end_quat_clip[f, ee, :]
-            R_ee = quat_to_rot(quat)
-            pts_axes_w = pos_w[None, :] + (R_ee @ axis).T
-            pts_w = np.vstack([pos_w[None, :], pts_axes_w])
-            Xc = world_to_cam_points(e_clip[f], pts_w)
-            uv = cam_to_pixels(K, Xc)
+        if not ret or f >= F:
+            break
+
+        overlay = frame.copy()
+
+        for ee in range(1):
+            pos_w = end_pos_clip[f, ee, :]  # (3,)
+            quat  = end_quat_clip[f, ee, :] # (4,)
+            R_ee  = quat_to_rot(quat)       # (3,3)
+
+            pts_axes_w = pos_w[None, :] + (R_ee @ axis).T  # (3,3)
+            pts_w = np.vstack([pos_w[None, :], pts_axes_w])  # (4,3)
+
+            Xc = world_to_cam_points(e_clip[f], pts_w)   # (4,3), 相机坐标
+            uv = cam_to_pixels(K, Xc[None, ...])[0]      # (4,2), 像素坐标
+
             u0, v0 = int(round(uv[0, 0])), int(round(uv[0, 1]))
+            z = float(Xc[0, 2])
+            circle_radius = _depth_to_radius(z, radius_at_z_ref, z_ref, radius_min, radius_max)
+
+            val = float(end_eff_clip[f, ee]) * 100
+            circle_color = _scalar_to_bgr(val, vmin, vmax)
+
+            cv2.circle(overlay, (u0, v0), circle_radius, circle_color, thickness=-1, lineType=cv2.LINE_AA)
             cv2.circle(frame, (u0, v0), POINT_RADIUS, (255, 255, 255), -1)
             colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
             for k in range(3):
-                uk, vk = int(round(uv[k+1, 0])), int(round(uv[k+1, 1]))
+                uk, vk = int(round(uv[k + 1, 0])), int(round(uv[k + 1, 1]))
                 cv2.line(frame, (u0, v0), (uk, vk), colors[k], AXIS_THICKNESS, cv2.LINE_AA)
+            cv2.circle(frame, (u0, v0), circle_radius, (255,255,255), 2, cv2.LINE_AA)
+        cv2.addWeighted(overlay, circle_alpha, frame, 1.0 - circle_alpha, 0.0, dst=frame)
         writer.write(frame)
         f += 1
+
     writer.release()
     cap.release()
     
-# def draw_overlay_on_black(clip_path: Path, out_path: Path, K: np.ndarray, e_clip: np.ndarray, end_pos_clip: np.ndarray, end_quat_clip: np.ndarray) -> None:
-#     cap = cv2.VideoCapture(str(clip_path))
-#     if not cap.isOpened(): raise RuntimeError(f"Failed to open {clip_path}")
-#     width, height, fps = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), cap.get(cv2.CAP_PROP_FPS)
-#     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-#     F = e_clip.shape[0]
-#     axis = np.eye(3) * AXIS_LEN_UNITS
-#     f = 0
-#     while True:
-#         ret, frame = cap.read()
-        
-#         if not ret or f >= F: break
-#         for ee in range(end_pos_clip.shape[1]): # Iterate over available arms
-#             frame = np.zeros_like(frame)
-#             pos_w, quat = end_pos_clip[f, ee, :], end_quat_clip[f, ee, :]
-#             R_ee = quat_to_rot(quat)
-#             pts_axes_w = pos_w[None, :] + (R_ee @ axis).T
-#             pts_w = np.vstack([pos_w[None, :], pts_axes_w])
-#             Xc = world_to_cam_points(e_clip[f], pts_w)
-#             uv = cam_to_pixels(K, Xc)
-#             u0, v0 = int(round(uv[0, 0])), int(round(uv[0, 1]))
-#             cv2.circle(frame, (u0, v0), POINT_RADIUS, (255, 255, 255), -1)
-#             colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
-#             for k in range(3):
-#                 uk, vk = int(round(uv[k+1, 0])), int(round(uv[k+1, 1]))
-#                 cv2.line(frame, (u0, v0), (uk, vk), colors[k], AXIS_THICKNESS, cv2.LINE_AA)
-#         writer.write(frame)
-#         f += 1
-#     writer.release()
-#     cap.release()
-    
-    
-def draw_overlay_on_black(clip_path: Path, out_path: Path, 
-                         K: np.ndarray, 
-                         e_clip: np.ndarray, 
-                         end_pos_clip: np.ndarray, 
-                         end_quat_clip: np.ndarray) -> None:
-    # --- 1. 打开输入视频 ---
+def draw_overlay_on_black(clip_path: Path, out_path: Path,
+                         K: np.ndarray,
+                         e_clip: np.ndarray,           # (F, 4, 4)
+                         end_pos_clip: np.ndarray,     # (F, 2, 3)
+                         end_quat_clip: np.ndarray,    # (F, 2, 4)
+                         end_eff_clip: np.ndarray,     # (F, 2),
+                         *,
+                         vmin: float = 35.0,
+                         vmax: float = 125.0,
+                         radius_at_z_ref: int = 40,    # 在 z_ref 时的像素半径
+                         z_ref: float = 1.0,           # 参考深度（与你场景单位一致，常见是米）
+                         radius_min: int = 8,
+                         radius_max: int = 140,
+                         circle_alpha: float = 0.35
+                         ) -> None:
     cap = cv2.VideoCapture(str(clip_path))
     if not cap.isOpened():
-        raise RuntimeError(f"FATAL: Failed to open source clip {clip_path}")
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        raise RuntimeError(f"Failed to open {clip_path}")
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # --- 2. 准备输出 ---
-    ensure_dir(out_path.parent)
-    
-    # 尝试使用 'mp4v' 编码器
+    fps    = cap.get(cv2.CAP_PROP_FPS)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    ensure_dir(out_path.parent)
     writer = cv2.VideoWriter(str(out_path), fourcc, fps, (width, height))
 
-    # --- 3. [关键诊断] 检查 VideoWriter 是否成功初始化 ---
-    if not writer.isOpened():
-        cap.release() # 释放已打开的资源
-        
-        # 如果失败，尝试一个更通用的编码器，比如用于 AVI 的 XVID
-        print(f"[WARN] VideoWriter failed with 'mp4v' for path {out_path}. Trying with 'XVID' and .avi extension...")
-        
-        out_path_avi = out_path.with_suffix('.avi')
-        fourcc_avi = cv2.VideoWriter_fourcc(*'XVID')
-        writer = cv2.VideoWriter(str(out_path_avi), fourcc_avi, fps, (width, height))
-        
-        if not writer.isOpened():
-             cap.release()
-             raise RuntimeError(f"FATAL: VideoWriter failed to open even with XVID codec for path {out_path_avi}. Check OpenCV backend/codec support.")
-
-    # --- 4. 逐帧处理 ---
     F = e_clip.shape[0]
-    axis = np.eye(3) * AXIS_LEN_UNITS
+    axis = np.eye(3) * AXIS_LEN_UNITS  # 3 axis unit vectors scaled
+
     f = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret or f >= F:
+            break
+
+        overlay = np.zeros_like(frame)
+        frame = overlay.copy()
+
+        for ee in range(1):
+            pos_w = end_pos_clip[f, ee, :]  # (3,)
+            quat  = end_quat_clip[f, ee, :] # (4,)
+            R_ee  = quat_to_rot(quat)       # (3,3)
+
+            pts_axes_w = pos_w[None, :] + (R_ee @ axis).T  # (3,3)
+            pts_w = np.vstack([pos_w[None, :], pts_axes_w])  # (4,3)
+
+            Xc = world_to_cam_points(e_clip[f], pts_w)   # (4,3), 相机坐标
+            uv = cam_to_pixels(K, Xc[None, ...])[0]      # (4,2), 像素坐标
+
+            u0, v0 = int(round(uv[0, 0])), int(round(uv[0, 1]))
+            z = float(Xc[0, 2])
+            circle_radius = _depth_to_radius(z, radius_at_z_ref, z_ref, radius_min, radius_max)
+
+            val = float(end_eff_clip[f, ee])
+            circle_color = _scalar_to_bgr(val, vmin, vmax)
+
+            cv2.circle(overlay, (u0, v0), circle_radius, circle_color, thickness=-1, lineType=cv2.LINE_AA)
+            cv2.circle(frame, (u0, v0), POINT_RADIUS, (255, 255, 255), -1)
+            colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
+            for k in range(3):
+                uk, vk = int(round(uv[k + 1, 0])), int(round(uv[k + 1, 1]))
+                cv2.line(frame, (u0, v0), (uk, vk), colors[k], AXIS_THICKNESS, cv2.LINE_AA)
+            cv2.circle(frame, (u0, v0), circle_radius, (255,255,255), 2, cv2.LINE_AA)
+        cv2.addWeighted(overlay, circle_alpha, frame, 1.0 - circle_alpha, 0.0, dst=frame)
+
+        writer.write(frame)
+        f += 1
+
+    writer.release()
+    cap.release()
     
-    try:
-        while True:
-            ret, frame_orig = cap.read()
-
-            # 必须在所有操作之前检查读取是否成功
-            if not ret or f >= F:
-                break
-
-            # 在 for 循环之外创建一次黑色画布
-            black_frame = np.zeros_like(frame_orig)
-
-            for ee in range(end_pos_clip.shape[1]):
-                pos_w, quat = end_pos_clip[f, ee, :], end_quat_clip[f, ee, :]
-                
-                if np.all(pos_w == 0): continue
-
-                R_ee = quat_to_rot(quat)
-                pts_axes_w = pos_w[None, :] + (R_ee @ axis).T
-                pts_w = np.vstack([pos_w[None, :], pts_axes_w])
-                Xc = world_to_cam_points(e_clip[f], pts_w)
-                uv = cam_to_pixels(K, Xc)
-                
-                u0, v0 = int(round(uv[0, 0])), int(round(uv[0, 1]))
-                cv2.circle(black_frame, (u0, v0), POINT_RADIUS, (255, 255, 255), -1)
-                colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
-                for k in range(3):
-                    uk, vk = int(round(uv[k+1, 0])), int(round(uv[k+1, 1]))
-                    cv2.line(black_frame, (u0, v0), (uk, vk), colors[k], AXIS_THICKNESS, cv2.LINE_AA)
-
-            writer.write(black_frame)
-            f += 1
-    finally:
-        # --- 5. 确保资源被释放 ---
-        # 使用 try...finally 确保即使循环中出现意外错误，资源也能被释放
-        writer.release()
-        cap.release()
-        
+    
 def fovy_to_intrinsics(fovy_degrees: float, image_width: int, image_height: int) -> np.ndarray:
     """
     通过垂直视场角 (fovy) 计算相机内参矩阵 K。
@@ -307,6 +309,47 @@ def fovy_to_intrinsics(fovy_degrees: float, image_width: int, image_height: int)
 
     return K
 
+# def _scalar_to_bgr(v: float, vmin: float, vmax: float) -> tuple[int, int, int]:
+#     if np.isnan(v):
+#         v = vmin
+#     t = (v - vmin) / (vmax - vmin + 1e-8)
+#     t = float(np.clip(t, 0.0, 1.0))
+#     gray = np.array([[int(round(t * 255))]], dtype=np.uint8)
+#     bgr = cv2.applyColorMap(gray, cv2.COLORMAP_TURBO)[0, 0]
+#     return int(bgr[0]), int(bgr[1]), int(bgr[2])  # (B,G,R)
+
+
+def _scalar_to_bgr(
+    v: float,
+    v_open: float = 0.0,   # 打开时的读数（你的情况是 0）
+    v_close: float = 50.0, # 关闭时的读数（你的情况是 40）
+) -> tuple[int, int, int]:
+    """
+    将夹爪读数映射为颜色：越打开(接近 v_open) 颜色越“高端”（反向归一化）。
+    返回 BGR (int,int,int) 以便 OpenCV 直接使用。
+    """
+    import numpy as np
+    import cv2
+
+    # NaN 直接按“最打开”的颜色处理（也可以换成固定颜色）
+    if np.isnan(v):
+        v = v_open
+
+    # 计算“合拢比例” p ∈ [0,1]：0=完全打开，1=完全关闭
+    denom = (v_close - v_open)
+    if abs(denom) < 1e-8:
+        p = 0.0
+    else:
+        p = (v - v_open) / denom
+    p = float(np.clip(p, 0.0, 1.0))
+
+    # 我们想要“越打开颜色越亮/越靠色条高端”，所以取 t = 1 - p
+    t = 1.0 - p  # 0=最合，1=最开
+
+    gray = np.array([[int(round(t * 255))]], dtype=np.uint8)
+    bgr = cv2.applyColorMap(gray, cv2.COLORMAP_TURBO)[0, 0]
+    return int(bgr[0]), int(bgr[1]), int(bgr[2])  # (B,G,R)
+
 def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, stride: int, crf: int, preset: str,
                   e_params_orig: np.ndarray, k_params: np.ndarray, end_pos_orig: np.ndarray,
                   end_quat_orig: np.ndarray, eff_pos_orig: np.ndarray, actions_orig: np.ndarray) -> Tuple[Path, List[Tuple[Path, int]]]:
@@ -350,12 +393,14 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
         black_path = black_dir / f"{stem}_clip_{i:05d}_black.mp4"
         try:
             if not overlay_path.exists():
-                draw_overlay_on_clip(clip_path, overlay_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip)
+                draw_overlay_on_clip(clip_path, overlay_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip[...,0],
+                                    vmin=4, vmax=0, radius_at_z_ref=20)
             if not black_path.exists():
-                draw_overlay_on_black(clip_path, black_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip)
+                draw_overlay_on_black(clip_path, black_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip[...,0],
+                                    vmin=4, vmax=0, radius_at_z_ref=20)
         except Exception as viz_err:
             print(f"[WARN] overlay failed for {clip_path}: {viz_err}")
-
+    
         products.append((clip_path, f0))
         last_processed_f0 = f0
         f0 += stride
@@ -381,9 +426,14 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
             np.savez_compressed(npz_path, extrinsics=e_clip, intrinsics=k_params, end_position=pos_clip, end_orientation=quat_clip, effector_position=eff_clip, actions=actions_clip, start_frame=final_f0, clip_len=clip_len, fps=fps)
 
             overlay_path = overlay_dir / f"{stem}_clip_{i:05d}_overlay.mp4"
+            black_path = black_dir / f"{stem}_clip_{i:05d}_black.mp4"
             try:
                 if not overlay_path.exists():
-                    draw_overlay_on_clip(clip_path, overlay_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip)
+                    draw_overlay_on_clip(clip_path, overlay_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip[...,0],
+                                        vmin=0.0, vmax=100)
+                if not black_path.exists():
+                    draw_overlay_on_black(clip_path, black_path, K=k_params, e_clip=e_clip, end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip[...,0],
+                                        vmin=0.0, vmax=100)
             except Exception as viz_err:
                 print(f"[WARN] overlay failed for {clip_path}: {viz_err}")
 
@@ -461,6 +511,17 @@ def batch_axisangle2quat(vecs: np.ndarray) -> np.ndarray:
 # ==============================================================================
 # PART 2: NEW LOGIC FOR READING LIBERO HDF5 AND CREATING TASKS
 # ==============================================================================
+
+def _depth_to_radius(z: float,
+                     radius_at_z_ref: float,
+                     z_ref: float,
+                     radius_min: int,
+                     radius_max: int) -> int:
+    if not np.isfinite(z) or z <= 1e-6:
+        return radius_min
+    r = radius_at_z_ref * (z_ref / z)
+    r = int(np.clip(r, radius_min, radius_max))
+    return max(r, 1)
 
 def extract_libero_data_and_create_video(
     args,
@@ -649,6 +710,8 @@ def main():
         print("No valid tasks created. Exiting.")
         shutil.rmtree(temp_video_dir)
         return
+    # process_video_task(tasks[0])
+    # raise
     print(f"\nStep 2: Start processing {len(tasks)} videos with {max(1, args.jobs)} workers...")
     data = []
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
