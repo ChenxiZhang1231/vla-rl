@@ -681,7 +681,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 breakpoint()
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()
-            breakpoint()
+            # breakpoint()
         self.actor_optimizer.zero_grad()
         torch.cuda.synchronize()
         torch.distributed.barrier()
