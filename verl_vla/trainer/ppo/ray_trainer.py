@@ -259,7 +259,8 @@ def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config
         # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
         advantages, returns = core_algos.compute_grpo_outcome_advantage_smolvla(token_level_rewards=token_level_rewards,
                                                                                 eos_mask=response_mask,
-                                                                                index=index)
+                                                                                index=index,
+                                                                                whiten=config.algorithm['whiten'])
         data.batch['advantages'] = advantages
         data.batch['returns'] = returns
         
@@ -713,13 +714,19 @@ class RayTrainer(object):
                     valid_batch = self.add_to_buffer(valid_batch, batch_size, n_samples)
 
                 for k, v in reward_metrics.items():  # success before filter
-                    if k == 'rm':
+                    if k in ['rm']:
                         confusion = v['confusion']
                         metric_rm = v['metrics']
                         all_individual_metrics = {**confusion, **metric_rm}
                         # metrics['train_verify_score/' + k] = metrics['train_verify_score/' + k]
                         for k_, v_ in all_individual_metrics.items():
                             metric_key = 'train_verify_score/rm/' + k_
+                            metrics[metric_key] = v_
+                    elif k in ['rm_step']:
+                        all_individual_metrics = {**v}
+                        # metrics['train_verify_score/' + k] = metrics['train_verify_score/' + k]
+                        for k_, v_ in all_individual_metrics.items():
+                            metric_key = 'train_verify_score/rm_step/' + k_
                             metrics[metric_key] = v_
                     else:
                         metrics['train_verify_score/' + k] = np.mean(metrics['train_verify_score/' + k])

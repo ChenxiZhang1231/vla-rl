@@ -172,9 +172,9 @@ def euler_to_T(tx_ty_tz_exyz: np.ndarray) -> np.ndarray:
 # --------------------------------------------------
 # DROID 装载
 def find_episode_video(recordings_mp4: Path, serial: str) -> Path:
-    c1 = recordings_mp4 / f"{serial}-stereo.mp4"
+    # c1 = recordings_mp4 / f"{serial}-stereo.mp4"
     c2 = recordings_mp4 / f"{serial}.mp4"
-    if c1.exists(): return c1
+    # if c1.exists(): return c1
     if c2.exists(): return c2
     raise FileNotFoundError(f"No mp4 for serial={serial} under {recordings_mp4}")
 
@@ -542,14 +542,15 @@ def process_one_camera_episode(
     clip_len: int,
     stride: int,
     crf: int,
-    preset: str
+    preset: str,
+    cam_name: str,
 ) -> List[Dict[str,Any]]:
     # 1) 重采样
     resampled_path = out_root / "resampled" / f"{nice_stem}_resampled.mp4"
     ensure_dir(resampled_path.parent)
     if not resampled_path.exists():
-        # resample_to_fps(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
-        resample_to_fps_left_half(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
+        resample_to_fps(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
+        # resample_to_fps_left_half(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
 
     # 2) 估计重采样后的总帧数
     total_frames_est = ffprobe_safe_total_frames(resampled_path, fps_out)
@@ -571,7 +572,9 @@ def process_one_camera_episode(
 
     out_items: List[Dict[str,Any]] = []
     f0 = 0; i = 0; last_f0 = -1
-    while f0 + clip_len <= total_frames_est:
+    if clip_len == -1:
+        clip_len = total_frames_est
+    while f0 + clip_len < total_frames_est:
         clip_path = clip_dir / f"{nice_stem}_clip_{i:05d}.mp4"
         if not clip_path.exists():
             cut_clip_by_frames(resampled_path, f0, clip_len, fps_out, clip_path, crf, preset)
@@ -582,7 +585,7 @@ def process_one_camera_episode(
         np.savez_compressed(npz_path,
             extrinsics=e_clip, intrinsics=k_params,
             action=a_clip, obs_state=o_clip,
-            start_frame=f0, clip_len=clip_len, fps=fps_out
+            start_frame=f0, clip_len=clip_len, fps=fps_out, orig_fps=orig_fps,cam_name=cam_name
         )
         overlay_path = overlay_dir / f"{nice_stem}_clip_{i:05d}_overlay.mp4"
         black_path = black_dir / f"{nice_stem}_clip_{i:05d}_black.mp4"
@@ -619,8 +622,26 @@ def process_one_camera_episode(
             np.savez_compressed(npz_path,
                 extrinsics=e_clip, intrinsics=k_params,
                 action=a_clip, obs_state=o_clip,
-                start_frame=final_f0, clip_len=clip_len, fps=fps_out
+                start_frame=final_f0, clip_len=clip_len, fps=fps_out, orig_fps=orig_fps,cam_name=cam_name
             )
+            overlay_path = overlay_dir / f"{nice_stem}_clip_{i:05d}_overlay.mp4"
+            black_path = black_dir / f"{nice_stem}_clip_{i:05d}_black.mp4"
+            try:
+                pos_clip = o_clip[:, :, 0:3]
+                rot_clip = o_clip[:, :, 3:6]
+                eff_clip = o_clip[:, :, 6]
+                quat_clip = batch_axisangle2quat(rot_clip[:, 0])
+                quat_clip = np.stack([quat_clip, np.zeros_like(quat_clip)], axis=1)
+                if not overlay_path.exists():
+                    draw_overlay_on_clip(clip_path, overlay_path, K=k_params, e_clip=e_clip,
+                                        end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip,
+                                        vmin=0.0, vmax=100)
+                if not black_path.exists():
+                    draw_overlay_on_black(clip_path, black_path, K=k_params, e_clip=e_clip,
+                                        end_pos_clip=pos_clip, end_quat_clip=quat_clip, end_eff_clip=eff_clip,
+                                        vmin=0.0, vmax=100)
+            except Exception as viz_err:
+                print(f"[WARN] overlay failed for {clip_path}: {viz_err}")  
             out_items.append({"caption": task_lang, "media_path": str(clip_path)})
 
     return out_items
@@ -825,9 +846,9 @@ def get_camera_frame_ts(H: h5py.File, serial: str) -> np.ndarray:
 def main():
     ap = argparse.ArgumentParser("DROID to clips+npz exporter")
     ap.add_argument("--scene_root", type=Path, default="/inspire/ssd/project/robotsimulation/public/data/droid_raw/1.0.1/RAD", help="目录：包含 success/ 和 failure/ 子目录")
-    ap.add_argument("--output_dir", type=Path, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid")
+    ap.add_argument("--output_dir", type=Path, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid_unclip")
     ap.add_argument("--fps", type=int, default=10)
-    ap.add_argument("--clip_len", type=int, default=30)
+    ap.add_argument("--clip_len", type=int, default=-1)
     ap.add_argument("--stride", type=int, default=5)
     ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--preset", type=str, default="veryfast")
@@ -884,6 +905,7 @@ def main():
                 for cam_name, serial in cam_serials.items():
                     # if cam_name != 'ext1':
                     #     continue
+                    
                     try:
                         camera = StereoCamera(
                             ts_dir / "recordings",
@@ -926,14 +948,17 @@ def main():
                         clip_len=args.clip_len,
                         stride=args.stride,
                         crf=args.crf,
-                        preset=args.preset
+                        preset=args.preset,
+                        cam_name=cam_name,
                     ))
                     # break
-                
+                # break
+            
             if not tasks:
                 continue
-            
-            # process_one_camera_episode(**tasks[1])
+            # breakpoint()
+            # process_one_camera_episode(**tasks[0])
+            # raise
             # 并行跑
             items_all: List[Dict[str,Any]] = []
             print(f"[{split}/{date_dir.name}] start {len(tasks)} camera-episodes with {args.jobs} workers...")

@@ -111,6 +111,7 @@
             "--libero_task_suite=libero_10",
             "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/debug_data",
             // "--output_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo",
+            "--debug=True",
             "--jobs=1"
           ],
           "env": {
@@ -160,7 +161,7 @@
           "program": "utils/droid/droid_to_json.py",
           "console": "integratedTerminal",
           "args":[
-            "--jobs=32"
+            "--jobs=1"
           ],
           "env": {
           }

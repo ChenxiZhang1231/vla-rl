@@ -116,7 +116,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
             env_creators.append(
                 partial(LIBEROAdapter._get_libero_env, task, assigned_gpu, resolution))
 
-        if self.env is None:
+        if self.env is None or (len(self.env.workers) != len(active_env_ids)):
             # First time reset, create the SubprocVectorEnv
             self.env = SubprocVectorEnv(env_creators)
         else:
