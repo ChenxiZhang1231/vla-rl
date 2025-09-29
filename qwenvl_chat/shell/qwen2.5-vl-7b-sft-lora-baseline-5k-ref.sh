@@ -7,7 +7,7 @@ PER_DEVICE_BATCH_SIZE=${PER_DEVICE_BATCH_SIZE:-4}
 GRADIENT_ACC=$((BATCH_SIZE / PER_DEVICE_BATCH_SIZE / GPUS))
 
 MODEL_NAME="/inspire/ssd/project/robotsimulation/public/huggingface_models/Qwen2.5-VL-7B-Instruct"
-OUTPUT_DIR='work_dirs/qwen2.5-vl-7b-sft-lora-baseline-5k-r128-ref'
+OUTPUT_DIR='work_dirs/qwen2.5-vl-7b-sft-lora-baseline-5k-r128-ref-64tokens'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"
@@ -37,7 +37,7 @@ torchrun \
     --num_lora_modules -1 \
     --deepspeed scripts/zero_stage1_config.json \
     --model_id $MODEL_NAME \
-    --data_path shell/data/train_rm_5k.json \
+    --data_path shell/data/train_rm_5k_ref.json \
     --remove_unused_columns False \
     --freeze_vision_tower True \
     --freeze_llm True \
@@ -49,8 +49,8 @@ torchrun \
     --num_train_epochs 5 \
     --per_device_train_batch_size $PER_DEVICE_BATCH_SIZE \
     --gradient_accumulation_steps $GRADIENT_ACC \
-    --image_min_pixels $((16 * 28 * 28)) \
-    --image_max_pixels $((16 * 28 * 28)) \
+    --image_min_pixels $((64 * 28 * 28)) \
+    --image_max_pixels $((64 * 28 * 28)) \
     --learning_rate 1e-4 \
     --weight_decay 0.1 \
     --warmup_ratio 0.03 \

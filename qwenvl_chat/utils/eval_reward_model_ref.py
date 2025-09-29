@@ -223,7 +223,8 @@ def process_video_to_base64_frames_with_indices(video_path: Path, num_frames: in
             # 不缩放，保持原图；如需加速可打开 128x128
             # resized_frame = cv2.resize(frame, (128, 128))
             # resized_frame = cv2.resize(frame, (316, 316))
-            resized_frame = cv2.resize(frame, (112, 112))
+            # resized_frame = cv2.resize(frame, (112, 112))
+            resized_frame = cv2.resize(frame, (224, 224))
             
             _, buffer = cv2.imencode('.jpg', resized_frame)
             base64_str = base64.b64encode(buffer).decode('utf-8')
