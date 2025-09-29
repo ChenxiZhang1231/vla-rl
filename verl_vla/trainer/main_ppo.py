@@ -1095,9 +1095,11 @@ class RobVLMRewardManager():
             for idx in frame_indices:
                 frame = valid_images[idx]
                 if self.use_ref:
-                    resized_frame = cv2.resize(frame, (112, 112))
+                    # resized_frame = cv2.resize(frame, (112, 112))
+                    resized_frame = cv2.resize(frame, (224, 224))
                 else:
-                    resized_frame = cv2.resize(frame, (128, 128))
+                    # resized_frame = cv2.resize(frame, (128, 128))
+                    resized_frame = cv2.resize(frame, (224, 224))
                 _, buffer = cv2.imencode('.jpg', resized_frame)
                 base64_str = base64.b64encode(buffer).decode('utf-8')
                 base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
