@@ -28,11 +28,11 @@ torchrun \
   --nproc_per_node=${GPUS} \
   --master_port=${MASTER_PORT} \
   src/train/train_sft.py \
-    --use_liger False \
+    --use_liger True \
     --lora_enable False \
     --use_dora False \
     --num_lora_modules -1 \
-    --deepspeed scripts/zero2_offload.json \
+    --deepspeed scripts/zero2.json \
     --model_id $MODEL_NAME \
     --data_path shell/data/train_rm_10k.json \
     --remove_unused_columns False \
@@ -58,6 +58,6 @@ torchrun \
     --report_to tensorboard \
     --lazy_preprocess True \
     --save_strategy "steps" \
-    --save_steps 171 \
+    --save_steps 326 \
     --save_total_limit 10 \
-    --dataloader_num_workers 4
+    --dataloader_num_workers 8
