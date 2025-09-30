@@ -383,6 +383,7 @@ if __name__ == '__main__':
         )
         print(f"Load {data_path}")
         dataset_list.append(dataset)
+        break
     train_dataset = ConcatDataset(dataset_list)
     # data = dataset[1]
     act_lsit = []

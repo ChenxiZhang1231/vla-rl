@@ -193,8 +193,9 @@ def process_video_to_base64_frames_with_indices(video_path: Path, num_frames: in
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
         if ret:
-            # 不缩放，保持原图；如需加速可打开 128x128
-            resized_frame = cv2.resize(frame, (128, 128))
+            # 不缩放，保持原图；如需加速可打开 224x224
+            # resized_frame = cv2.resize(frame, (224, 224))
+            resized_frame = cv2.resize(frame, (224, 224))
             _, buffer = cv2.imencode('.jpg', resized_frame)
             base64_str = base64.b64encode(buffer).decode('utf-8')
             base64_frames.append(f"data:image/jpeg;base64,{base64_str}")
@@ -208,12 +209,12 @@ def process_video_to_frames_step(
     step: int = 5,                 # 间隔帧数：每 step 取一帧
     finish_step: int = -1,
     max_frames: int | None = None, # 可选：最多取多少帧
-    resize_hw: tuple[int, int] = (128, 128),
+    resize_hw: tuple[int, int] = (224, 224),
 ):
     """
     按固定间隔采样视频帧（默认每 5 帧取 1 帧），返回 (frames, frame_indices)
 
-    frames: list[np.ndarray]，每帧为 BGR 128x128
+    frames: list[np.ndarray]，每帧为 BGR 224x224
     frame_indices: np.ndarray[int]，对应原视频中的帧号
     """
     if step <= 0:
@@ -277,7 +278,7 @@ def process_video_to_PIL_frames_with_indices(video_path: Path, num_frames: int =
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
         if ret:
-            resized_frame = cv2.resize(frame, (128, 128))
+            resized_frame = cv2.resize(frame, (224, 224))
             rgb_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(rgb_frame)
             image_list.append(pil_image)
@@ -629,7 +630,7 @@ def main():
                         help="存放评测视频的目录")
     parser.add_argument("--output_dir", type=str, default="work_dirs/vlac-oneshot", help="结果保存目录")
     parser.add_argument("--rm_model_path", type=str, default="/inspire/ssd/project/robotsimulation/public/huggingface_models/VLAC", help="")
-    parser.add_argument("--tag", type=str, default="1891step", help="子目录名")
+    parser.add_argument("--tag", type=str, default="1891step-224", help="子目录名")
     parser.add_argument("--mode", type=str, default="", help="传给 build_system_prompt 的模式字段")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     parser.add_argument("--num_frames", type=int, default=20, help="每段视频抽帧数")
