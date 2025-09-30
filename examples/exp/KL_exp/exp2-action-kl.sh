@@ -100,6 +100,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.whiten=True \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
