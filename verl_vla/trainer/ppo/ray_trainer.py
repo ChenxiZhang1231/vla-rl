@@ -618,6 +618,7 @@ class RayTrainer(object):
                 metrics['timing/acc&trunc_filter'] = 0
                 metrics['timing/filter_format_error'] = 0
                 metrics['timing/compute_all_entropy'] = 0
+                metrics['timing/compute_logp'] = 0
 
                 # breakpoint()
                 while len(valid_batch) < batch_size * n_samples:
@@ -707,6 +708,31 @@ class RayTrainer(object):
                         valid_batch = DataProto.concat(batch)
                     print(
                         f"collected {len(valid_batch)} / {batch_size * n_samples} rollouts and each prompt has {n_samples} responses")
+                
+                # compute_logp
+                if 'step_images' in valid_batch.batch:
+                    del valid_batch.batch['step_images']
+                with Timer(name='compute_logp', text="{name}: {seconds:.1f} seconds") as timer:
+
+                    if self.tokenizer is not None:
+                        gen_batch.meta_info = {
+                            'eos_token_id': self.tokenizer.eos_token_id,
+                            'n_samples': n_samples,
+                            'pad_token_id': self.tokenizer.pad_token_id,
+                            'is_train': True,
+                        }
+                    else:
+                        gen_batch.meta_info = {
+                            'eos_token_id': -1,
+                            'n_samples': n_samples,
+                            'pad_token_id': -1,
+                            'is_train': True,
+                        }
+                    compute_logp_output = self.actor_rollout_wg.compute_log_prob(data=valid_batch)
+                    valid_batch = valid_batch.union(compute_logp_output)
+                # breakpoint()
+                metrics['timing/compute_logp'] += timer.last
+                
                     
                 if len(valid_batch) < batch_size * n_samples:
                     break
@@ -858,7 +884,10 @@ class RayTrainer(object):
                     logger.log(data=val_metrics, step=global_steps)
 
                 # collect metrics
-                # breakpoint()
+                for key, values in batch.batch.items():
+                    if 'out_metric' in key:
+                        metrics[key] = values.mean().item()
+                    
                 with Timer(name='logging1', text="{name}: {seconds:.1f} seconds") as timer:
                     data_metrics = compute_data_metrics(batch=batch, config=self.config, model_name=self.config.actor_rollout_ref.model.vla)
                 with Timer(name='logging2', text="{name}: {seconds:.1f} seconds") as timer:

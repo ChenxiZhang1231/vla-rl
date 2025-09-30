@@ -843,7 +843,8 @@ class RobActorRolloutRefWorker(Worker):
             
         # with Timer(name=f'gen seq end ,  old log will begin', text="{name}: {seconds:.1f} seconds") as timer:    
         #     print("gen seq end ,  old log will begin")
-        if self._is_actor and recompute_log_prob:
+        # if self._is_actor and recompute_log_prob:
+        if False:
             if 'step_images' in output.batch:
                 has_step_images = True
                 step_images = output.batch['step_images']
@@ -858,11 +859,14 @@ class RobActorRolloutRefWorker(Worker):
             output.meta_info['max_token_len'] = self.config.rollout.log_prob_max_token_len_per_gpu
             output.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
             logp_output = self.actor.compute_log_prob(data=output)
-            if len(logp_output) == 3:
-                old_log_probs, old_mean, old_std = logp_output
+            if len(logp_output) == 4:
+                old_log_probs, old_mean, old_std, out_metric = logp_output
                 output.batch['old_log_probs'] = old_log_probs
                 output.batch['old_mean'] = old_mean
                 output.batch['old_std'] = old_std
+                for key, values in out_metric.items():
+                    output.batch[f'out_metric/{key}'] = values
+                
             else:
                 output.batch['old_log_probs'] = logp_output
             if has_step_images:
@@ -879,6 +883,28 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('After recompute log prob', logger=logger)
         return output
 
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_log_prob(self, data: DataProto):
+        data = data.to('cuda')
+        # we should always recompute old_log_probs when it is HybridEngine
+
+        data.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
+        data.meta_info['temperature'] = self.config.rollout.temperature
+        data.meta_info['use_dynamic_bsz'] = self.config.rollout.log_prob_use_dynamic_bsz
+        data.meta_info['max_token_len'] = self.config.rollout.log_prob_max_token_len_per_gpu
+        data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        old_log_probs, old_mean, old_std, out_metric = self.actor.compute_log_prob(data=data)
+        output = DataProto.from_dict(
+            tensors={
+                'old_log_probs': old_log_probs,
+                'old_mean': old_mean,
+                'old_std': old_std
+                })
+        for key, values in out_metric.items():
+            output.batch[f'out_metric/{key}'] = values
+        return output
+            
+        
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def compute_ref_log_prob(self, data: DataProto):
         assert self._is_ref
@@ -925,8 +951,8 @@ class RobActorRolloutRefWorker(Worker):
         data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
         data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
         output = self.ref_policy.compute_log_prob(data=data)
-        if len(output) == 3:
-            ref_log_prob, ref_mean, ref_std = output
+        if len(output) == 4:
+            ref_log_prob, ref_mean, ref_std, out_metric = output
             output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
                                                 'ref_mean': ref_mean,
                                                 'ref_std': ref_std})

@@ -214,6 +214,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             mean, std = return_dict["mean"], return_dict["std"]
+            out_metric = return_dict["out_metric"]
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
                 
@@ -239,7 +240,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
                 
 
-            return ent_outer, logp_action, mean, std
+            return ent_outer, logp_action, mean, std, out_metric
         
     
     def _forward_micro_batch_update(self, input_ids, attention_mask, pixel_values, responses, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -473,6 +474,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         log_probs_lst = []
         mean_lst = []
         std_lst = []
+        out_metric_lst = []
         for micro_batch in micro_batches:
             with torch.no_grad():
                 # if isinstance(self.actor_module, FSDP):
@@ -482,7 +484,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                 # with torch.autocast(device_type='cuda', dtype=torch.float32):
                     if self.config.vla == 'smolvla':
-                        ent_outer, logp_action, mean, std = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
+                        ent_outer, logp_action, mean, std, out_metric = self._forward_micro_batch_smolvla(micro_batch, return_logprob=True)
                         log_probs = logp_action
                     else:
                         _, log_probs = self._forward_micro_batch(micro_batch, temperature=temperature)
@@ -493,6 +495,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             log_probs_lst.append(log_probs)
             mean_lst.append(mean)
             std_lst.append(std)
+            out_metric_lst.append(out_metric)
             
         log_probs = torch.concat(log_probs_lst, dim=0)
         if mean is not None:
@@ -500,7 +503,18 @@ class RobDataParallelPPOActor(BasePPOActor):
             std = torch.concat(std_lst, dim=0)
         else:
             mean, std = None, None
-        # breakpoint()
+        out_metric_dict = {}
+        for item in out_metric_lst:
+            for key, values in item.items():
+                if key not in out_metric_dict:
+                    out_metric_dict[key] = [values]
+                else:
+                    out_metric_dict[key].append(values)
+        
+        for key, values in out_metric_dict.items():
+            out_metric[key] = torch.cat(values)
+        
+                
         # if use_dynamic_bsz:
         if False:
             indices = list(itertools.chain.from_iterable(indices))
@@ -508,7 +522,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             revert_indices = torch.tensor(get_reverse_idx(indices), dtype=torch.long)
             log_probs = log_probs[revert_indices]
 
-        return log_probs, mean, std
+        return log_probs, mean, std, out_metric
 
     def update_policy_smolvla(self, data: DataProto):
         self.actor_module.train()

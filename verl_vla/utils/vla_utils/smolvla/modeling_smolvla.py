@@ -532,6 +532,7 @@ class SmolVLAPolicy(PreTrainedModel):
              ent_joint,
              mean,
              std_dev_t,
+             out_metric,
              ) = self.model.recompute_logprob(images, img_masks, lang_tokens, lang_masks, state, x_t, t, x_next, finish_step)
             return_dict = {
                 "logp_action": logp_action,
@@ -543,6 +544,7 @@ class SmolVLAPolicy(PreTrainedModel):
                 "ent_joint": ent_joint,
                 "mean": mean,
                 "std": std_dev_t,
+                "out_metric": out_metric,
                 }
             return None, lang_tokens, lang_masks, return_dict
         
@@ -1538,7 +1540,6 @@ class VLAFlowMatching(nn.Module):
         ent_step  = h_per_dim * num_valid_dims                              # [B,S,K]
         ent_outer = ent_step.sum(dim=2)                                     # [B,S]
         ent_joint = ent_outer.sum(dim=1)                                    # [B]
-
         return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint
     
     def recompute_logprob(
@@ -1652,7 +1653,7 @@ class VLAFlowMatching(nn.Module):
             - torch.log(std)
             - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
         )
-        lp_elem = lp_elem[..., :self.config.n_action_steps, :]
+        lp_elem = lp_elem[..., :self.config.n_action_steps, :]            # [B,S,K,CH,D]
         lp_elem = lp_elem * mask_elem
         original_action_dim = 7
         lp_elem = lp_elem[..., :original_action_dim]
@@ -1669,11 +1670,72 @@ class VLAFlowMatching(nn.Module):
         ent_step  = h_per_dim * num_valid_dims
         ent_outer = ent_step.sum(dim=2)
         ent_joint = ent_outer.sum(dim=1)
+        
+
         mean = mean[..., :original_action_dim]
         std_dev_t = std_dev_t[..., :original_action_dim]
-        # breakpoint()
-        return logp_action, logp_step, logp_outer, logp_joint, ent_step, ent_outer, ent_joint, mean, std_dev_t
+        out_metric = self.summarize_logprob_metrics(
+            logp_step, logp_outer, logp_joint,
+            mean, std, x_next_f, mask_actions, mask_elem,
+            t, sigmas, finish_step, original_action_dim=7
+        )
+        return (
+            logp_action, 
+            logp_step, 
+            logp_outer, 
+            logp_joint, 
+            ent_step, 
+            ent_outer, 
+            ent_joint, 
+            mean, 
+            std_dev_t,
+            out_metric,
+        )
     
+    def summarize_logprob_metrics(
+        self,
+        logp_step, logp_outer, logp_joint,
+        mean, std, x_next_f, mask_actions, mask_elem,
+        t, sigmas, finish_step, original_action_dim=7
+    ):
+        out = {}
+        # 1) NLL / BPD
+        B = logp_joint.shape[0]
+        num_valid_actions = mask_actions.sum(dim=-1)         # [B,S]
+        valid_dims = (num_valid_actions * original_action_dim).sum(dim=-1)  # [B]
+        bpd_joint = -logp_joint / (valid_dims.clamp_min(1) * math.log(2.0))
+        out["bpd_joint_mean"] = bpd_joint
+        out["logp_joint_mean"] = logp_joint
+
+        # 2) Entropy
+        c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
+        std_use = std[..., :original_action_dim]
+        H_elem = (c0 + torch.log(std_use)) * mask_elem[..., :original_action_dim]
+        H_joint = H_elem.sum(dim=(-1,-2,-3,-4))  # [B]
+        out["H_joint_mean"] = H_joint
+
+        # 3) Calibration
+        err = (x_next_f[..., :7] - mean[..., :7]) / (std[..., :7] + 1e-12)
+        with torch.autocast('cuda', enabled=False):
+            err = err.to(torch.float64)
+            m = mask_elem[..., :7].expand_as(err).to(torch.float64)   # 显式扩成与 err 同形状
+
+            denom = m.sum(dim=(1,2,3,4)).clamp_min(1)
+            z2 = (err.pow(2) * m).sum(dim=(1,2,3,4)) / denom
+            z4 = (err.pow(4) * m).sum(dim=(1,2,3,4)) / denom
+
+        out["z_m2"], out["z_m4"] = z2, z4
+
+        # 4) K-decomp
+        out["logp_k_first"] = torch.nanmean(logp_step[..., 0], dim=1)
+        out["logp_k_last"]  = torch.nanmean(logp_step[..., -1], dim=1)
+
+        # 5) Masks / stability
+        out["frac_valid_actions"] = mask_actions.float().mean(dim=(1,2))
+
+        return out
+
+
     def compute_values(
         self,
         images,             # [B,S,3,H,W]
