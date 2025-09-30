@@ -752,7 +752,7 @@ def main():
             complete = 0.0
             finish_step = max_steps
         task.pred_success = complete
-        task.pred_finish_step = finish_step
+        task.pred_finish_step = finish_step  # * 5 if finish_step != max_steps else max_steps
         
                 
     y_true = [t.score_gt for t in tasks]
