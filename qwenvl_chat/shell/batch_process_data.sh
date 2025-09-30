@@ -1,18 +1,37 @@
 #!/bin/bash
 
 # 定义实验的视频文件夹和输出目录
+# declare -a experiments=(
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train2" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train2"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train3" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train3"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train4" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train4"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train5" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train5"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train6" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train6"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train7" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train7"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train8" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train8"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train9" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train9"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train10" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train10"
+#     "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train11" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train11"
+# )
+
 declare -a experiments=(
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train2" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train2"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train3" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train3"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train4" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train4"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train5" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train5"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train6" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train6"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train7" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train7"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train8" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train8"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train9" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train9"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train10" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train10"
-    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train11" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train11"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train12" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train12"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train13" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train13"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train14" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train14"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train15" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train15"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train16" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train16"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train17" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train17"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train18" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train18"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train19" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train19"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train20" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train20"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/rollouts/rm_train21" "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl/rm_train21"
+
 )
+
+
+
+
+
 
 num_experiments=${#experiments[@]}
 
