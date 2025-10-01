@@ -1674,10 +1674,10 @@ class VLAFlowMatching(nn.Module):
         
         # breakpoint()
         # logp_action = logp_action / K
-        # original_action_dim = 7
-        # valid_CH = mask_actions.sum(dim=-1)                 # [B,S]
-        # num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
-        # logp_outer = logp_outer / num_elems
+        original_action_dim = 7
+        valid_CH = mask_actions.sum(dim=-1)                 # [B,S]
+        num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
+        logp_outer = logp_outer / num_elems
 
         mean = mean[..., :original_action_dim]
         std_dev_t = std_dev_t[..., :original_action_dim]
