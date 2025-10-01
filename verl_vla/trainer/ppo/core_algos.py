@@ -415,6 +415,12 @@ def compute_policy_loss(
         
         negative_approx_kl = negative_approx_kl[..., None, None].repeat(1, 1, CH, D)
         negative_approx_kl = negative_approx_kl.reshape(B, -1)
+
+        valid_CH = eos_mask.view(B, S, CH, 7).any(dim=-1).float().sum(dim=-1).clamp_min(1)  # [B,S]
+        perdim_scale = (1.0 / (K * valid_CH * D))            # [B,S]
+        perdim_scale = perdim_scale[..., None, None].repeat(1, 1, CH, 7).reshape(B, -1)  # [B, S*CH*D]
+        advantages = advantages * perdim_scale
+        
     else:
         ratio_brd = ratio
         ratio_brd_clip = ratio_clip

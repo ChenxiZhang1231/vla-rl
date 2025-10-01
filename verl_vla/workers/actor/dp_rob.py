@@ -639,8 +639,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                         mask_actions = mask_before.expand(B, S, CH) + mask_equal
                         original_action_dim = 7
                         valid_CH = mask_actions.sum(dim=-1)                 # [B,S]
-                        # num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
-                        num_elems = 1
+                        num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
+                        # num_elems = 1
                     elif self.config.kl_loss_type == 'kl':
                         # num_elems = K
                         num_elems = 1
