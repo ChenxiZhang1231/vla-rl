@@ -7,6 +7,7 @@ export ACCELERATE_USE_FSDP=true
 export FSDP_CPU_RAM_EFFICIENT_LOADING=true
 # export MUJOCO_GL="osmesa"
 export MUJOCO_GL="egl"
+# We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
 EXPERIMENT_NAME='exp2-action-kl'
@@ -54,9 +55,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.num_images_in_input=1 \
     actor_rollout_ref.actor.traj_mini_batch_size=6 \
     actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.dlogp_clamp=True \
-    actor_rollout_ref.actor.dlogp_clamp_max=4.0 \
-    actor_rollout_ref.actor.dlogp_clamp_min=-4.0 \
+    actor_rollout_ref.actor.dlogp_clamp=False \
     actor_rollout_ref.actor.kl_loss_type=kl \
     actor_rollout_ref.actor.kl_loss_coef=0.04 \
     algorithm.kl_ctrl.kl_coef=0.04 \
@@ -97,7 +96,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
     algorithm.adv_params.verifier_gamma=1.0 \
     algorithm.adv_params.reward_model_gamma=1.0 \
-    algorithm.whiten=True \
+    algorithm.whiten=False \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
     trainer.val_before_train=False \
