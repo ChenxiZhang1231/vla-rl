@@ -625,16 +625,31 @@ class RobDataParallelPPOActor(BasePPOActor):
                 # breakpoint()
                 policy_loss = pg_loss
                 if self.config.use_kl_loss:
-                    # breakpoint()
                     ref_log_prob = data["ref_log_prob"]
                     # if self.config.kl_loss_type == 'outer_kl':
                     #     ref_logp_outer = data["ref_logp_outer"]
+                    if self.config.kl_loss_type == 'outer_kl':
+                        CH_idx = torch.arange(CH)[None, None, :].to('cuda')
+                        S_idx  = torch.arange(S)[None, :, None].to('cuda')
+                        s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
+                        c_fin  = (data['finish_step'] %  CH).view(B, 1, 1)
+
+                        mask_before = (S_idx <  s_fin).float()
+                        mask_equal  = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+                        mask_actions = mask_before.expand(B, S, CH) + mask_equal
+                        original_action_dim = 7
+                        valid_CH = mask_actions.sum(dim=-1)                 # [B,S]
+                        num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
+                    elif self.config.kl_loss_type == 'kl':
+                        num_elems = K
+                        
                     ref_log_prob = ref_log_prob.reshape(B, -1)
                     kld = core_algos.kl_penalty(
                         logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type, 
                         mean=mean, std=std, ref_mean=data.get("ref_mean", None), 
                         logp_outer=logp_outer,
                         ref_logp_outer=data.get("ref_logp_outer", None),
+                        num_elems=num_elems,
                     )
                     kld = kld.reshape(B, -1)
                     # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
@@ -668,8 +683,6 @@ class RobDataParallelPPOActor(BasePPOActor):
                 if n_has_grad_after == 0:
                     # breakpoint()
                     assert n_has_grad_after != 0, "n_has_grad_after == 0"
-                
-                
                 
                 loss_info['actor/pg_loss'] =  loss_info['actor/pg_loss'] + policy_loss.detach().item()
                 loss_info['actor/pg_clipfrac'] = loss_info['actor/pg_clipfrac'] + pg_clipfrac.detach().item()

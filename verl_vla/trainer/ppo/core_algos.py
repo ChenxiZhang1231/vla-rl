@@ -483,6 +483,7 @@ def kl_penalty(
     ref_mean=None,
     logp_outer=None,
     ref_logp_outer=None,
+    num_elems=10,
 ) -> torch.FloatTensor:
     """Compute KL divergence given logprob and ref_logprob.
     Copied from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1104
@@ -495,10 +496,10 @@ def kl_penalty(
 
     """
     if kl_penalty == "kl":
-        return logprob - ref_logprob
+        return (logprob - ref_logprob) / num_elems
 
     if kl_penalty == "outer_kl":
-        return logp_outer - ref_logp_outer
+        return (logp_outer - ref_logp_outer) / num_elems
 
     if kl_penalty == "abs":
         return (logprob - ref_logprob).abs()
