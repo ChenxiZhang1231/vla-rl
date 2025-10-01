@@ -362,7 +362,19 @@ def compute_rewards(token_level_scores, old_log_prob, ref_log_prob, kl_ratio):
     return token_level_scores - kl * kl_ratio
 
 
-def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio_high, clip_ratio_low, dlogp_clamp=False, dlogp_clamp_max=None, dlogp_clamp_min=None):
+def compute_policy_loss(
+    old_log_prob, 
+    log_prob, 
+    advantages, 
+    eos_mask, 
+    clip_ratio_high, 
+    clip_ratio_low, 
+    dlogp_clamp=False, 
+    dlogp_clamp_max=None, 
+    dlogp_clamp_min=None,
+    loss_type='kl',
+    data_shape=(1, 6, 10, 50, 7)
+):
     """Adapted from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1122
 
     Args:
@@ -390,11 +402,26 @@ def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio
         negative_approx_kl_clamp = negative_approx_kl.clamp(dlogp_clamp_min, dlogp_clamp_max)
     else:
         negative_approx_kl_clamp = negative_approx_kl
+        
     ratio = torch.exp(negative_approx_kl_clamp)
-    ppo_kl = verl_F.masked_mean(-negative_approx_kl, eos_mask)
+    ratio_clip = torch.clamp(ratio, 1.0 - clip_ratio_low, 1.0 + clip_ratio_high)
+    
+    if loss_type == 'outer_kl':
+        B, S, K, CH, D = data_shape
+        ratio_brd = ratio[..., None, None].repeat(1, 1, CH, D)
+        ratio_brd_clip = ratio_clip[..., None, None].repeat(1, 1, CH, D)
+        ratio_brd = ratio_brd.reshape(B, -1)
+        ratio_brd_clip = ratio_brd_clip.reshape(B, -1)
+        
+        negative_approx_kl = negative_approx_kl[..., None, None].repeat(1, 1, CH, D)
+        negative_approx_kl = negative_approx_kl.reshape(B, -1)
+    else:
+        ratio_brd = ratio
+        ratio_brd_clip = ratio_clip
 
-    pg_losses = -advantages * ratio
-    pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - clip_ratio_low, 1.0 + clip_ratio_high)
+    ppo_kl = verl_F.masked_mean(-negative_approx_kl, eos_mask)
+    pg_losses = -advantages * ratio_brd
+    pg_losses2 = -advantages * ratio_brd_clip
 
     pg_loss = verl_F.masked_mean(torch.max(pg_losses, pg_losses2), eos_mask)
     pg_clipfrac = verl_F.masked_mean(torch.gt(pg_losses2, pg_losses).float(), eos_mask)
@@ -447,7 +474,16 @@ def compute_value_loss(vpreds, returns, values, eos_mask, cliprange_value):
     return vf_loss, vf_clipfrac
 
 
-def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_penalty, mean=None, std=None, ref_mean=None) -> torch.FloatTensor:
+def kl_penalty(
+    logprob: torch.FloatTensor, 
+    ref_logprob: torch.FloatTensor, 
+    kl_penalty, 
+    mean=None, 
+    std=None, 
+    ref_mean=None,
+    logp_outer=None,
+    ref_logp_outer=None,
+) -> torch.FloatTensor:
     """Compute KL divergence given logprob and ref_logprob.
     Copied from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1104
 
@@ -460,6 +496,9 @@ def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_pe
     """
     if kl_penalty == "kl":
         return logprob - ref_logprob
+
+    if kl_penalty == "outer_kl":
+        return logp_outer - ref_logp_outer
 
     if kl_penalty == "abs":
         return (logprob - ref_logprob).abs()

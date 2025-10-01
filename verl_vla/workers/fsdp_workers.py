@@ -894,11 +894,15 @@ class RobActorRolloutRefWorker(Worker):
         data.meta_info['max_token_len'] = self.config.rollout.log_prob_max_token_len_per_gpu
         data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
         old_log_probs, old_mean, old_std, out_metric = self.actor.compute_log_prob(data=data)
+        # breakpoint()
+        logp_outer = out_metric['logp_outer']
+        
         output = DataProto.from_dict(
             tensors={
                 'old_log_probs': old_log_probs,
                 'old_mean': old_mean,
-                'old_std': old_std
+                'old_std': old_std,
+                'old_logp_outer': logp_outer
                 })
         for key, values in out_metric.items():
             output.batch[f'out_metric/{key}'] = values
@@ -951,11 +955,16 @@ class RobActorRolloutRefWorker(Worker):
         data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
         data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
         output = self.ref_policy.compute_log_prob(data=data)
+        # breakpoint()
+        
         if len(output) == 4:
             ref_log_prob, ref_mean, ref_std, out_metric = output
+            logp_outer = out_metric['logp_outer']
             output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
                                                 'ref_mean': ref_mean,
-                                                'ref_std': ref_std})
+                                                'ref_std': ref_std,
+                                                'ref_logp_outer': logp_outer,
+                                                })
         else:
             output = DataProto.from_dict(tensors={'ref_log_prob': output})
         output = output.to('cpu')

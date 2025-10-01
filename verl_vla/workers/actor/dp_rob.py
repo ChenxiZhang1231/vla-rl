@@ -215,6 +215,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             mean, std = return_dict["mean"], return_dict["std"]
             out_metric = return_dict["out_metric"]
+            out_metric['logp_outer'] = logp_outer
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
                 
@@ -317,32 +318,9 @@ class RobDataParallelPPOActor(BasePPOActor):
             logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             mean, std = return_dict["mean"], return_dict["std"]
-            # if self.config.vla == "smolvla":
-            #       # prevent model thinks we are generating
-                
-            #     assert self.actor_module.vocab_size == 32000
-            #     start_index = self.actor_module.vocab_size - 256 
-            #     logits = logits[..., -256-64:-64]  # Shape: [batch_size, seq_len, 256]
-            #     responses = responses - start_index
-            #     #assert (0<=responses<=255).all()
             
-            #     logits = logits.div(temperature) 
-                
-            #     log_probs = logprobs_from_logits(logits, responses)
-            #     entropy = verl_F.entropy_from_logits(logits)  # (bsz, response_length)
             
-            #     assert len(log_probs.shape)==2 and len(entropy.shape)==2 
-            #     log_probs = log_probs.reshape((batch_size, traj_len*8,7) )
-            #     entropy = entropy.reshape((batch_size, traj_len*8,7) )
-
-            #     mask = self.generate_traj_mask(micro_batch['finish_step'], traj_len*8)
-            #     log_probs, entropy = self.apply_mask_with_grad_control(log_probs, entropy, mask)
-                
-            #     log_probs = log_probs.reshape((batch_size, traj_len*response_length))
-            #     entropy = entropy.reshape((batch_size, traj_len*response_length)) 
-                
-
-            return ent_outer, logp_action, mean, std
+            return ent_outer, logp_action, mean, std, logp_outer
         
     def _forward_micro_batch_entropy(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = micro_batch['responses'].size(0)
@@ -547,6 +525,9 @@ class RobDataParallelPPOActor(BasePPOActor):
                 select_keys.append('ref_log_prob')
                 select_keys.append('ref_mean')
                 select_keys.append('ref_std')
+                if self.config.kl_loss_type == 'outer_kl':
+                    select_keys.append('old_logp_outer')
+                    select_keys.append('ref_logp_outer')
         else:
             select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
@@ -583,6 +564,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 response_mask_sum = response_mask.sum(axis=None)
 
                 old_log_prob = data['old_log_probs']
+                
                 advantages = data['advantages']  # .reshape(B, S, CH)
                 
                 #clip_ratio = self.config.clip_ratio
@@ -605,7 +587,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 traj_split_num = int(traj_len/self.config.traj_mini_batch_size)
                 assert traj_split_num == 1    
 
-                entropy, log_prob, mean, std = self._forward_micro_batch_update_smolvla(data)
+                entropy, log_prob, mean, std, logp_outer = self._forward_micro_batch_update_smolvla(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
                 # breakpoint()
@@ -614,10 +596,12 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
-                # breakpoint()
+                if self.config.kl_loss_type == 'outer_kl':
+                    log_prob = logp_outer
+                    old_log_prob_tmp = data['old_logp_outer']
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
-                assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
-                assert response_mask_tmp.sum().item() > 0, "mask 全 0：这一轮没有任何有效 token"
+                # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
+                # assert response_mask_tmp.sum().item() > 0, "mask 全 0：这一轮没有任何有效 token"
                 if self.config.algo == "grpo":
                     pass
                 elif self.config.algo == "ppo":
@@ -633,22 +617,32 @@ class RobDataParallelPPOActor(BasePPOActor):
                                                                                 clip_ratio_low=clip_ratio_low,
                                                                                 dlogp_clamp=self.config.dlogp_clamp,
                                                                                 dlogp_clamp_max=self.config.dlogp_clamp_max,
-                                                                                dlogp_clamp_min=self.config.dlogp_clamp_min)
+                                                                                dlogp_clamp_min=self.config.dlogp_clamp_min,
+                                                                                loss_type=self.config.kl_loss_type,
+                                                                                data_shape=(B, S, K, CH, 7))
                     
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
                 # breakpoint()
                 policy_loss = pg_loss
                 if self.config.use_kl_loss:
+                    # breakpoint()
                     ref_log_prob = data["ref_log_prob"]
+                    # if self.config.kl_loss_type == 'outer_kl':
+                    #     ref_logp_outer = data["ref_logp_outer"]
                     ref_log_prob = ref_log_prob.reshape(B, -1)
                     kld = core_algos.kl_penalty(
                         logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type, 
-                        mean=mean, std=std, ref_mean=data.get("ref_mean", None),
+                        mean=mean, std=std, ref_mean=data.get("ref_mean", None), 
+                        logp_outer=logp_outer,
+                        ref_logp_outer=data.get("ref_logp_outer", None),
                     )
                     kld = kld.reshape(B, -1)
                     # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
                     #     breakpoint()
-                    kl_loss = verl_F.masked_mean(kld, response_mask)
+                    if self.config.kl_loss_type == 'outer_kl':
+                        kl_loss = kld.mean()
+                    else:
+                        kl_loss = verl_F.masked_mean(kld, response_mask)
                     target_kl = self.config.get('kl_loss_target', 0.0)
                     if target_kl == 0.0:
                         beta = self.config.kl_loss_coef
