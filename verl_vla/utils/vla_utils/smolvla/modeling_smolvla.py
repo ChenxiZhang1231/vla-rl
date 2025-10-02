@@ -1725,6 +1725,7 @@ class VLAFlowMatching(nn.Module):
 
         # 3) Calibration
         err = (x_next_f[..., :7] - mean[..., :7]) / (std[..., :7] + 1e-12)
+        err = err[..., :self.config.n_action_steps, :]
         with torch.autocast('cuda', enabled=False):
             err = err.to(torch.float64)
             m = mask_elem[..., :7].expand_as(err).to(torch.float64)   # 显式扩成与 err 同形状
