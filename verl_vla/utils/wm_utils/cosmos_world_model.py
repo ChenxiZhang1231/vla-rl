@@ -145,6 +145,7 @@ class CosMosWorldModel(nn.Module):
             seed=self.config.get("seed", 0),
             num_sampling_step=self.config.get("num_sampling_step", 10),
             use_cuda_graphs=self.config.get("use_cuda_graphs", False),
+            history_list=None,
         )
         
         

@@ -710,6 +710,10 @@ class RayTrainer(object):
                         f"collected {len(valid_batch)} / {batch_size * n_samples} rollouts and each prompt has {n_samples} responses")
                 
                 # compute_logp
+                if valid_batch == []:
+                    # self.train_dataloader.start_new_epoch()
+                    break
+                    continue
                 if 'step_images' in valid_batch.batch:
                     del valid_batch.batch['step_images']
                 with Timer(name='compute_logp', text="{name}: {seconds:.1f} seconds") as timer:
