@@ -525,7 +525,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 select_keys.append('ref_log_prob')
                 select_keys.append('ref_mean')
                 select_keys.append('ref_std')
-                if self.config.kl_loss_type == 'outer_kl':
+                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     select_keys.append('old_logp_outer')
                     select_keys.append('ref_logp_outer')
         else:
@@ -596,7 +596,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
-                if self.config.kl_loss_type == 'outer_kl':
+                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     log_prob = logp_outer
                     old_log_prob_tmp = data['old_logp_outer']
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
@@ -628,7 +628,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     ref_log_prob = data["ref_log_prob"]
                     # if self.config.kl_loss_type == 'outer_kl':
                     #     ref_logp_outer = data["ref_logp_outer"]
-                    if self.config.kl_loss_type == 'outer_kl':
+                    if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                         CH_idx = torch.arange(CH)[None, None, :].to('cuda')
                         S_idx  = torch.arange(S)[None, :, None].to('cuda')
                         s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
@@ -642,27 +642,52 @@ class RobDataParallelPPOActor(BasePPOActor):
                         num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
                         # num_elems = 1
                     elif self.config.kl_loss_type == 'kl':
+                        valid_CH = None
+                        mask_actions = None
                         # num_elems = K
                         num_elems = 1
                         
                     ref_log_prob = ref_log_prob.reshape(B, -1)
                     kld = core_algos.kl_penalty(
                         logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type, 
-                        mean=mean, std=std, ref_mean=data.get("ref_mean", None), 
+                        mean=mean, std=std, ref_mean=data.get("ref_mean", None), ref_std=data.get("ref_std", None),
                         logp_outer=logp_outer,
                         ref_logp_outer=data.get("ref_logp_outer", None),
                         num_elems=num_elems,
                     )
+                    if self.config.kl_loss_type == "hkb_lite":
+                        kld, kld_inner = kld
+                    else:
+                        kld_inner = None
                     kld = kld.reshape(B, -1)
                     # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
                     #     breakpoint()
+                    breakpoint()
                     if self.config.kl_loss_type == 'outer_kl':
-                        kl_loss = kld.mean()
+                        # kl_loss = kld.mean()
+                        weights = num_elems                                         # [B,S]
+                        kl_loss = (kld * weights).sum() / weights.sum().clamp_min(1.0)
+                        
+                    elif self.config.kl_loss_type == 'hkb_lite':
+                        # kl_loss = kld.mean()
+                        weights = num_elems                                         # [B,S]
+                        kl_loss = (kld * weights).sum() / weights.sum().clamp_min(1.0)
+                        
+                        kld_inner = kld_inner * mask_actions[...,None].unsqueeze(2)
+                        kl_loss_inner = kld_inner.sum(dim=(-1,-2)) / (valid_CH[...,None]*7)  # B S K
+                        with torch.no_grad():
+                            gamma = 1.0
+                            w = torch.softmax(gamma * kl_loss_inner, dim=2)  # B S K
+                        kl_loss_inner = (w * kl_loss_inner).sum(dim=2)
+                        w_seg = valid_CH
+                        kl_loss_inner  = (kl_loss_inner * w_seg).sum() / w_seg.sum().clamp_min(1.0)
                     else:
                         kl_loss = verl_F.masked_mean(kld, response_mask)
+                        
                     target_kl = self.config.get('kl_loss_target', 0.0)
                     if target_kl == 0.0:
                         beta = self.config.kl_loss_coef
+                        beta_inner = self.config.kl_loss_coef_inner
                     else:
                         kl_now = kl_loss.detach().item() / self.gradient_accumulation
                         hi, lo = 1.5, 0.5
@@ -674,8 +699,16 @@ class RobDataParallelPPOActor(BasePPOActor):
                         beta = float(max(1e-8, min(beta, 1e4)))
                         
                     policy_loss = policy_loss + kl_loss * beta
+                    if self.config.kl_loss_type == 'hkb_lite':
+                        policy_loss = policy_loss + kl_loss_inner * beta_inner
+                        
                     loss_info["actor/kl_loss"] = kl_loss.detach().item() / self.gradient_accumulation
                     loss_info["actor/kl_coef"] = beta
+                    
+                    if self.config.kl_loss_type == 'hkb_lite':
+                        loss_info["actor/kl_loss_inner"] = kl_loss_inner.detach().item() / self.gradient_accumulation
+                        loss_info["actor/kl_coef_inner"] = beta_inner
+
                     
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
@@ -704,7 +737,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 breakpoint()
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()
-            # breakpoint()
+            breakpoint()
         self.actor_optimizer.zero_grad()
         torch.cuda.synchronize()
         torch.distributed.barrier()

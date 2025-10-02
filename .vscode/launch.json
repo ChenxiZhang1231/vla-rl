@@ -49,9 +49,13 @@
               // "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
               // "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
               // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
-              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-23_17-05-47/checkpoints/model/iter_000024000.pt",
-              "--input_video", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial/clips/agentview_ff9aba93-c770-476c-b669-dc64c3645a7e_clip_00001.mp4",
-              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial/metadata/agentview_ff9aba93-c770-476c-b669-dc64c3645a7e_clip_00001.npz",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/pretrain/predict2_video2world_2b_action_conditioned_pretraining_2025-09-30_05-39-26/checkpoints/model/iter_000008000.pt",
+              
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/clips/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/metadata/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.npz",
+              "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/clips/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.mp4",
+              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/metadata/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.npz",
+              
               "--num_conditional_frames", "1",
               "--chunk_size", "20",
               "--save_path", "output_debug/generated_video_action.mp4",
@@ -60,6 +64,8 @@
               "--disable_guardrail",
               "--disable_prompt_refiner",
               "--autoregressive",
+              "--use_black",
+              "--use_history",
           ],
           "env": {
               // "CUDA_VISIBLE_DEVICES": "0" 

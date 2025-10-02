@@ -406,7 +406,7 @@ def compute_policy_loss(
     ratio = torch.exp(negative_approx_kl_clamp)
     ratio_clip = torch.clamp(ratio, 1.0 - clip_ratio_low, 1.0 + clip_ratio_high)
     
-    if loss_type == 'outer_kl':
+    if loss_type in ['outer_kl', 'hkb_lite']:
         B, S, K, CH, D = data_shape
         ratio_brd = ratio[..., None, None].repeat(1, 1, CH, D)
         ratio_brd_clip = ratio_clip[..., None, None].repeat(1, 1, CH, D)
@@ -420,6 +420,7 @@ def compute_policy_loss(
         perdim_scale = (1.0 / (K * valid_CH * D))            # [B,S]
         perdim_scale = perdim_scale[..., None, None].repeat(1, 1, CH, 7).reshape(B, -1)  # [B, S*CH*D]
         advantages = advantages * perdim_scale
+        # advantages = advantages / 10.0
         
     else:
         ratio_brd = ratio
@@ -487,6 +488,7 @@ def kl_penalty(
     mean=None, 
     std=None, 
     ref_mean=None,
+    ref_std=None,
     logp_outer=None,
     ref_logp_outer=None,
     num_elems=10,
@@ -506,6 +508,14 @@ def kl_penalty(
 
     if kl_penalty == "outer_kl":
         return (logp_outer - ref_logp_outer) / num_elems
+
+    if kl_penalty == "hkb_lite":
+        seg_kl = (logp_outer - ref_logp_outer) / num_elems
+        inner_kl = (torch.log(ref_std / std)
+                    + (std ** 2 + (mean - ref_mean) ** 2) / (2 * ref_std ** 2)
+                    - 0.5)   
+        return (seg_kl, inner_kl)
+        
 
     if kl_penalty == "abs":
         return (logprob - ref_logprob).abs()

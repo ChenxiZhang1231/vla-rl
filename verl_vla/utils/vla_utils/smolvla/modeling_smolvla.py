@@ -1681,6 +1681,7 @@ class VLAFlowMatching(nn.Module):
 
         mean = mean[..., :original_action_dim]
         std_dev_t = std_dev_t[..., :original_action_dim]
+        std = std[..., :original_action_dim]
         out_metric = self.summarize_logprob_metrics(
             logp_step, logp_outer, logp_joint,
             mean, std, x_next_f, mask_actions, mask_elem,
@@ -1695,7 +1696,8 @@ class VLAFlowMatching(nn.Module):
             ent_outer, 
             ent_joint, 
             mean, 
-            std_dev_t,
+            # std_dev_t,
+            std,
             out_metric,
         )
     
