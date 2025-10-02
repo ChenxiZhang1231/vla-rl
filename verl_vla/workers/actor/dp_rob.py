@@ -623,90 +623,98 @@ class RobDataParallelPPOActor(BasePPOActor):
                     
                 response_mask_tmp_sum = response_mask_tmp.sum(axis=None)
                 # breakpoint()
+                device = log_prob.device
+                D = 7
                 policy_loss = pg_loss
                 if self.config.use_kl_loss:
-                    ref_log_prob = data["ref_log_prob"]
-                    # if self.config.kl_loss_type == 'outer_kl':
-                    #     ref_logp_outer = data["ref_logp_outer"]
-                    if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
-                        CH_idx = torch.arange(CH)[None, None, :].to('cuda')
-                        S_idx  = torch.arange(S)[None, :, None].to('cuda')
+                    kl_type = self.config.kl_loss_type
+                    # ---- 覆盖率（只在 outer/hkb 下需要）----
+                    if kl_type in ['outer_kl', 'hkb_lite']:
+                        CH_idx = torch.arange(CH, device=device)[None, None, :]
+                        S_idx  = torch.arange(S,  device=device)[None, :, None]
                         s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
                         c_fin  = (data['finish_step'] %  CH).view(B, 1, 1)
 
-                        mask_before = (S_idx <  s_fin).float()
-                        mask_equal  = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
-                        mask_actions = mask_before.expand(B, S, CH) + mask_equal
-                        original_action_dim = 7
-                        valid_CH = mask_actions.sum(dim=-1)                 # [B,S]
-                        num_elems = (valid_CH * original_action_dim * K).clamp_min(1)
-                        # num_elems = 1
-                    elif self.config.kl_loss_type == 'kl':
-                        valid_CH = None
+                        mask_before   = (S_idx < s_fin).float()
+                        mask_equal    = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+                        mask_actions  = mask_before.expand(B, S, CH) + mask_equal          # [B,S,CH]
+                        valid_CH      = mask_actions.sum(dim=-1).clamp_min(0.0)            # [B,S]
+                        elem_count    = (valid_CH * K * D).clamp_min(1.0)                  # [B,S]
+                        seg_weight    = valid_CH                                           # [B,S] 用于 HKB 段级聚合
+                    else:
                         mask_actions = None
-                        # num_elems = K
-                        num_elems = 1
-                        
-                    ref_log_prob = ref_log_prob.reshape(B, -1)
-                    kld = core_algos.kl_penalty(
-                        logprob=log_prob, ref_logprob=ref_log_prob, kl_penalty=self.config.kl_loss_type, 
-                        mean=mean, std=std, ref_mean=data.get("ref_mean", None), ref_std=data.get("ref_std", None),
-                        logp_outer=logp_outer,
-                        ref_logp_outer=data.get("ref_logp_outer", None),
-                        num_elems=num_elems,
+                        valid_CH     = None
+                        elem_count   = None  # 不用
+
+                    # ---- 计算 KL（外层 + 可选 HKB 内层）----
+                    # core_algos.kl_penalty 约定返回：
+                    # - outer_kl / hkb_lite:  KL_seg_perdim: [B,S], 以及（hkb_lite 时）KL_k_elem: [B,S,K,CH,D]
+                    # - kl:                  元素/Token级 KL（你原有的分支，用 response_mask）
+                    KL_out = core_algos.kl_penalty(
+                        logprob=log_prob.reshape(B, -1),
+                        ref_logprob=data["ref_log_prob"].reshape(B, -1),
+                        kl_penalty=kl_type,
+                        mean=mean, std=std,                               # std 必须是 σ_t * sqrt(|Δt|)
+                        ref_mean=data.get("ref_mean", None),
+                        ref_std=data.get("ref_std", None),
+                        logp_outer=logp_outer,                            # [B,S]
+                        ref_logp_outer=data.get("ref_logp_outer", None),  # [B,S]
+                        num_elems=elem_count,                             # [B,S] 仅供 outer/hkb 使用
                     )
-                    if self.config.kl_loss_type == "hkb_lite":
-                        kld, kld_inner = kld
+
+                    if kl_type == 'hkb_lite':
+                        KL_seg_perdim, KL_k_elem = KL_out                 # shapes: [B,S], [B,S,K,CH,D]
                     else:
-                        kld_inner = None
-                    kld = kld.reshape(B, -1)
-                    # if max(abs(kld.max().item()), abs(kld.min().item())) != 0.0:
-                    #     breakpoint()
-                    breakpoint()
-                    if self.config.kl_loss_type == 'outer_kl':
-                        # kl_loss = kld.mean()
-                        weights = num_elems                                         # [B,S]
-                        kl_loss = (kld * weights).sum() / weights.sum().clamp_min(1.0)
-                        
-                    elif self.config.kl_loss_type == 'hkb_lite':
-                        # kl_loss = kld.mean()
-                        weights = num_elems                                         # [B,S]
-                        kl_loss = (kld * weights).sum() / weights.sum().clamp_min(1.0)
-                        
-                        kld_inner = kld_inner * mask_actions[...,None].unsqueeze(2)
-                        kl_loss_inner = kld_inner.sum(dim=(-1,-2)) / (valid_CH[...,None]*7)  # B S K
+                        KL_seg_perdim = KL_out
+                        KL_k_elem = None
+
+                    # ---- 段级 outer-KL 的覆盖率加权聚合 ----
+                    if kl_type in ['outer_kl', 'hkb_lite']:
+                        # KL_seg_perdim 是 [B,S] 的“每维”outer-KL；按元素数加权：
+                        L_kl_seg = (KL_seg_perdim * elem_count).sum() / elem_count.sum().clamp_min(1.0)
+                    else:
+                        # 你原来的 token-level 分支
+                        L_kl_seg = verl_F.masked_mean(KL_seg_perdim.reshape(B, -1), response_mask)
+
+                    # ---- HKB-Lite：逐 k 的方向塑形（小权重）----
+                    if kl_type == 'hkb_lite':
+                        # 逐步每维 KL：对 CH,D 做平均，mask CH
+                        KL_k_perdim = (KL_k_elem * mask_actions[..., None].unsqueeze(2)).sum(dim=(-1, -2))  # [B,S,K]
+                        KL_k_perdim = KL_k_perdim / (valid_CH[..., None] * D).clamp_min(1.0)
+
                         with torch.no_grad():
-                            gamma = 1.0
-                            w = torch.softmax(gamma * kl_loss_inner, dim=2)  # B S K
-                        kl_loss_inner = (w * kl_loss_inner).sum(dim=2)
-                        w_seg = valid_CH
-                        kl_loss_inner  = (kl_loss_inner * w_seg).sum() / w_seg.sum().clamp_min(1.0)
-                    else:
-                        kl_loss = verl_F.masked_mean(kld, response_mask)
-                        
+                            gamma = getattr(self.config, 'hkb_gamma', 1.0)
+                            w_k = torch.softmax(gamma * KL_k_perdim, dim=2)                 # [B,S,K]
+                            # 可选：混一点均匀避免塌缩
+                            # alpha = 0.7
+                            # w_k = (1 - alpha) * (1.0 / K) + alpha * w_k
+
+                        # 段内加权 → 段级值；再按覆盖率聚合到 batch
+                        L_hkb_seg = (w_k * KL_k_perdim).sum(dim=2)                           # [B,S]
+                        L_hkb     = (L_hkb_seg * seg_weight).sum() / seg_weight.sum().clamp_min(1.0)
+
+                    # ---- KL 系数（outer 自适应可选；inner 固定为 outer 的 5~10%）
                     target_kl = self.config.get('kl_loss_target', 0.0)
-                    if target_kl == 0.0:
-                        beta = self.config.kl_loss_coef
-                        beta_inner = self.config.kl_loss_coef_inner
-                    else:
-                        kl_now = kl_loss.detach().item() / self.gradient_accumulation
+                    beta       = self.config.kl_loss_coef
+                    beta_inner = self.config.kl_loss_coef_inner
+
+                    if target_kl > 0.0:  # 简单自适应 outer
+                        kl_now = (L_kl_seg.detach().item()) / self.gradient_accumulation
                         hi, lo = 1.5, 0.5
-                        beta = self.config.kl_loss_coef
-                        if kl_now > hi * target_kl:
-                            beta *= 1.5
-                        elif kl_now < lo * target_kl:
-                            beta /= 1.5
+                        if   kl_now > hi * target_kl: beta *= 1.5
+                        elif kl_now < lo * target_kl: beta /= 1.5
                         beta = float(max(1e-8, min(beta, 1e4)))
-                        
-                    policy_loss = policy_loss + kl_loss * beta
-                    if self.config.kl_loss_type == 'hkb_lite':
-                        policy_loss = policy_loss + kl_loss_inner * beta_inner
-                        
-                    loss_info["actor/kl_loss"] = kl_loss.detach().item() / self.gradient_accumulation
+
+                    # ---- 汇总到 policy loss ----
+                    policy_loss = policy_loss + beta * L_kl_seg
+                    if kl_type == 'hkb_lite':
+                        policy_loss = policy_loss + beta_inner * L_hkb
+
+                    # ---- 日志 ----
+                    loss_info["actor/kl_loss"] = (L_kl_seg.detach().item() / self.gradient_accumulation)
                     loss_info["actor/kl_coef"] = beta
-                    
-                    if self.config.kl_loss_type == 'hkb_lite':
-                        loss_info["actor/kl_loss_inner"] = kl_loss_inner.detach().item() / self.gradient_accumulation
+                    if kl_type == 'hkb_lite':
+                        loss_info["actor/kl_loss_inner"] = (L_hkb.detach().item() / self.gradient_accumulation)
                         loss_info["actor/kl_coef_inner"] = beta_inner
 
                     
@@ -737,7 +745,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 breakpoint()
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()
-            breakpoint()
+            # breakpoint()
         self.actor_optimizer.zero_grad()
         torch.cuda.synchronize()
         torch.distributed.barrier()
