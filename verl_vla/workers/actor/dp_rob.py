@@ -680,11 +680,17 @@ class RobDataParallelPPOActor(BasePPOActor):
                     if kl_type == 'hkb_lite':
                         # 逐步每维 KL：对 CH,D 做平均，mask CH
                         KL_k_perdim = (KL_k_elem * mask_actions[..., None].unsqueeze(2)).sum(dim=(-1, -2))  # [B,S,K]
+                        KL_k_perdim = torch.nan_to_num(KL_k_perdim, 0.0, 0.0, 0.0)
                         KL_k_perdim = KL_k_perdim / (valid_CH[..., None] * D).clamp_min(1.0)
+                        KL_k_perdim = torch.nan_to_num(KL_k_perdim, 0.0, 0.0, 0.0)
 
                         with torch.no_grad():
                             gamma = getattr(self.config, 'hkb_gamma', 1.0)
-                            w_k = torch.softmax(gamma * KL_k_perdim, dim=2)                 # [B,S,K]
+                            x = (gamma * KL_k_perdim).to(torch.float32)
+                            x = torch.clamp(x, -50.0, 50.0)
+                            x = torch.nan_to_num(x, 0.0, 0.0, 0.0)
+                            w_k = torch.softmax(x, dim=2)
+                            # w_k = torch.softmax(gamma * KL_k_perdim, dim=2)                 # [B,S,K]
                             # 可选：混一点均匀避免塌缩
                             # alpha = 0.7
                             # w_k = (1 - alpha) * (1.0 / K) + alpha * w_k

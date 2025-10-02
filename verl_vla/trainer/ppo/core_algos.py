@@ -510,10 +510,14 @@ def kl_penalty(
         return (logp_outer - ref_logp_outer) / num_elems
 
     if kl_penalty == "hkb_lite":
+        eps = 1e-6
+        std  = std.float().clamp_min(eps)
+        ref_std = (ref_std if ref_std is not None else std).float().clamp_min(eps)
         seg_kl = (logp_outer - ref_logp_outer) / num_elems
         inner_kl = (torch.log(ref_std / std)
                     + (std ** 2 + (mean - ref_mean) ** 2) / (2 * ref_std ** 2)
                     - 0.5)   
+        inner_kl = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
         return (seg_kl, inner_kl)
         
 
