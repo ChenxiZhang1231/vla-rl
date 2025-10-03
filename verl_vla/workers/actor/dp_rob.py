@@ -602,9 +602,12 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
+                log_prob_action = log_prob.detach().clone()
+                ref_log_prob = data["ref_log_prob"].reshape(B, -1)
                 if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     log_prob = logp_outer
                     old_log_prob_tmp = data['old_logp_outer']
+                    log_prob_action = logp_outer
                 elif self.config.kl_loss_type in ['dwc_pg']:
 
                     device = log_prob.device
@@ -694,8 +697,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                     # - outer_kl / hkb_lite:  KL_seg_perdim: [B,S], 以及（hkb_lite 时）KL_k_elem: [B,S,K,CH,D]
                     # - kl:                  元素/Token级 KL（你原有的分支，用 response_mask）
                     KL_out = core_algos.kl_penalty(
-                        logprob=log_prob.reshape(B, -1),
-                        ref_logprob=data["ref_log_prob"].reshape(B, -1),
+                        logprob=log_prob_action.reshape(B, -1),
+                        ref_logprob=ref_log_prob,
                         kl_penalty=kl_type,
                         mean=mean, std=std,                               # std 必须是 σ_t * sqrt(|Δt|)
                         ref_mean=data.get("ref_mean", None),
