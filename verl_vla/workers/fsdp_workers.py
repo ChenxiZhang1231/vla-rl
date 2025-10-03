@@ -896,13 +896,15 @@ class RobActorRolloutRefWorker(Worker):
         old_log_probs, old_mean, old_std, out_metric = self.actor.compute_log_prob(data=data)
         # breakpoint()
         logp_outer = out_metric['logp_outer']
+        logp_elem = out_metric['logp_elem']
         
         output = DataProto.from_dict(
             tensors={
                 'old_log_probs': old_log_probs,
                 'old_mean': old_mean,
                 'old_std': old_std,
-                'old_logp_outer': logp_outer
+                'old_logp_outer': logp_outer,
+                'old_logp_elem': logp_elem
                 })
         for key, values in out_metric.items():
             output.batch[f'out_metric/{key}'] = values
@@ -960,10 +962,12 @@ class RobActorRolloutRefWorker(Worker):
         if len(output) == 4:
             ref_log_prob, ref_mean, ref_std, out_metric = output
             logp_outer = out_metric['logp_outer']
+            logp_elem = out_metric['logp_elem']
             output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
                                                 'ref_mean': ref_mean,
                                                 'ref_std': ref_std,
                                                 'ref_logp_outer': logp_outer,
+                                                'ref_logp_elem': logp_elem,
                                                 })
         else:
             output = DataProto.from_dict(tensors={'ref_log_prob': output})

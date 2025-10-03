@@ -211,11 +211,13 @@ class RobDataParallelPPOActor(BasePPOActor):
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
         # with torch.autocast(device_type='cuda', dtype=torch.float32):
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk(micro_batch, recompute_log_prob=True)
-            logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
+            logp_action, logp_step, logp_outer, logp_joint, logp_elem = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"], return_dict["logp_elem"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             mean, std = return_dict["mean"], return_dict["std"]
             out_metric = return_dict["out_metric"]
             out_metric['logp_outer'] = logp_outer
+            out_metric['logp_elem'] = logp_elem
+            
             # if self.config.vla == "smolvla":
             #       # prevent model thinks we are generating
                 
@@ -315,12 +317,12 @@ class RobDataParallelPPOActor(BasePPOActor):
         # with torch.autocast(device_type='cuda', dtype=torch.float32):
             # breakpoint()
             actions, lang_tokens, lang_masks, return_dict = self.actor_module.predict_action_chunk_update(micro_batch, recompute_log_prob=True)
-            logp_action, logp_step, logp_outer, logp_joint = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"]
+            logp_action, logp_step, logp_outer, logp_joint, logp_elem = return_dict["logp_action"], return_dict["logp_step"], return_dict["logp_outer"], return_dict["logp_joint"], return_dict["logp_elem"]
             ent_step, ent_outer, ent_joint = return_dict["ent_step"], return_dict["ent_outer"], return_dict["ent_joint"]
             mean, std = return_dict["mean"], return_dict["std"]
             
             
-            return ent_outer, logp_action, mean, std, logp_outer
+            return ent_outer, logp_action, mean, std, logp_outer, logp_elem
         
     def _forward_micro_batch_entropy(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = micro_batch['responses'].size(0)
@@ -528,6 +530,10 @@ class RobDataParallelPPOActor(BasePPOActor):
                 if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     select_keys.append('old_logp_outer')
                     select_keys.append('ref_logp_outer')
+                if self.config.kl_loss_type in ['dwc_pg']:
+                    select_keys.append('old_logp_elem')
+                    select_keys.append('ref_logp_elem')
+                    
         else:
             select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages', "finish_step"]
         batch = data.select(batch_keys=select_keys).batch
@@ -587,7 +593,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 traj_split_num = int(traj_len/self.config.traj_mini_batch_size)
                 assert traj_split_num == 1    
 
-                entropy, log_prob, mean, std, logp_outer = self._forward_micro_batch_update_smolvla(data)
+                entropy, log_prob, mean, std, logp_outer, logp_elem = self._forward_micro_batch_update_smolvla(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
                 # breakpoint()
@@ -596,9 +602,48 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
+                breakpoint()
                 if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     log_prob = logp_outer
                     old_log_prob_tmp = data['old_logp_outer']
+                elif self.config.kl_loss_type in ['dwc-pg']:
+
+                    device = log_prob.device
+                    D = 7
+                    CH_idx = torch.arange(CH, device=device)[None, None, :]
+                    S_idx  = torch.arange(S,  device=device)[None, :, None]
+                    s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
+                    c_fin  = (data['finish_step'] %  CH).view(B, 1, 1)
+
+                    mask_before   = (S_idx < s_fin).float()
+                    mask_equal    = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+                    mask_actions  = mask_before.expand(B, S, CH) + mask_equal          # [B,S,CH]
+                    valid_CH      = mask_actions.sum(dim=-1).clamp_min(0.0)            # [B,S]
+                    elem_count    = (valid_CH * K * D).clamp_min(1.0)                  # [B,S]
+                    seg_weight    = valid_CH    
+
+                    eps = 1e-6
+                    std  = std.float().clamp_min(eps)
+                    ref_std = data['ref_std'].float().clamp_min(eps)
+                    ref_mean = data['ref_mean']
+                    inner_kl = (torch.log(ref_std / std)
+                                + (std ** 2 + (mean - ref_mean) ** 2) / (2 * ref_std ** 2)
+                                - 0.5)   
+
+                    inner_kl = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
+                    inner_kl = (inner_kl * mask_actions[..., None].unsqueeze(2)).sum(dim=(-1, -2))  # [B,S,K]
+                    inner_kl = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
+                    inner_kl = inner_kl / (valid_CH[..., None] * D).clamp_min(1.0)
+                    delta = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
+                    with torch.no_grad():
+                        K = 10
+                        gamma = 1.0
+                        w = torch.softmax(gamma * delta, dim=2)      # [B,S,K]
+                        c = K * w                                    # sum_k c = K（尺度与等权一致）
+                    c = c[..., None, None].repeat(1, 1, 1, CH, D)
+                    log_prob = (c * logp_elem).sum(dim=2).reshape(B, -1)
+                    old_log_prob_tmp = (c * data['old_logp_elem']).sum(dim=2).reshape(B, -1)
+                    
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
                 # assert response_mask_tmp.sum().item() > 0, "mask 全 0：这一轮没有任何有效 token"
