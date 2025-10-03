@@ -644,7 +644,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     else:
                         mask_actions = None
                         valid_CH     = None
-                        elem_count   = None  # 不用
+                        elem_count   = 1
 
                     # ---- 计算 KL（外层 + 可选 HKB 内层）----
                     # core_algos.kl_penalty 约定返回：
