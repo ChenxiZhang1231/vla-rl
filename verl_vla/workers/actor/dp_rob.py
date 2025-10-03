@@ -602,11 +602,10 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
-                breakpoint()
                 if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     log_prob = logp_outer
                     old_log_prob_tmp = data['old_logp_outer']
-                elif self.config.kl_loss_type in ['dwc-pg']:
+                elif self.config.kl_loss_type in ['dwc_pg']:
 
                     device = log_prob.device
                     D = 7
@@ -626,20 +625,19 @@ class RobDataParallelPPOActor(BasePPOActor):
                     std  = std.float().clamp_min(eps)
                     ref_std = data['ref_std'].float().clamp_min(eps)
                     ref_mean = data['ref_mean']
-                    inner_kl = (torch.log(ref_std / std)
+                    kl_elem = (torch.log(ref_std / std)
                                 + (std ** 2 + (mean - ref_mean) ** 2) / (2 * ref_std ** 2)
                                 - 0.5)   
 
-                    inner_kl = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
-                    inner_kl = (inner_kl * mask_actions[..., None].unsqueeze(2)).sum(dim=(-1, -2))  # [B,S,K]
-                    inner_kl = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
-                    inner_kl = inner_kl / (valid_CH[..., None] * D).clamp_min(1.0)
-                    delta = torch.nan_to_num(inner_kl, 0.0, 0.0, 0.0)
+                    kl_elem = torch.nan_to_num(kl_elem, 0.0, 0.0, 0.0)
+                    kl_elem = (kl_elem * mask_actions[..., None].unsqueeze(2)).sum(dim=(-1, -2))  # [B,S,K]
+                    kl_elem = torch.nan_to_num(kl_elem, 0.0, 0.0, 0.0)
+                    KL_k_perdim = kl_elem / (valid_CH[..., None] * D).clamp_min(1.0)
+                    KL_k_perdim = torch.nan_to_num(KL_k_perdim, 0.0, 0.0, 0.0)
                     with torch.no_grad():
-                        K = 10
                         gamma = 1.0
-                        w = torch.softmax(gamma * delta, dim=2)      # [B,S,K]
-                        c = K * w                                    # sum_k c = K（尺度与等权一致）
+                        w = torch.softmax(gamma * KL_k_perdim, dim=2)      # [B,S,K]
+                        c = K * w 
                     c = c[..., None, None].repeat(1, 1, 1, CH, D)
                     log_prob = (c * logp_elem).sum(dim=2).reshape(B, -1)
                     old_log_prob_tmp = (c * data['old_logp_elem']).sum(dim=2).reshape(B, -1)
@@ -767,6 +765,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                     if kl_type == 'hkb_lite':
                         loss_info["actor/kl_loss_inner"] = (L_hkb.detach().item() / self.gradient_accumulation)
                         loss_info["actor/kl_coef_inner"] = beta_inner
+                    if kl_type == 'dwc_pg':
+                        loss_info["actor/dwc_pg_c"] = c.mean().item()
 
                     
                 loss = policy_loss / self.gradient_accumulation
