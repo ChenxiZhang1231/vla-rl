@@ -2571,7 +2571,7 @@ class RobHFRollout(BaseRollout):
         initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
         video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
         full_trajectory_video = np.concatenate(video_chunks, axis=1)
-        
+        # breakpoint()
         # self.world_model.save_trajectory_grid_image(
         #     full_trajectory_video, 
         #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
