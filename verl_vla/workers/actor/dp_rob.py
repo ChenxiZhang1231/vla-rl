@@ -602,7 +602,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 advantages_tmp = advantages.reshape(B, -1)
                 response_mask_tmp = response_mask
                 log_prob = log_prob.reshape(B, -1)
-                log_prob_action = log_prob.detach().clone()
+                log_prob_action = log_prob
                 ref_log_prob = data["ref_log_prob"].reshape(B, -1)
                 if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
                     log_prob = logp_outer
@@ -644,6 +644,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     c = c[..., None, None].repeat(1, 1, 1, CH, D)
                     log_prob = (c * logp_elem).sum(dim=2).reshape(B, -1)
                     old_log_prob_tmp = (c * data['old_logp_elem']).sum(dim=2).reshape(B, -1)
+                    log_prob_action = logp_elem.sum(dim=2).reshape(B, -1)
                     
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
