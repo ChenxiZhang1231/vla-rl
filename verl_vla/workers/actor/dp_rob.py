@@ -637,11 +637,33 @@ class RobDataParallelPPOActor(BasePPOActor):
                     kl_elem = torch.nan_to_num(kl_elem, 0.0, 0.0, 0.0)
                     KL_k_perdim = kl_elem / (valid_CH[..., None] * D).clamp_min(1.0)
                     KL_k_perdim = torch.nan_to_num(KL_k_perdim, 0.0, 0.0, 0.0)
+                    
+                    # breakpoint()
+                    delta = KL_k_perdim
+                    delta = (delta - delta.mean(dim=2, keepdim=True)) / (delta.std(dim=2, keepdim=True) + 1e-6)
                     with torch.no_grad():
-                        gamma = 1.0
-                        w = torch.softmax(gamma * KL_k_perdim, dim=2)      # [B,S,K]
-                        c = K * w 
-                    c = c[..., None, None].repeat(1, 1, 1, CH, D)
+                        K_eff  = logp_elem.size(2)
+                        gamma  = 0.8
+                        x      = (gamma * delta).float().clamp(-50, 50)
+                        w      = torch.softmax(x, dim=2)
+                        w      = 0.7 * w + 0.3 * (1.0 / K_eff)
+                        
+                        c_max = 2.0                                      # 别设成 1；建议 1.5~3.0
+                        c_k   = K_eff * w                                # [B,S,K]
+
+                        for _ in range(2):                               # 2~3 次足够
+                            over   = c_k > c_max
+                            excess = (c_k - c_max).clamp_min(0).sum(-1, keepdim=True)     # 多出来的质量
+                            c_k    = torch.where(over, c_max, c_k)                         # 截到上界
+                            free   = ~over
+                            denom  = free.sum(-1, keepdim=True).clamp_min(1)
+                            # 把“多出来的质量”均匀回流到尚未触顶的分量
+                            c_k    = c_k + free.float() * (excess / denom)
+                        # 保险：总和轻微偏差时按比例微调（不会破坏上界）
+                        sum_k = c_k.sum(-1, keepdim=True).clamp_min(1e-6)
+                        c_k   = c_k * (K_eff / sum_k).clamp_min(0.0)
+                        c     = c_k[..., None, None].expand(-1, -1, -1, CH, D)
+                        
                     log_prob = (c * logp_elem).sum(dim=2).reshape(B, -1)
                     old_log_prob_tmp = (c * data['old_logp_elem']).sum(dim=2).reshape(B, -1)
                     log_prob_action = logp_elem.sum(dim=2).reshape(B, -1)
