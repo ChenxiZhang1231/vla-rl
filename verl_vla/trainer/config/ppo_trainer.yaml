@@ -47,6 +47,7 @@ actor_rollout_ref:
     kl_loss_coef_seg: 0.0
     kl_loss_target: 0.0
     kl_loss_type: kl
+    k_baseline_eta: 0.1
     algo: grpo
     vla: ${actor_rollout_ref.model.vla}
     action_token_len: ${actor_rollout_ref.model.action_token_len}

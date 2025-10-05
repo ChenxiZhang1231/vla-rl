@@ -527,10 +527,10 @@ class RobDataParallelPPOActor(BasePPOActor):
                 select_keys.append('ref_log_prob')
                 select_keys.append('ref_mean')
                 select_keys.append('ref_std')
-                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite', 'kl_seg']:
+                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite', 'kl_seg', 'kl_kwise']:
                     select_keys.append('old_logp_outer')
                     select_keys.append('ref_logp_outer')
-                if self.config.kl_loss_type in ['dwc_pg']:
+                # if self.config.kl_loss_type in ['dwc_pg']:
                     select_keys.append('old_logp_elem')
                     select_keys.append('ref_logp_elem')
                     
@@ -667,7 +667,51 @@ class RobDataParallelPPOActor(BasePPOActor):
                     log_prob = (c * logp_elem).sum(dim=2).reshape(B, -1)
                     old_log_prob_tmp = (c * data['old_logp_elem']).sum(dim=2).reshape(B, -1)
                     log_prob_action = logp_elem.sum(dim=2).reshape(B, -1)
+                
+                if self.config.kl_loss_type in ['kl_kwise']:
+                    # breakpoint()
+                    eps = 1e-6
+                    B, S, K, CH, D = logp_elem.shape
+                    device = log_prob.device
+                    D = 7
+                    CH_idx = torch.arange(CH, device=device)[None, None, :]
+                    S_idx  = torch.arange(S,  device=device)[None, :, None]
+                    s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
+                    c_fin  = (data['finish_step'] %  CH).view(B, 1, 1)
+
+                    mask_before   = (S_idx < s_fin).float()
+                    mask_equal    = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+                    mask_actions  = mask_before.expand(B, S, CH) + mask_equal          # [B,S,CH]
+                    # 有效元素掩码，扩到 [B,S,K,CH,D]
+                    mask_elem = mask_actions[:, :, None, :, None].expand(B, S, K, CH, D).float()
+
+                    # 逐 k 的 “噪声强度” 代理：E_{CH,D}[ 1/std^2 ]，只看有效 CH、维度
+                    std32  = std.to(torch.float32).clamp_min(eps)
+                    inv_var = 1.0 / (std32 ** 2)                        # [B,S,K,CH,D]
+                    g_raw = (inv_var * mask_elem).sum(dim=(-1, -2))                    # [B,S,K]
+                    valid_CH = mask_actions.sum(dim=-1).clamp_min(1.0)               # [B,S]
+                    g_raw = g_raw / (valid_CH[..., None] * D).clamp_min(1.0)             # [B,S,K]
+                    g_raw = torch.nan_to_num(g_raw, 0.0, 0.0, 0.0)
+                    g_z   = (g_raw - g_raw.mean(dim=2, keepdim=True)) / (g_raw.std(dim=2, keepdim=True) + eps)
+                    gamma = 0.5
+                    g_k   = torch.tanh(gamma * g_z)    
+
+                    # 基线：b_k = η_b * g_k  （η_b ∈ {0.1, 0.3, 1.0} 试三档）
+                    eta_b = self.config.k_baseline_eta   # 0.1 / 0.3 / 1.0
+                    b_k = (eta_b * g_k).detach()  
+                    b_k = b_k[..., None].expand(-1, -1, -1, CH)
+                    b_k = b_k.reshape(B, -1)
                     
+                    log_prob = logp_elem.sum(dim=-1).reshape(B, -1)   #  [B, S*K*CH]
+                    old_log_prob_tmp = data['old_logp_elem'].sum(dim=-1).reshape(B, -1)
+                    
+                    response_mask_tmp = mask_actions[:, :, None, :].expand(B,S,K,CH).reshape(B, -1).bool()
+                    advantages_tmp = advantages_tmp.reshape(B, S, CH, D).sum(dim=-1)
+                    advantages_tmp = advantages_tmp[:, :, None, :].expand(B,S,K,CH).reshape(B, -1)
+                    advantages_tmp = advantages_tmp - b_k
+                else:
+                    b_k = None
+                       
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
                 # assert response_mask_tmp.sum().item() > 0, "mask 全 0：这一轮没有任何有效 token"
