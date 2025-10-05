@@ -504,10 +504,13 @@ def kl_penalty(
 
     """
     if kl_penalty in ["kl", "dwc_pg"]:
-        return (logprob - ref_logprob) / num_elems
+        return (logprob - ref_logprob) / 1
 
     if kl_penalty == "outer_kl":
         return (logp_outer - ref_logp_outer) / num_elems
+
+    if kl_penalty == "kl_seg":
+        return (logprob - ref_logprob), (logp_outer - ref_logp_outer) / num_elems
 
     if kl_penalty == "hkb_lite":
         eps = 1e-6

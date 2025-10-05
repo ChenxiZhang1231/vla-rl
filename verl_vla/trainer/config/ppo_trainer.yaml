@@ -44,6 +44,7 @@ actor_rollout_ref:
     dlogp_clamp_min: None
     kl_loss_coef: 0.0
     kl_loss_coef_inner: 0.0
+    kl_loss_coef_seg: 0.0
     kl_loss_target: 0.0
     kl_loss_type: kl
     algo: grpo

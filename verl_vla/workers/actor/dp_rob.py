@@ -527,7 +527,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 select_keys.append('ref_log_prob')
                 select_keys.append('ref_mean')
                 select_keys.append('ref_std')
-                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite']:
+                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite', 'kl_seg']:
                     select_keys.append('old_logp_outer')
                     select_keys.append('ref_logp_outer')
                 if self.config.kl_loss_type in ['dwc_pg']:
@@ -698,7 +698,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 if self.config.use_kl_loss:
                     kl_type = self.config.kl_loss_type
                     # ---- 覆盖率（只在 outer/hkb 下需要）----
-                    if kl_type in ['outer_kl', 'hkb_lite']:
+                    if kl_type in ['outer_kl', 'hkb_lite', 'kl_seg']:
                         CH_idx = torch.arange(CH, device=device)[None, None, :]
                         S_idx  = torch.arange(S,  device=device)[None, :, None]
                         s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
@@ -733,17 +733,23 @@ class RobDataParallelPPOActor(BasePPOActor):
 
                     if kl_type == 'hkb_lite':
                         KL_seg_perdim, KL_k_elem = KL_out                 # shapes: [B,S], [B,S,K,CH,D]
+                    elif kl_type == 'kl_seg':
+                        KL_action_perdim, KL_seg_perdim = KL_out
                     else:
-                        KL_seg_perdim = KL_out
+                        KL_action_perdim = KL_out
                         KL_k_elem = None
 
                     # ---- 段级 outer-KL 的覆盖率加权聚合 ----
                     if kl_type in ['outer_kl', 'hkb_lite']:
                         # KL_seg_perdim 是 [B,S] 的“每维”outer-KL；按元素数加权：
                         L_kl_seg = (KL_seg_perdim * elem_count).sum() / elem_count.sum().clamp_min(1.0)
+                    elif kl_type == 'kl_seg':
+                        L_kl_action = verl_F.masked_mean(KL_action_perdim.reshape(B, -1), response_mask)
+                        L_kl_seg = (KL_seg_perdim * elem_count).sum() / elem_count.sum().clamp_min(1.0)
                     else:
                         # 你原来的 token-level 分支
-                        L_kl_seg = verl_F.masked_mean(KL_seg_perdim.reshape(B, -1), response_mask)
+                        L_kl_action = verl_F.masked_mean(KL_action_perdim.reshape(B, -1), response_mask)
+                        L_kl_seg = None
 
                     # ---- HKB-Lite：逐 k 的方向塑形（小权重）----
                     if kl_type == 'hkb_lite':
@@ -772,25 +778,38 @@ class RobDataParallelPPOActor(BasePPOActor):
                     target_kl = self.config.get('kl_loss_target', 0.0)
                     beta       = self.config.kl_loss_coef
                     beta_inner = self.config.kl_loss_coef_inner
+                    beta_seg = self.config.kl_loss_coef_seg
 
+                    if kl_type in ['outer_kl', 'hkb_lite']:
+                        L_kl_main = L_kl_seg
+                        L_kl_second = L_hkb
+                    else:
+                        L_kl_main = L_kl_action
+                        L_kl_second = L_kl_seg
+                        
                     if target_kl > 0.0:  # 简单自适应 outer
-                        kl_now = (L_kl_seg.detach().item()) / self.gradient_accumulation
+                        kl_now = (L_kl_main.detach().item()) / self.gradient_accumulation
                         hi, lo = 1.5, 0.5
                         if   kl_now > hi * target_kl: beta *= 1.5
                         elif kl_now < lo * target_kl: beta /= 1.5
                         beta = float(max(1e-8, min(beta, 1e4)))
 
                     # ---- 汇总到 policy loss ----
-                    policy_loss = policy_loss + beta * L_kl_seg
+                    policy_loss = policy_loss + beta * L_kl_main
                     if kl_type == 'hkb_lite':
-                        policy_loss = policy_loss + beta_inner * L_hkb
+                        policy_loss = policy_loss + beta_inner * L_kl_second
+                    elif kl_type == 'kl_seg':
+                        policy_loss = policy_loss + beta_seg * L_kl_second
 
                     # ---- 日志 ----
-                    loss_info["actor/kl_loss"] = (L_kl_seg.detach().item() / self.gradient_accumulation)
+                    loss_info["actor/kl_loss"] = (L_kl_main.detach().item() / self.gradient_accumulation)
                     loss_info["actor/kl_coef"] = beta
-                    if kl_type == 'hkb_lite':
-                        loss_info["actor/kl_loss_inner"] = (L_hkb.detach().item() / self.gradient_accumulation)
+                    if kl_type == 'hkb_lite':  # HACK: / self.gradient_accumulation is a bug here,
+                        loss_info["actor/kl_loss_inner"] = (L_kl_second.detach().item() / self.gradient_accumulation)
                         loss_info["actor/kl_coef_inner"] = beta_inner
+                    if kl_type == 'kl_seg':
+                        loss_info["actor/kl_loss_seg"] = (L_kl_second.detach().item() / self.gradient_accumulation)
+                        loss_info["actor/kl_coef_seg"] = beta_seg
                     if kl_type == 'dwc_pg':
                         loss_info["actor/dwc_pg_c"] = c.mean().item()
 
