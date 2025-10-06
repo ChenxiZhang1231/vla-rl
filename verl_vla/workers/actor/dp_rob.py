@@ -709,11 +709,9 @@ class RobDataParallelPPOActor(BasePPOActor):
                     advantages_tmp = advantages_tmp.reshape(B, S, CH, D).sum(dim=-1)
                     advantages_tmp = advantages_tmp[:, :, None, :].expand(B,S,K,CH).reshape(B, -1)
                     advantages_tmp = advantages_tmp - b_k
-                else:
-                    b_k = None
-
-                if self.config.kl_loss_type in ['kl_ffp']:
-                    breakpoint()
+                    
+                elif self.config.kl_loss_type in ['kl_ffp']:
+                    # breakpoint()
                     eps = 1e-6
                     B, S, K, CH, D = logp_elem.shape
                     device = log_prob.device
@@ -734,7 +732,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     alpha  = 0.3         # 30% 均匀混合，防塌缩
                     w_min, w_max = 0.3, 2.0
 
-                    sigma2 = (std.to(torch.float32).squeeze(-1, -1) ** 2)         # [B,S,K]
+                    sigma2 = (std.to(torch.float32).squeeze(-1, -2) ** 2)         # [B,S,K]
                     w_k    = (sigma2 + eps) ** p                                  # [B,S,K]
                     w_k    = w_k / (w_k.mean(dim=2, keepdim=True) + eps)          # 段内均值=1
                     w_k    = alpha * 1.0 + (1 - alpha) * w_k                      # 混均匀
