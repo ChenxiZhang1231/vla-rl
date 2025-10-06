@@ -527,7 +527,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 select_keys.append('ref_log_prob')
                 select_keys.append('ref_mean')
                 select_keys.append('ref_std')
-                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite', 'kl_seg', 'kl_kwise']:
+                if self.config.kl_loss_type in ['outer_kl', 'hkb_lite', 'kl_seg', 'kl_kwise', 'kl_ffp']:
                     select_keys.append('old_logp_outer')
                     select_keys.append('ref_logp_outer')
                 # if self.config.kl_loss_type in ['dwc_pg']:
@@ -711,6 +711,44 @@ class RobDataParallelPPOActor(BasePPOActor):
                     advantages_tmp = advantages_tmp - b_k
                 else:
                     b_k = None
+
+                if self.config.kl_loss_type in ['kl_ffp']:
+                    breakpoint()
+                    eps = 1e-6
+                    B, S, K, CH, D = logp_elem.shape
+                    device = log_prob.device
+                    D = 7
+                    CH_idx = torch.arange(CH, device=device)[None, None, :]
+                    S_idx  = torch.arange(S,  device=device)[None, :, None]
+                    s_fin  = (data['finish_step'] // CH).view(B, 1, 1)
+                    c_fin  = (data['finish_step'] %  CH).view(B, 1, 1)
+
+                    mask_before   = (S_idx < s_fin).float()
+                    mask_equal    = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+                    mask_actions  = mask_before.expand(B, S, CH) + mask_equal          # [B,S,CH]
+                    # 有效元素掩码，扩到 [B,S,K,CH,D]
+                    mask_elem = mask_actions[:, :, None, :, None].expand(B, S, K, CH, D).float()
+
+                    # 逐 k 的 “噪声强度” 代理：E_{CH,D}[ 1/std^2 ]，只看有效 CH、维度
+                    p      = 0.5         # 开始先用 sqrt
+                    alpha  = 0.3         # 30% 均匀混合，防塌缩
+                    w_min, w_max = 0.3, 2.0
+
+                    sigma2 = (std.to(torch.float32).squeeze(-1, -1) ** 2)         # [B,S,K]
+                    w_k    = (sigma2 + eps) ** p                                  # [B,S,K]
+                    w_k    = w_k / (w_k.mean(dim=2, keepdim=True) + eps)          # 段内均值=1
+                    w_k    = alpha * 1.0 + (1 - alpha) * w_k                      # 混均匀
+                    w_k    = torch.clamp(w_k, w_min, w_max).detach()              # stop-grad
+
+                    w_kch  = w_k[..., None].expand(B, S, K, CH).reshape(B, -1)     # [B, S*K*CH]
+
+                    log_prob = logp_elem.sum(dim=-1).reshape(B, -1)   #  [B, S*K*CH]
+                    old_log_prob_tmp = data['old_logp_elem'].sum(dim=-1).reshape(B, -1)
+                    
+                    response_mask_tmp = mask_actions[:, :, None, :].expand(B,S,K,CH).reshape(B, -1).bool()
+                    advantages_tmp = advantages_tmp.reshape(B, S, CH, D).sum(dim=-1)
+                    advantages_tmp = advantages_tmp[:, :, None, :].expand(B,S,K,CH).reshape(B, -1)
+                    advantages_tmp = advantages_tmp * w_kch
                        
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
