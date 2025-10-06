@@ -100,10 +100,7 @@ class CosMosWorldModel(nn.Module):
 
     @torch.no_grad()
     def step(self, current_obs_batch: np.ndarray, action_batch: np.ndarray, step) -> np.ndarray:
-        """
-        执行一步并行的闭环模拟。
-        这个版本利用了BatchPipeline，不再需要for循环。
-        
+        """        
         Args:
             current_obs_batch (np.ndarray): 形状为 [B, H, W, 3]，uint8，范围 [0, 255]
             action_batch (np.ndarray): 形状为 [B, action_dim]
@@ -111,54 +108,91 @@ class CosMosWorldModel(nn.Module):
         Returns:
             np.ndarray: 下一步的批量观测，形状与输入相同 [B, H, W, 3]，uint8
         """
-        # print(f"--- [CosMosWorldModel] step called on PID {os.getpid()} ---")
-        # print(f"--- Input obs shape: {current_obs_batch.shape}, dtype: {current_obs_batch.dtype} ---")
-        # print(f"--- Input action shape: {action_batch.shape}, dtype: {action_batch.dtype} ---")
-
-        # 1. 适配pipeline的输入要求
-        # a. 将批量的初始帧从numpy数组转换为列表
-        #    `first_frames` 将是一个包含 B 个 (H, W, 3) numpy数组的列表
-        first_frames: List[np.ndarray] = [frame for frame in current_obs_batch]
-        
-        # b. 将批量的单个动作，扩展成批量的、长度为1的动作序列
-        #    `action_sequences` 将是一个包含 B 个 (1, action_dim) numpy数组的列表
-        #    `action_batch[:, np.newaxis, :]` 的形状是 [B, 1, action_dim]
-
-        # Normalize the last action dimension to [-1,+1]
-        orig_low, orig_high = 0.0, 1.0
-        action_batch[..., -1] = 2 * (action_batch[..., -1] - orig_low) / (orig_high - orig_low) - 1
-        action_batch[..., -1] = np.sign(action_batch[..., -1])
-        action_batch[..., -1] = action_batch[..., -1] *  -1.0
-        
-        
-        dummy_action_batch = np.zeros_like(action_batch)
-        action_batch_dual = np.concatenate([action_batch, dummy_action_batch], axis=-1)
-        action_sequences: List[np.ndarray] = [seq[:self.chunk_size] for seq in action_batch_dual]
-        # action_sequences = self.process_action(action_sequences)
         # breakpoint()
-        predicted_videos = self.pipe(
-            first_frames=first_frames,  # H W 3
-            actions_list=action_sequences,  # 50 7
-            blacks_list=None,
-            num_conditional_frames=1,
-            guidance=self.config.get("guidance", 7.0),
-            seed=self.config.get("seed", 0),
-            num_sampling_step=self.config.get("num_sampling_step", 10),
-            use_cuda_graphs=self.config.get("use_cuda_graphs", False),
-            history_list=None,
-        )
-        
-        
-        video_tensors = [video[0] for video in predicted_videos]
-        predicted_videos_batch_tensor = torch.stack(video_tensors, dim=0)
-        videos_batch_normalized = (predicted_videos_batch_tensor / 2 + 0.5).clamp(0, 1)
-        videos_batch_hwc = rearrange(videos_batch_normalized, 'b c f h w -> b f h w c')
-        videos_batch_numpy = videos_batch_hwc.cpu().numpy()
-        videos_batch_uint8 = (videos_batch_numpy * 255).astype(np.uint8)
+        B = int(current_obs_batch.shape[0])
+
+        # Standardize actions to [B, T, A]
+        if action_batch.ndim == 2:
+            actions = action_batch[:, None, :]          # [B, 1, A]
+        elif action_batch.ndim == 3:
+            actions = action_batch                      # [B, T, A]
+        else:
+            raise ValueError(f"action_batch must be [B, A] or [B, T, A], got {action_batch.shape}")
+
+        T, A = int(actions.shape[1]), int(actions.shape[2])
+        if T == 0:
+            raise ValueError("Empty action sequence (T=0).")
+
+        # --------- 1) Preprocess actions (match your current logic) ---------
+        actions = actions.copy()
+        # Normalize the last action dimension to [-1, +1], then sign and flip
+        actions[..., -1] = 2.0 * (actions[..., -1] - 0.0) / (1.0 - 0.0) - 1.0
+        actions[..., -1] = np.sign(actions[..., -1]) * -1.0
+
+        # Dual concat (keep your current behavior: concat zeros on the last dimension)
+        dummy = np.zeros_like(actions)
+        actions_dual = np.concatenate([actions, dummy], axis=-1)   # [B, T, 2A]
+
+        # --------- 2) Chunking plan ---------
+        max_len = int(self.config.get("wm_max_steps", 20))  # WM一次支持的最大帧数（默认20）
+        if max_len <= 0:
+            raise ValueError(f"wm_max_steps must be positive, got {max_len}")
+
+        # First frames for the first chunk
+        cur_first_frames: List[np.ndarray] = [frame for frame in current_obs_batch]  # B x (H,W,3), uint8
+
+        out_chunks: List[np.ndarray] = []
+
+        # --------- 3) Loop over chunks ---------
+        for s in range(0, T, max_len):
+            e = min(s + max_len, T)                         # [s, e) chunk interval
+            chunk_len = e - s
+            chunk_actions_list: List[np.ndarray] = [actions_dual[b, s:e] for b in range(B)]  # per-batch seq
+
+            chunk_actions_list: List[np.ndarray] = []
+            for b in range(B):
+                chunk = actions_dual[b, s:e]     # [chunk_len, 2A]
+                if chunk_len < max_len:
+                    pad = np.zeros(
+                        (max_len - chunk_len, actions_dual.shape[-1]),
+                        dtype=actions_dual.dtype
+                    )
+                    chunk = np.concatenate([chunk, pad], axis=0)  # [max_len, 2A]
+                chunk_actions_list.append(chunk)
+                
+            # Run the WM pipeline for this chunk
+            predicted_videos = self.pipe(
+                first_frames=cur_first_frames,              # list of B images, H W 3
+                actions_list=chunk_actions_list,            # list of B arrays, (chunk_len, 2A)
+                blacks_list=None,
+                num_conditional_frames=1,
+                guidance=self.config.get("guidance", 7.0),
+                seed=self.config.get("seed", 0),
+                num_sampling_step=self.config.get("num_sampling_step", 10),
+                use_cuda_graphs=self.config.get("use_cuda_graphs", False),
+                history_list=None,                          # 如果你的WM需要历史，可在这里衔接
+            )
+
+            # Convert the pipeline outputs to uint8 frames & drop the conditional frame at index 0
+            # expected: each item in predicted_videos is like (video[C,F,H,W], ...); we take [0]
+            # 
+            video_tensors = [vid[0] for vid in predicted_videos]           # list of [C, F, H, W]
+            batch = torch.stack(video_tensors, dim=0)                      # [B, C, F, H, W]
+            batch = (batch / 2 + 0.5).clamp(0, 1)
+            batch_hwc = rearrange(batch, 'b c f h w -> b f h w c').cpu().numpy()
+            frames_uint8_full = (batch_hwc * 255).astype(np.uint8)[:, 1:]       # [B, chunk_len, H, W, 3]
+            frames_uint8 = frames_uint8_full[:, :chunk_len]
+            out_chunks.append(frames_uint8)
+
+            # Next chunk starts from the last predicted frame of this chunk
+            cur_first_frames = [frames_uint8[b, -1] for b in range(B)]
+        # breakpoint()
+        # --------- 4) Concatenate along time ---------
+        out = np.concatenate(out_chunks, axis=1)   # [B, T, H, W, 3]
         # breakpoint()
         # self.save_video_grid(videos_batch_uint8, f'debug{step}.mp4')
         # self.save_trajectory_grid_image(videos_batch_uint8, 'debug.png')
-        return videos_batch_uint8[:, 1:]  # B, chunk_size, H, W, C
+        return out  # B, chunk_size, H, W, C
     
     def save_video_grid(self, video_batch: np.ndarray, save_path: str, fps: int = 10):
         """

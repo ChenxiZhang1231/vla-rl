@@ -503,7 +503,7 @@ def kl_penalty(
     Returns:
 
     """
-    if kl_penalty in ["kl", "dwc_pg", 'kl_kwise']:
+    if kl_penalty in ["kl", "dwc_pg", 'kl_kwise', 'kl_ffp']:
         return (logprob - ref_logprob) / 1
 
     if kl_penalty == "outer_kl":
