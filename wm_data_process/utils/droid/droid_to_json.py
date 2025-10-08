@@ -548,15 +548,20 @@ def process_one_camera_episode(
     # 1) 重采样
     resampled_path = out_root / "resampled" / f"{nice_stem}_resampled.mp4"
     ensure_dir(resampled_path.parent)
-    if not resampled_path.exists():
-        resample_to_fps(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
-        # resample_to_fps_left_half(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
+    orig_fps = ffprobe_fps(mp4_path)
+    if fps_out == -1:
+        resampled_path = mp4_path
+        fps_out = orig_fps
+    else:
+        if not resampled_path.exists():
+            resample_to_fps(mp4_path, resampled_path, fps=fps_out, crf=crf, preset=preset)
 
     # 2) 估计重采样后的总帧数
+    # import pdb; pdb.set_trace()
     total_frames_est = ffprobe_safe_total_frames(resampled_path, fps_out)
 
     # 3) 建立索引映射
-    orig_fps = ffprobe_fps(mp4_path)
+    # orig_fps = ffprobe_fps(mp4_path)
     N = e_params_orig.shape[0]
     idx_map = indices_for_resampled(total_frames_est, orig_fps if orig_fps>0 else fps_out, fps_out, N)
     e_res = e_params_orig[idx_map]
@@ -847,9 +852,9 @@ def main():
     ap = argparse.ArgumentParser("DROID to clips+npz exporter")
     ap.add_argument("--scene_root", type=Path, default="/inspire/ssd/project/robotsimulation/public/data/droid_raw/1.0.1/RAD", help="目录：包含 success/ 和 failure/ 子目录")
     ap.add_argument("--output_dir", type=Path, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/droid_unclip")
-    ap.add_argument("--fps", type=int, default=10)
-    ap.add_argument("--clip_len", type=int, default=-1)
-    ap.add_argument("--stride", type=int, default=5)
+    ap.add_argument("--fps", type=int, default=-1)
+    ap.add_argument("--clip_len", type=int, default=121)
+    ap.add_argument("--stride", type=int, default=60)
     ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--preset", type=str, default="veryfast")
     ap.add_argument("--jobs", type=int, default=16)
@@ -896,6 +901,7 @@ def main():
                 with h5py.File(str(traj_path), "r") as H:
                     action, obs_state = build_action_and_obs(H)
                     cam_serials = collect_camera_serials(meta)
+                    # import pdb; pdb.set_trace()
                     # cam_frame_ts = {}
                     # for cam_name in cam_serials:
                     #     frame_ts = get_camera_frame_ts(H, cam_serials[cam_name])
@@ -951,7 +957,7 @@ def main():
                         preset=args.preset,
                         cam_name=cam_name,
                     ))
-                    # break
+                #     break
                 # break
             
             if not tasks:

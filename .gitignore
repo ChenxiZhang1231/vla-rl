@@ -149,3 +149,4 @@ wm_data_process/data_output_debug
 wm_data_process/WM-data-processed
 *.pid
 VLAC/result
+result_analyse/
