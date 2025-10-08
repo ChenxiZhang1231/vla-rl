@@ -10,12 +10,12 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp8-action-ffp-fp16-debug'
+EXPERIMENT_NAME='exp8-action-ffp-long-fp16'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
-DATASET_NAME="libero_spatial"
+DATASET_NAME="libero_10"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
 NUM_GPUS=8
@@ -53,7 +53,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
     actor_rollout_ref.actor.num_images_in_input=1 \
-    actor_rollout_ref.actor.traj_mini_batch_size=6 \
+    actor_rollout_ref.actor.traj_mini_batch_size=11 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.dlogp_clamp=True \
     actor_rollout_ref.actor.dlogp_clamp_max=4.0 \
@@ -102,6 +102,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.whiten=False \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 

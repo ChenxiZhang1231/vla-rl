@@ -635,7 +635,7 @@ class RayTrainer(object):
                         if len(buffer_batch) > 0:
                             newbatch = DataProto.concat([buffer_batch, newbatch])
                             buffer_batch = []
-                        gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id', 'init_state'],
+                        gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id', 'init_state', 'init_state_len'],
                                                     non_tensor_batch_keys={"task_suite_name", "task_lang"},
                                                     meta_info_keys={})
  
