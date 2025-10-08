@@ -167,7 +167,8 @@
           "program": "utils/droid/droid_to_json.py",
           "console": "integratedTerminal",
           "args":[
-            "--jobs=1"
+            "--output_dir", "debug",
+            "--jobs=1",
           ],
           "env": {
           }

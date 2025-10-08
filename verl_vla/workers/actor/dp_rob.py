@@ -800,6 +800,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     advantages_tmp = advantages_tmp.reshape(B, S, CH, D).sum(dim=-1)
                     advantages_tmp = advantages_tmp[:, :, None, :].expand(B,S,K,CH).reshape(B, -1)
                     advantages_tmp = (advantages_tmp - b_k) * w_kch
+                    # breakpoint()
                        
                 print("[dbg] T_lp=", log_prob.shape[1], "T_mask=", response_mask_tmp.shape[1], "mask.sum=", response_mask_tmp.sum().item())
                 # assert log_prob.shape[1] == response_mask_tmp.shape[1], f"length mismatch: logp={log_prob.shape}, mask={response_mask_tmp.shape}"
