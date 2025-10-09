@@ -14,6 +14,7 @@ import json
 import torch
 import torchvision.transforms.functional as TF
 from torch.utils.data import Dataset
+from concurrent.futures import ThreadPoolExecutor
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -45,7 +46,7 @@ from lerobot.datasets.video_utils import (
     get_video_info,
 )
 from tqdm import tqdm
-
+from torch.utils.data import DataLoader
 
 
 def resolve_delta_timestamps(
@@ -398,33 +399,71 @@ dataset = LeRobotDataset(
 
 data_list = []
 len_dataset = dataset.__len__()
-for idx in tqdm(range(len_dataset)):
 
-    data = dataset.__getitem__(idx)['batch']
+def save_data_item(data):
+    """
+    处理从DataLoader获取的单个数据项：保存图片并返回结构化数据。
+    """
+    # try:
+    data = data['batch']
     ep_idx = int(data['episode_index'].item())
     frame_idx = int(data['frame_index'].item())
 
-    image_save_path = os.path.join(saved_path, 'images', f'ep_{ep_idx:03d}-{frame_idx:06d}.png')
-    image_path = os.path.join('images', f'ep_{ep_idx:03d}-{frame_idx:06d}.png')
+    image_filename = f'ep_{ep_idx:03d}-{frame_idx:06d}.png'
+    image_save_path = os.path.join(saved_path, 'images', image_filename)
+    image_relative_path = os.path.join('images', image_filename)
+    
     os.makedirs(os.path.dirname(image_save_path), exist_ok=True)
 
-    # image = data['observation.images.front'].to(torch.float32)
     image = data['observation.images.image'].to(torch.float32)
     image = (image * 255).to(torch.uint8)
     pil_img = TF.to_pil_image(image)
     pil_img.save(image_save_path)
     
-    # save image
     data_item = {
-        "observation.images.front": [image_path],
-        "observation.images.front_is_pad": data['observation.images.image_is_pad'].to(torch.float32).numpy().tolist(),
+        "observation.images.image": [image_relative_path],
+        "observation.images.image_is_pad": data['observation.images.image_is_pad'].to(torch.float32).numpy().tolist(),
         "observation.state": data['observation.state'].to(torch.float32).numpy().tolist(),
         "observation.state_is_pad": data['observation.state_is_pad'].to(torch.float32).numpy().tolist(),
         "action": data['action'].to(torch.float32).numpy().tolist(),
         "action_is_pad": data['action_is_pad'].to(torch.float32).numpy().tolist(),
         "task": data['task'],
     }
-    data_list.append(data_item)
+    return data_item
+    # except Exception as e:
+    #     print(f"处理数据时发生错误: {e}")
+    #     return None
+
+# 2. 配置并创建 DataLoader
+# - num_workers: 开启的子进程数量，用于并行加载数据。通常设置为CPU核心数的 0.5 到 2 倍。
+# - prefetch_factor: 每个worker预先加载的样本数。
+# - pin_memory: 如果使用GPU，可以设置为True以加速数据到GPU的传输（这里不必要）。
+data_loader = DataLoader(
+    dataset,
+    batch_size=None,  # 设置为 None, DataLoader 会返回单个样本而不是一个批次
+    shuffle=False,
+    num_workers=32,    # 根据你的CPU核心数调整
+    prefetch_factor=4 # 建议设置
+)
+
+# 3. 配置并创建 ThreadPoolExecutor 用于写入文件
+write_executor = ThreadPoolExecutor(max_workers=16) # 用于写入的线程数
+
+# 4. 主循环
+# DataLoader 会在后台加载数据，主循环可以立即将保存任务提交给线程池
+futures = []
+data_list = []
+
+# tqdm现在包裹的是DataLoader，显示数据加载的进度
+for data_item in tqdm(data_loader, total=len(dataset)):
+    # 异步地提交保存任务到线程池
+    # future = write_executor.submit(save_data_item, data_item)
+    # futures.append(future)
+    item = save_data_item(data_item)
+    data_list.append(item)
+
+
+print(f"\n处理完成！共成功处理 {len(data_list)} 个项目。")
 
 
 jsonl_path = os.path.join(saved_path, 'data.jsonl')

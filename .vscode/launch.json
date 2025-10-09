@@ -72,6 +72,41 @@
           }
         },
         {
+          "name": "Debug video2world_action pretrain",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/world_model/ActionWorldModel",
+          "program": "examples/video2world_action_pretrain.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+              "--model_size", "2B",
+              // "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/libero_1008/predict2_video2world_2b_action_conditioned_finetuning_libero_2025-10-07_16-01-00/checkpoints/model/iter_000008000.pt",
+              
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/clips/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/metadata/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.npz",
+              "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/clips/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.mp4",
+              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/metadata/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.npz",
+              
+              "--num_conditional_frames", "1",
+              "--chunk_size", "20",
+              "--save_path", "output_debug/generated_video_action.mp4",
+              "--guidance", "0",
+              "--seed", "0",
+              "--disable_guardrail",
+              "--disable_prompt_refiner",
+              "--autoregressive",
+              "--use_black",
+              "--use_history",
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Regenerate LIBERO",
           "type": "debugpy",
           "request": "launch",
@@ -87,6 +122,30 @@
             // "MUJOCO_GL": "egl",
             // "MUJOCO_GL": "glx",
             "MUJOCO_GL": "osmesa",
+            // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+            
+          }
+        },
+        {
+          "name": "Convert LIBERO",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
+          "program": "libero_h5.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--src-paths=/inspire/ssd/project/robotsimulation/public/data/Debug-dataset/libero_spatial_no_noops",
+            "--output-path=/inspire/ssd/project/robotsimulation/public/data/Debug-dataset",
+            "--executor=local",
+            "--tasks-per-job=1",
+            "--workers=1",
+            "--debug",
+            "--use_delta_action",
+          ],
+          "env": {
+            "MUJOCO_GL": "egl",
+            // "MUJOCO_GL": "glx",
+            // "MUJOCO_GL": "osmesa",
             // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
             
           }
@@ -268,7 +327,8 @@
               "--model_name_or_path", "/inspire/ssd/project/robotsimulation/public/huggingface_models/smolvla_base",
               "--conv_style", "smolvla",
               "--output_dir", "work_dirs/debug",
-              "--meta_path", "/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/internvl_chat/shell/data/debug.json",
+              // "--meta_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/shell/data/debug.json",
+              "--meta_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/shell/data/libero_full_delta.json",
               "--overwrite_output_dir", "True",
               "--drop_path_rate", "0.0",
               "--dataloader_num_workers", "1",

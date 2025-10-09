@@ -37,9 +37,10 @@ class SaveLerobotDataset(PipelineStep):
     name = "Save Temp LerobotDataset"
     type = "libero2lerobot"
 
-    def __init__(self, tasks: list[tuple[Path, Path, str]]):
+    def __init__(self, tasks: list[tuple[Path, Path, str]], use_delta_action=False):
         super().__init__()
         self.tasks = tasks
+        self.use_delta_action = use_delta_action
 
     def run(self, data=None, rank: int = 0, world_size: int = 1):
         logger = setup_logger()
@@ -59,7 +60,7 @@ class SaveLerobotDataset(PipelineStep):
 
         logger.info(f"start processing for {input_h5}, saving to {output_path}")
 
-        raw_dataset = load_local_episodes(input_h5)
+        raw_dataset = load_local_episodes(input_h5, use_delta_action=self.use_delta_action)
         for episode_index, episode_data in enumerate(raw_dataset):
             with self.track_time("saving episode"):
                 for frame_data in episode_data:
@@ -247,6 +248,7 @@ def main(
     resume_from_save: Path = None,
     resume_from_aggregate: Path = None,
     debug: bool = False,
+    use_delta_action: bool = False,
     repo_id: str = None,
     push_to_hub: bool = False,
 ):
@@ -302,7 +304,7 @@ def main(
         **({"cpus_per_task": cpus_per_task, "tasks_per_job": tasks_per_job} if executor is RayPipelineExecutor else {}),
     }
 
-    executor(pipeline=[SaveLerobotDataset(tasks)], **executor_config, logging_dir=resume_from_save).run()
+    executor(pipeline=[SaveLerobotDataset(tasks, use_delta_action=use_delta_action)], **executor_config, logging_dir=resume_from_save).run()
     executor(
         pipeline=[DeleteTempData([task[1] for task in tasks])],
         **executor_config,
@@ -343,6 +345,7 @@ if __name__ == "__main__":
     parser.add_argument("--resume-from-save", type=Path, help="logs directory to resume from save step")
     parser.add_argument("--resume-from-aggregate", type=Path, help="logs directory to resume from aggregate step")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--use_delta_action", action="store_true")
     parser.add_argument("--repo-id", type=str, help="required when push-to-hub is True")
     parser.add_argument("--push-to-hub", action="store_true", help="upload to hub")
     args = parser.parse_args()

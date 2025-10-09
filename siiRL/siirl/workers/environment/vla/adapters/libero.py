@@ -83,7 +83,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.benchmark_dict = benchmark.get_benchmark_dict()
         self.task_suite = self.benchmark_dict[self.task_suite_name]()
 
-    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None, init_state = None) -> List[Dict[str, Any]]:
+    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None, init_state = None, init_state_len = None) -> List[Dict[str, Any]]:
         """Synchronous implementation of the reset logic."""
 
         # Use provided task_ids or sample new ones
@@ -140,7 +140,11 @@ class LIBEROAdapter(BaseVLAEnvironment):
             state_id = trial_ids[i]
             initial_state_ids.append(state_id)
             if init_state is not None:
-                initial_states_to_set.append(init_state[i])
+                if init_state_len is not None:
+                    init_s = init_state[i][:init_state_len[i][0]]
+                else:
+                    init_s = init_state[i]
+                initial_states_to_set.append(init_s)
             else:
                 initial_states_to_set.append(initial_states_list[i][state_id])
 
