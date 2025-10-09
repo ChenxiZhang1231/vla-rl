@@ -60,6 +60,7 @@ class SaveLerobotDataset(PipelineStep):
 
         logger.info(f"start processing for {input_h5}, saving to {output_path}")
 
+        # raw_dataset = load_local_episodes(input_h5, use_delta_action=self.use_delta_action)
         raw_dataset = load_local_episodes(input_h5, use_delta_action=self.use_delta_action)
         for episode_index, episode_data in enumerate(raw_dataset):
             with self.track_time("saving episode"):

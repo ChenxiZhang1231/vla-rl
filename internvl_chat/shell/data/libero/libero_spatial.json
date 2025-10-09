@@ -1,0 +1,9 @@
+{
+  "libero_spatial": {
+    "root": "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial-jsonl",
+    "annotation": "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial-jsonl/data.jsonl",
+    "data_augment": false,
+    "repeat_time": 1,
+    "length": 1
+  }
+}

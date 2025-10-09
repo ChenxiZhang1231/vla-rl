@@ -6,8 +6,8 @@
 
 import torch
 from flash_attn.flash_attn_interface import flash_attn_varlen_func
-from transformers.models.llama.modeling_llama import (LLAMA_ATTENTION_CLASSES,
-                                                      LlamaFlashAttention2)
+# from transformers.models.llama.modeling_llama import (LLAMA_ATTENTION_CLASSES,
+#                                                       LlamaFlashAttention2)
 
 
 # Modified from transformers.models.llama.modeling_llama.LlamaFlashAttention2

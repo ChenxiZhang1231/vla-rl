@@ -6,6 +6,7 @@ import argparse
 from typing import Dict, List
 from einops import rearrange
 import mediapy as mp
+from collections import deque
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from megatron.core import parallel_state
@@ -63,6 +64,9 @@ class CosMosWorldModel(nn.Module):
         pipeline_config.state_t = self.config.get("state_t", 6)
         pipeline_config.net.action_dim = self.config.get("action_dim", 14) * (self.config.get("pred_len", 21) - 1)
         pipeline_config.net.use_black = self.config.get("use_black", False)
+        # pipeline_config.net.use_history = self.config.get("use_history", False)
+        # self.history_video_length = self.config.get("history_video_length", 60)
+        # self.history_frams = deque(maxlen=self.history_video_length)
         
         if hasattr(args, "dit_path") and args.dit_path:
             dit_path = args.dit_path
@@ -193,6 +197,15 @@ class CosMosWorldModel(nn.Module):
         # self.save_video_grid(videos_batch_uint8, f'debug{step}.mp4')
         # self.save_trajectory_grid_image(videos_batch_uint8, 'debug.png')
         return out  # B, chunk_size, H, W, C
+    
+    # def reset(self):
+    #     self.history_frames = deque(maxlen=self.history_video_length)
+    
+    # def init_env(self, init_state):
+    #     breakpoint()
+    #     if self.use_history:
+    #         while len(self.history_frames) < self.history_video_length:
+    #             self.history_frames.append(init_state)
     
     def save_video_grid(self, video_batch: np.ndarray, save_path: str, fps: int = 10):
         """

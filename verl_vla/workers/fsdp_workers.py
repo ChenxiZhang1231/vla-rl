@@ -147,6 +147,7 @@ class RobActorRolloutRefWorker(Worker):
 
     def _build_model_optimizer(self,
                                model_path,
+                               meta_path,
                                fsdp_config,
                                optim_config,
                                override_model_config,
@@ -284,8 +285,15 @@ class RobActorRolloutRefWorker(Worker):
                 from lerobot.datasets.utils import dataset_to_policy_features
                 from lerobot.configs.types import FeatureType
                 policy_cfg = SmolVLAConfig()
+                # meta_path
+                # ds_meta = LeRobotDatasetMetadata(
+                #     "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+                # )
+                # ds_meta = LeRobotDatasetMetadata(
+                #     "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Spatial"
+                # )
                 ds_meta = LeRobotDatasetMetadata(
-                    "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+                    meta_path
                 )
 
                 logger.info('Loading SmolVLA...')
@@ -649,6 +657,7 @@ class RobActorRolloutRefWorker(Worker):
             
             self.actor_module_fsdp, self.actor_optimizer, self.actor_lr_scheduler, self.actor_model_config = self._build_model_optimizer(
                 model_path=self.config.model.path,
+                meta_path=self.config.model.meta_path,
                 fsdp_config=fsdp_config,
                 optim_config=optim_config,
                 override_model_config=override_model_config,
@@ -698,6 +707,7 @@ class RobActorRolloutRefWorker(Worker):
 
         if self._is_ref:
             self.ref_module_fsdp = self._build_model_optimizer(model_path=self.config.model.path,
+                                                               meta_path=self.config.model.meta_path,
                                                                fsdp_config=self.config.ref.fsdp_config,
                                                                optim_config=None,
                                                                override_model_config=override_model_config,

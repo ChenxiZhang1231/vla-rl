@@ -816,13 +816,15 @@ class RobHFRollout(BaseRollout):
 
         # self.num_workers = self.config.get('num_env_workers', 8)
         self.num_workers = 16
+        
         self.adapter = LIBEROAdapter(
             task_suite_name=self.config.task_suite_name,
             num_envs=self.num_workers,
             max_steps=self.max_steps[self.config.task_suite_name],
             num_steps_wait=self.config.num_steps_wait,
             model_family=self.config.model_family,
-            gpu_ids=[self._rank % self._num_gpus_per_node] # Run all workers on the same assigned GPU
+            gpu_ids=[self._rank % self._num_gpus_per_node], # Run all workers on the same assigned GPU
+            # delta_action=self.config.delta_action
         )
         #oft add
         # unnorm_key=config.unnorm_key

@@ -357,7 +357,7 @@ class LeRobotDataset(Dataset):
                     item = {**item, **padding}
                     for key, val in query_result.items():
                         item[key] = val
-                item['action'] = item['action'][:, 0]
+                item['action'] = item['action']  #[:, 0]
                 if len(self.meta.video_keys) > 0:
                     current_ts = item["timestamp"].item()
                     query_timestamps = self._get_query_timestamps(current_ts, query_indices)
@@ -384,8 +384,15 @@ class LeRobotDataset(Dataset):
 
 
 
-root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/libero_whole'
-saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/libero_whole_jsonl'
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial-jsonl'
+
+root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long'
+saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long-jsonl'
+
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Goal'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Goal-jsonl'
+
 policy_cfg = SmolVLAConfig()
 ds_meta = LeRobotDatasetMetadata(
     {'root': root_path}

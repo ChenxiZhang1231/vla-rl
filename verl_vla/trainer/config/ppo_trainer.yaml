@@ -29,6 +29,7 @@ actor_rollout_ref:
     action_token_len: 7
     action_chunks_len: 8
     path: ~/models/deepseek-llm-7b-chat
+    meta_path: ""
     load_ckpt: ""
     external_lib: null
     override_config: { }
@@ -91,6 +92,9 @@ actor_rollout_ref:
     guidance: 0
     num_sampling_step: 35
     use_cuda_graphs: True
+    use_black: False
+    use_history: False
+    history_video_length: 0
     
     fsdp_config:
       model_dtype: bfloat16
@@ -116,6 +120,7 @@ actor_rollout_ref:
     ulysses_sequence_parallel_size: ${actor_rollout_ref.actor.ulysses_sequence_parallel_size} # sp size
   rollout:
     reward_type: env
+    delta_action: False
     n_gpus_per_node: 8
     only_for_gen_rm_data: False
     vla: ${actor_rollout_ref.model.vla}
@@ -168,6 +173,7 @@ critic:
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     path: ~/models/deepseek-llm-7b-chat
+    meta_path: ""
     tokenizer_path: ${actor_rollout_ref.model.path}
     override_config: { }
     external_lib: ${actor_rollout_ref.model.external_lib}
@@ -223,6 +229,7 @@ reward_model:
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
     input_tokenizer: ${actor_rollout_ref.model.path}  # set this to null if the chat template is identical
     path: ~/models/FsfairX-LLaMA3-RM-v0.1
+    meta_path: ""
     external_lib: ${actor_rollout_ref.model.external_lib}
     use_remove_padding:  ${actor_rollout_ref.model.use_remove_padding}
     fsdp_config:

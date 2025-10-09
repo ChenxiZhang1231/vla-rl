@@ -53,6 +53,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
                  max_steps: int,
                  num_steps_wait: int = 10,
                  model_family: str = "openvla",
+                #  delta_action: bool = False,
                  gpu_ids: List[int] = [0],
                  seed: int = 0):
         """
@@ -76,6 +77,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.num_steps_wait = num_steps_wait
         self.model_family = model_family
         self.gpu_ids = gpu_ids
+        # self.delta_action = delta_action
 
         self.env: SubprocVectorEnv = None
         self.step_count = None
@@ -149,6 +151,9 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 initial_states_to_set.append(initial_states_list[i][state_id])
 
         # Set initial state only for the active environments.
+        # breakpoint()
+        # if self.delta_action:
+        #     breakpoint()
         obs_np_list = self.env.set_init_state(initial_states_to_set, id=active_env_ids)
 
         for _ in range(self.num_steps_wait):

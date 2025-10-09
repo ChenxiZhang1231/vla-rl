@@ -127,7 +127,8 @@ class SmolVLAConfig(PretrainedConfig):
     device: str | None = None  # cuda | cpu | mp
     use_amp: bool = False
     architectures: str = None
-
+    is_composition: bool = False
+    
     @property
     def image_features(self) -> dict[str, PolicyFeature]:
         return {key: ft for key, ft in self.input_features.items() if ft.type is FeatureType.VISUAL}
