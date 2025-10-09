@@ -92,23 +92,33 @@ class LIBERO_Dataset(Dataset):
                         initial_states = task_suite.get_task_init_states(task_id)
                         task_name_list = []
                         for i in trials_range:
-                            initial_state = initial_states[i]
-                            init_state_list.append(initial_state) 
+                            init_state = initial_states[i]
+                            state_len = len(init_state)
+                            padded_state = np.pad(init_state, (0, 200 - state_len), 'constant')
+                            
+                            init_state_list.append(padded_state)
                             task_name_list.append(task.language)
+                            init_state_len_list.append(state_len)
                     else:
                         task = task_suite.get_task(task_id)
                         orig_data_path = os.path.join(self.libero_raw_data_dir, self.task_suite_name, f"{task.name}_demo.hdf5")
                         orig_data_file = h5py.File(orig_data_path, "r")
                         orig_data = orig_data_file["data"]
                         init_state_list, task_name_list = [], []
+                        init_state_len_list = []
                         # if not self.use_world_model:
                         if True:
                             for i in range(len(orig_data.keys())):
                                 demo_data = orig_data[f"demo_{i}"]
                                 orig_states = demo_data["states"][()]
                                 init_state = orig_states[0]
-                                init_state_list.append(init_state)
+                                state_len = len(init_state)
+                                padded_state = np.pad(init_state, (0, 200 - state_len), 'constant')
+                                
+                                init_state_list.append(padded_state)
                                 task_name_list.append(task.language)
+                                init_state_len_list.append(state_len)
+                                
                         else:
                             for i in range(len(orig_data.keys())):
                                 demo_data = orig_data[f"demo_{i}"]
@@ -123,10 +133,15 @@ class LIBERO_Dataset(Dataset):
                 elif self.train_val == "valid":
                     trials_range = list(range(0, int(self.num_trials_per_task))) 
                     init_state_list = []
+                    init_state_len_list = []
                     for i in trials_range:
                         initial_states = task_suite.get_task_init_states(task_id)
-                        initial_state = initial_states[i]
-                        init_state_list.append(initial_state)   
+                        init_state = initial_states[i]
+                        state_len = len(init_state)
+                        padded_state = np.pad(init_state, (0, 200 - state_len), 'constant')
+                        
+                        init_state_list.append(padded_state)
+                        init_state_len_list.append(state_len)
                 else:
                     raise ValueError
                 for i in trials_range:
@@ -135,6 +150,7 @@ class LIBERO_Dataset(Dataset):
                         "task_id": torch.tensor(task_id, dtype=torch.int64).unsqueeze(0),
                         "trial_id": torch.tensor(i, dtype=torch.int64).unsqueeze(0),
                         "init_state": torch.from_numpy(init_state_list[i].copy()),
+                        "init_state_len": torch.tensor(init_state_len_list[i]).unsqueeze(0),
                     }
                     if self.train_val == "train":
                         data.update({"task_lang": task_name_list[i]})

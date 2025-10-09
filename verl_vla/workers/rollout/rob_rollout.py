@@ -1161,18 +1161,21 @@ class RobHFRollout(BaseRollout):
         task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
         trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
         init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
         task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
         max_steps = self.max_steps[self.config.task_suite_name]
         batch_size = task_id.size(0)
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         is_train = meta_info.get('is_train', False)
+        # breakpoint()
 
         # This is a blocking call
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
             init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy()
         )
         
         
@@ -1302,6 +1305,7 @@ class RobHFRollout(BaseRollout):
         task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
         trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
         init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
         task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
         max_steps = self.max_steps[self.config.task_suite_name]
         batch_size = task_id.size(0)
@@ -1312,7 +1316,8 @@ class RobHFRollout(BaseRollout):
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
-            init_state=init_state.cpu().numpy()
+            init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy(),
         )
         
         # ctx = mp.get_context("spawn")
@@ -2455,6 +2460,7 @@ class RobHFRollout(BaseRollout):
         task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
         trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
         init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
         task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
         task_lang = np.repeat(prompts.non_tensor_batch['task_lang'], n_samples)
         task_descriptions = [name for name in task_lang]
@@ -2465,6 +2471,7 @@ class RobHFRollout(BaseRollout):
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
             init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy(),
         )
         current_obs_batch_np_list = []
         for idx in range(len(init_data_list)):
