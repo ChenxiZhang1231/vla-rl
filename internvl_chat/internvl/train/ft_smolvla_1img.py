@@ -645,6 +645,7 @@ class LeRobotDatasetJsonl(Dataset):
                 if len(item['observation.images.image']) == 1:
                     image = Image.open(os.path.join(self.root, item['observation.images.image'][0])).convert('RGB')
                 img_tensor = TF.to_tensor(image) 
+                img_tensor = TF.hflip(img_tensor)
                 ret_dcit['observation.images.image'] = img_tensor
                 
                 
@@ -782,6 +783,7 @@ def main():
     kwargs["dataset_stats"] = ds_meta.stats
     policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
     policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
+    # policy_cfg.train_expert_only = False
     kwargs["config"] = policy_cfg
     # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
     kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path

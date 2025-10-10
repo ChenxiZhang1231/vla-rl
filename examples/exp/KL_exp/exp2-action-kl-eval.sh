@@ -10,11 +10,12 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp2-action-kl-fp16'
+EXPERIMENT_NAME='exp2-action-kl-fp16-eval'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 META_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp2-action-kl-fp16/SimpleVLA-RL/exp2-action-kl-fp16/actor/global_step_609"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
@@ -39,6 +40,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.max_response_length=128 \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
     actor_rollout_ref.model.meta_path=$META_PATH \
+    actor_rollout_ref.model.load_ckpt=$LOAD_MODEL_PATH \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
     actor_rollout_ref.model.action_chunks_len=50 \
@@ -95,7 +97,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     trainer.save_freq=10 \
     trainer.test_freq=10 \
     trainer.total_epochs=100 \
-    trainer.val_only=False \
+    trainer.val_only=True \
     ray_init.num_cpus=32 \
     algorithm.adv_estimator=grpo \
     algorithm.adv_params.verifier_gamma=1.0 \

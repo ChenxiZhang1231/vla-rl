@@ -1213,6 +1213,7 @@ class RobHFRollout(BaseRollout):
 
             vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
             actions = vla_output["action"]
+            # breakpoint()
             
             step_data = vla_input.copy()
             step_data["action"] = actions

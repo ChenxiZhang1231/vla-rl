@@ -357,7 +357,7 @@ class LeRobotDataset(Dataset):
                     item = {**item, **padding}
                     for key, val in query_result.items():
                         item[key] = val
-                item['action'] = item['action']  #[:, 0]
+                item['action'] = item['action'] # [:, 0]
                 if len(self.meta.video_keys) > 0:
                     current_ts = item["timestamp"].item()
                     query_timestamps = self._get_query_timestamps(current_ts, query_indices)
@@ -387,11 +387,17 @@ class LeRobotDataset(Dataset):
 # root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial'
 # saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial-jsonl'
 
-root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long'
-saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long-jsonl'
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Long-jsonl'
 
-# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Goal'
-# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Goal-jsonl'
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Goal'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Goal-jsonl'
+
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Object'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Object-jsonl'
+
+root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks'
+saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks_jsonl'
 
 policy_cfg = SmolVLAConfig()
 ds_meta = LeRobotDatasetMetadata(
@@ -453,19 +459,12 @@ data_loader = DataLoader(
     prefetch_factor=4 # 建议设置
 )
 
-# 3. 配置并创建 ThreadPoolExecutor 用于写入文件
-write_executor = ThreadPoolExecutor(max_workers=16) # 用于写入的线程数
 
-# 4. 主循环
-# DataLoader 会在后台加载数据，主循环可以立即将保存任务提交给线程池
 futures = []
 data_list = []
 
 # tqdm现在包裹的是DataLoader，显示数据加载的进度
 for data_item in tqdm(data_loader, total=len(dataset)):
-    # 异步地提交保存任务到线程池
-    # future = write_executor.submit(save_data_item, data_item)
-    # futures.append(future)
     item = save_data_item(data_item)
     data_list.append(item)
 

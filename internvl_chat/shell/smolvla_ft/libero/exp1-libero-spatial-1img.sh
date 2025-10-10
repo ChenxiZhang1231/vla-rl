@@ -14,7 +14,7 @@ export MASTER_PORT=34229
 export TF_CPP_MIN_LOG_LEVEL=3
 export LAUNCHER=pytorch
 
-OUTPUT_DIR='work_dirs/exp1-libero-spatial-1img'
+OUTPUT_DIR='work_dirs/exp1-smolvla-libero-spatial-1img-bs64-repeat'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"
@@ -33,17 +33,18 @@ torchrun \
   --master_port=${MASTER_PORT} \
   internvl/train/ft_smolvla_1img.py \
   --model_name_or_path "/inspire/ssd/project/robotsimulation/public/huggingface_models/smolvla_base" \
+  --resume_from_checkpoint "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/work_dirs/exp1-smolvla-libero-spatial-1img-bs64-repeat/checkpoint-83171" \
   --output_dir ${OUTPUT_DIR} \
   --meta_path "./shell/data/libero/libero_spatial.json" \
   --overwrite_output_dir True \
   --drop_path_rate 0.0 \
   --dataloader_num_workers 2 \
   --bf16 True \
-  --num_train_epochs 20 \
+  --num_train_epochs 5 \
   --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
   --gradient_accumulation_steps ${GRADIENT_ACC} \
   --save_strategy "steps" \
-  --save_steps 1664 \
+  --save_steps 10000 \
   --save_total_limit 10 \
   --learning_rate 5e-4 \
   --weight_decay 0.05 \

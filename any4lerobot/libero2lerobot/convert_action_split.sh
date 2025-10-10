@@ -8,7 +8,6 @@ python libero_h5.py \
     --executor local \
     --tasks-per-job 5 \
     --workers 100 \
-    --use_delta_action
 
 
 python libero_h5.py \
@@ -17,7 +16,6 @@ python libero_h5.py \
     --executor local \
     --tasks-per-job 5 \
     --workers 100 \
-    --use_delta_action
 
 
 python libero_h5.py \
@@ -26,7 +24,6 @@ python libero_h5.py \
     --executor local \
     --tasks-per-job 5 \
     --workers 100 \
-    --use_delta_action
 
 python libero_h5.py \
     --src-paths /inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed/libero_object_no_noops  \
@@ -34,4 +31,3 @@ python libero_h5.py \
     --executor local \
     --tasks-per-job 5 \
     --workers 100 \
-    --use_delta_action

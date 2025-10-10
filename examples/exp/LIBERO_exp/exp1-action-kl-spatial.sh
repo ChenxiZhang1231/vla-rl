@@ -10,11 +10,11 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp2-action-kl-fp16'
+EXPERIMENT_NAME='exp1-action-kl-spatial-14wsteps'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
-SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
+SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/work_dirs/exp1-smolvla-libero-spatial-1img-bs64-repeat/checkpoint-140000"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
-META_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
+META_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Spatial"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
@@ -94,8 +94,8 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     trainer.nnodes=$NUM_NODES \
     trainer.save_freq=10 \
     trainer.test_freq=10 \
-    trainer.total_epochs=100 \
-    trainer.val_only=False \
+    trainer.total_epochs=300 \
+    trainer.val_only=True \
     ray_init.num_cpus=32 \
     algorithm.adv_estimator=grpo \
     algorithm.adv_params.verifier_gamma=1.0 \
