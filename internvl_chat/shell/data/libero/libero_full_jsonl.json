@@ -1,0 +1,9 @@
+{
+  "libero_full": {
+    "root": "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot_jsonl",
+    "annotation": "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot_jsonl/data.jsonl",
+    "data_augment": false,
+    "repeat_time": 1,
+    "length": 1
+  }
+}

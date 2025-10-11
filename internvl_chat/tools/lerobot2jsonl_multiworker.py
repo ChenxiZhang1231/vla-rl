@@ -396,8 +396,11 @@ class LeRobotDataset(Dataset):
 # root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Object'
 # saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-Split/LIBERO-Object-jsonl'
 
-root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks'
-saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks_jsonl'
+# root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks'
+# saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-4tasks/libero_4tasks_jsonl'
+
+root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot'
+saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot_jsonl'
 
 policy_cfg = SmolVLAConfig()
 ds_meta = LeRobotDatasetMetadata(

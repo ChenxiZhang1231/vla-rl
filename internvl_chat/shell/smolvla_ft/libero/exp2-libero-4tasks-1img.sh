@@ -14,7 +14,7 @@ export MASTER_PORT=34229
 export TF_CPP_MIN_LOG_LEVEL=3
 export LAUNCHER=pytorch
 
-OUTPUT_DIR='work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img-repeat'
+OUTPUT_DIR='work_dirs/exp2-smolvla-libero-4tasks-1img-bs256-4tasks'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"
@@ -34,17 +34,17 @@ torchrun \
   internvl/train/ft_smolvla_1img.py \
   --model_name_or_path "/inspire/ssd/project/robotsimulation/public/huggingface_models/smolvla_base" \
   --output_dir ${OUTPUT_DIR} \
-  --meta_path "./shell/data/libero_full.json" \
+  --meta_path "./shell/data/libero/libero_4tasks.json" \
   --overwrite_output_dir True \
   --drop_path_rate 0.0 \
-  --dataloader_num_workers 32 \
+  --dataloader_num_workers 4 \
   --bf16 True \
-  --num_train_epochs 100 \
+  --num_train_epochs 20 \
   --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
   --gradient_accumulation_steps ${GRADIENT_ACC} \
   --save_strategy "steps" \
-  --save_steps 10000 \
-  --save_total_limit 10 \
+  --save_steps 20000 \
+  --save_total_limit 100 \
   --learning_rate 5e-4 \
   --weight_decay 0.05 \
   --warmup_ratio 0.03 \
