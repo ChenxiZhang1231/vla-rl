@@ -150,3 +150,6 @@ wm_data_process/WM-data-processed
 *.pid
 VLAC/result
 result_analyse/
+*.pkl
+config.json.back.*
+*.jpg
