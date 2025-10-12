@@ -889,6 +889,108 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         return normalized_actions, actions_hidden_states
 
 
+    def _flow_prediction(
+        self,
+        input_embeddings,
+        all_actions_mask,
+        projected_patch_embeddings,
+        attention_mask,
+        labels,
+        NUM_PATCHES,
+        NUM_PROMPT_TOKENS,
+        action_head=None,
+        noisy_action_projector=None,
+        proprio=None,
+        proprio_projector=None,
+    ):
+
+        action_queries = self.action_queries.weight  # (1, h)
+        action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)  # (b, chunk_size, h)
+        # Replace action token embeddings with noisy action embeddings
+        input_embeddings = self._replace_input_embeddings(input_embeddings.clone(), all_actions_mask, action_queries)
+
+        # Build multimodal embeddings and attention mask
+        multimodal_embeddings, multimodal_attention_mask = self._build_multimodal_attention(
+            input_embeddings, projected_patch_embeddings, attention_mask
+        )
+
+        # Forward pass through language model
+        language_model_output = self.language_model(
+            input_ids=None,
+            attention_mask=multimodal_attention_mask,
+            position_ids=None,
+            past_key_values=None,
+            inputs_embeds=multimodal_embeddings,
+            labels=None,
+            use_cache=None,
+            output_attentions=False,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+        # Extract hidden states for action tokens
+        # multi_layer_hidden_states = []
+        
+        # for item in language_model_output.hidden_states[0:]:
+        #     # last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
+        #     # Get hidden states for text portion of prompt+response (after the vision patches)
+        #     text_hidden_states = item
+        #     # Get hidden states for action portion of response
+        #     actions_hidden_states = text_hidden_states[:, NUM_PATCHES+ NUM_PROMPT_TOKENS : NUM_PATCHES + NUM_PROMPT_TOKENS + NUM_TOKENS, :,].reshape(1, 1, NUM_TOKENS, -1).to(torch.bfloat16)
+            
+        #     batch_size = item.shape[0]
+        #     task_latten_states = item[:, :NUM_PATCHES].reshape(batch_size, 1, NUM_PATCHES , -1)
+        #     all_hidden_states = torch.cat((task_latten_states, actions_hidden_states),2)
+        #     multi_layer_hidden_states.append(all_hidden_states)
+            
+        # multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim = 1)
+        
+        last_hidden_states = language_model_output.hidden_states[-1]  # (B, seq_len, D)
+        # Get hidden states for text portion of prompt+response (after the vision patches)
+        text_hidden_states = last_hidden_states[:, NUM_PATCHES:-1]
+        task_latent_states = last_hidden_states[:, :NUM_PATCHES].reshape(1, 1, NUM_PATCHES, -1)
+        # Get hidden states for action portion of response
+        actions_hidden_states = last_hidden_states[:, NUM_PATCHES+ NUM_PROMPT_TOKENS : NUM_PATCHES + NUM_PROMPT_TOKENS + NUM_TOKENS, :,].reshape(1, 1, NUM_TOKENS, -1).to(torch.bfloat16)
+        # actions_hidden_states = text_hidden_states[current_action_mask | next_actions_mask].reshape(B, 1,num_tokens, -1).to(torch.bfloat16)
+        # breakpoint()
+        
+        all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
+        
+        device = all_hidden_states.device
+        dt = -1.0 / 10
+        dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+        actions_shape = (1, 20, 7)
+        noise = action_head.sample_noise(actions_shape, device)
+            
+        x_t = noise
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        x_t_all, t_all, x_next_all, log_probs = [], [], [], []
+        # breakpoint()
+        while time >= -dt / 2:
+            expanded_time = time.expand(1)
+            x_t_ = x_t.reshape(1, -1).unsqueeze(-1).to(torch.bfloat16)
+            rearranged_actions_hidden_states = noisy_action_projector(x_t_)
+            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(1, NUM_ACTIONS_CHUNK, -1)
+            v_t = action_head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            # Euler step
+            # breakpoint()
+            x_next = x_t + dt * v_t
+            
+            x_t_all.append(x_t)
+            t_all.append(expanded_time.detach().cpu())
+            x_next_all.append(x_next)
+            
+            x_t = x_next
+            time += dt
+            
+        
+        normalized_actions = x_t
+        normalized_actions = normalized_actions.reshape(NUM_ACTIONS_CHUNK, ACTION_DIM)
+        normalized_actions = normalized_actions.float().cpu().detach().numpy()
+        
+        return normalized_actions, actions_hidden_states
+    
     def predict_action(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -953,18 +1055,33 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         NUM_PATCHES = self.vision_backbone.get_num_patches() * self.vision_backbone.get_num_images_in_input()
 
         # Run regression or discrete token-based prediction
-        normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(
-            input_embeddings,
-            all_actions_mask,
-            projected_patch_embeddings,
-            attention_mask,
-            labels,
-            NUM_PATCHES,
-            NUM_PROMPT_TOKENS,
-            action_head=action_head,
-            proprio=proprio, # [8]
-            proprio_projector=proprio_projector,
-            )
+        if noisy_action_projector is not None:
+            normalized_actions, actions_hidden_states = self._flow_prediction(
+                input_embeddings,
+                all_actions_mask,
+                projected_patch_embeddings,
+                attention_mask,
+                labels,
+                NUM_PATCHES,
+                NUM_PROMPT_TOKENS,
+                action_head=action_head,
+                noisy_action_projector=noisy_action_projector,
+                proprio=proprio, # [8]
+                proprio_projector=proprio_projector,
+                )
+        else:
+            normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(
+                input_embeddings,
+                all_actions_mask,
+                projected_patch_embeddings,
+                attention_mask,
+                labels,
+                NUM_PATCHES,
+                NUM_PROMPT_TOKENS,
+                action_head=action_head,
+                proprio=proprio, # [8]
+                proprio_projector=proprio_projector,
+                )
            
         # Unnormalize predicted actions
         actions = self._unnormalize_actions(normalized_actions, unnorm_key)

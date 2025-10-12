@@ -88,7 +88,8 @@ class GenerateConfig:
     #################################################################################################################
     model_family: str = "openvla"                    # Model family
     pretrained_checkpoint: Union[str, Path] = ""     # Pretrained checkpoint path
-    use_l1_regression: bool = True                   # If True, uses continuous action head with L1 regression objective
+    use_l1_regression: bool = False                   # If True, uses continuous action head with L1 regression objective
+    use_flow: bool = True
     use_minivlm: bool = True                         # If True, uses minivlm
     num_diffusion_steps: int = 50                    # (When `diffusion==True`) Number of diffusion steps for inference
     use_film: bool = False                           # If True, uses FiLM to infuse language inputs into visual features
@@ -162,9 +163,10 @@ def initialize_model(cfg: GenerateConfig):
     action_head = None
     if cfg.use_l1_regression:
         action_head = get_action_head(cfg, model.llm_dim)
-
-    # Load noisy action projector if using diffusion
-    noisy_action_projector = None
+        noisy_action_projector = None
+    elif cfg.use_flow:
+        action_head = get_action_head(cfg, model.llm_dim)
+        noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
 
     # Get OpenVLA processor if needed
     processor = None
@@ -317,53 +319,53 @@ def run_episode(
 
     # Run episode
     success = False
-    try:
-        while t < max_steps + cfg.num_steps_wait:
-            # Do nothing for the first few timesteps to let objects stabilize
-            if t < cfg.num_steps_wait:
-                obs, reward, done, info = env.step(get_libero_dummy_action(cfg.model_family))
-                t += 1
-                continue
-
-            # Prepare observation
-            observation, img = prepare_observation(obs, resize_size)
-            replay_images.append(img)
-
-            # If action queue is empty, requery model
-            if len(action_queue) == 0:
-                # Query model to get action
-                actions = get_action(
-                    cfg,
-                    model,
-                    observation,
-                    task_description,
-                    processor=processor,
-                    action_head=action_head,
-                    proprio_projector=proprio_projector,
-                    noisy_action_projector=noisy_action_projector,
-                    use_film=cfg.use_film,
-                    use_minivlm=cfg.use_minivlm
-                )
-
-                action_queue.extend(actions) 
-
-            # Get action from queue
-            action = action_queue.popleft()
-            # action = actions[0]
-
-
-            # Process action
-            action = process_action(action, cfg.model_family)
-
-            # Execute action in environment
-            obs, reward, done, info = env.step(action.tolist())
-            if done:
-                success = True
-                break
+    # try:
+    while t < max_steps + cfg.num_steps_wait:
+        # Do nothing for the first few timesteps to let objects stabilize
+        if t < cfg.num_steps_wait:
+            obs, reward, done, info = env.step(get_libero_dummy_action(cfg.model_family))
             t += 1
+            continue
 
-    except Exception as e:
-        log_message(f"Episode error: {e}", log_file)
+        # Prepare observation
+        observation, img = prepare_observation(obs, resize_size)
+        replay_images.append(img)
+
+        # If action queue is empty, requery model
+        if len(action_queue) == 0:
+            # Query model to get action
+            actions = get_action(
+                cfg,
+                model,
+                observation,
+                task_description,
+                processor=processor,
+                action_head=action_head,
+                proprio_projector=proprio_projector,
+                noisy_action_projector=noisy_action_projector,
+                use_film=cfg.use_film,
+                use_minivlm=cfg.use_minivlm
+            )
+
+            action_queue.extend(actions) 
+
+        # Get action from queue
+        action = action_queue.popleft()
+        # action = actions[0]
+
+
+        # Process action
+        action = process_action(action, cfg.model_family)
+
+        # Execute action in environment
+        obs, reward, done, info = env.step(action.tolist())
+        if done:
+            success = True
+            break
+        t += 1
+
+    # except Exception as e:
+    #     log_message(f"Episode error: {e}", log_file)
 
     return success, replay_images
 

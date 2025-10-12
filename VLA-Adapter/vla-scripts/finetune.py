@@ -26,6 +26,7 @@ from torch.utils.data import DataLoader
 from transformers import AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
 from transformers.modeling_outputs import CausalLMOutputWithPast
 import wandb
+from torch.utils.tensorboard import SummaryWriter
 
 from experiments.robot.openvla_utils import (
     check_model_logic_mismatch,
@@ -35,10 +36,10 @@ from experiments.robot.openvla_utils import (
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
-from prismatic.models.action_heads import L1RegressionActionHead
+from prismatic.models.action_heads import L1RegressionActionHead, FlowMatchingActionHead
 from prismatic.models.backbones.llm.prompting import PurePromptBuilder
 from prismatic.models.film_vit_wrapper import FiLMedPrismaticVisionBackbone
-from prismatic.models.projectors import ProprioProjector
+from prismatic.models.projectors import ProprioProjector, NoisyActionProjector
 from prismatic.training.train_utils import (
     compute_actions_l1_loss,
     compute_token_accuracy,
@@ -80,6 +81,7 @@ class FinetuneConfig:
     # Algorithm and architecture
     use_l1_regression: bool = True                   # If True, trains continuous action head with L1 regression objective
     use_diffusion: bool = False                      # If True, trains continuous action head with diffusion modeling objective (DDIM)
+    use_flow: bool = False
     num_diffusion_steps: int = 50                    # (When `diffusion==True`) Number of diffusion steps for training 
     use_film: bool = False                           # If True, uses FiLM to infuse language inputs into visual features
     num_images_in_input: int = 1                     # Number of images in the VLA input (default: 1)
@@ -120,7 +122,7 @@ class FinetuneConfig:
     wandb_project: str = "your-wandb-project"        # Name of WandB project
     run_id_note: Optional[str] = None                # Extra note to add to end of run ID for logging
     run_id_override: Optional[str] = None            # Optional string to override the run ID with
-    wandb_log_freq: int = 10                         # WandB logging frequency in steps
+    wandb_log_freq: int = 1                         # WandB logging frequency in steps
 
     # revision version
     use_pro_version: bool = True                             # the version number
@@ -289,9 +291,11 @@ def run_forward_pass(
     vla,
     action_head,
     proprio_projector,
+    noisy_action_projector,
     batch,
     action_tokenizer,
     device_id,
+    use_flow,
     use_l1_regression,
     use_proprio,
     use_film,
@@ -330,7 +334,8 @@ def run_forward_pass(
     # Get ground-truth action labels
     ground_truth_actions = batch["actions"].to(device_id).to(torch.bfloat16)
     noise, noisy_actions, diffusion_timestep_embeddings = None, None, None
-
+    B, _, _ = ground_truth_actions.shape
+    
     # VLA forward pass
     with torch.autocast("cuda", dtype=torch.bfloat16):
         output: CausalLMOutputWithPast = vla(
@@ -353,7 +358,38 @@ def run_forward_pass(
     next_actions_mask = get_next_actions_mask(ground_truth_token_ids)
 
     # Compute metrics for discrete action representation (next-token prediction)
-    if not (use_l1_regression):
+    if use_flow:
+        # pass
+        
+        last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
+        # Get hidden states for text portion of prompt+response (after the vision patches)
+        text_hidden_states = last_hidden_states[:, num_patches:-1]
+        # Get hidden states for action portion of response
+        num_tokens = 64
+        actions_hidden_states = text_hidden_states[current_action_mask | next_actions_mask].reshape(B, 1,num_tokens, -1).to(torch.bfloat16)
+        task_latent_states = last_hidden_states[:, :num_patches].reshape(B, 1, num_patches, -1)
+        all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
+        
+        noise = action_head.sample_noise(ground_truth_actions.shape, ground_truth_actions.device)
+        time = action_head.sample_time(ground_truth_actions.shape[0], ground_truth_actions.device)
+        time_expanded = time[:, None, None]
+        u_t = noise - ground_truth_actions
+        
+        x_t = time_expanded * noise + (1 - time_expanded) * ground_truth_actions
+        x_t = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
+        rearranged_actions_hidden_states = noisy_action_projector(x_t)
+        rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
+        # flow_pred = action_head.flow_predictor(
+        #     obs=rearranged_actions_hidden_states,
+        #     hidden_states=all_hidden_states,
+        #     time_step=time_expanded,
+        #     proprio_states=None
+        # )
+        flow_pred = action_head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=time, proprio_states=None)
+        loss = F.mse_loss(u_t, flow_pred, reduction="mean")
+        metrics["loss_value"] = loss.detach().float().item()
+        
+    elif not (use_l1_regression):
         loss = output.loss
         predicted_token_ids = output.logits[:, num_patches:-1].argmax(dim=2)
 
@@ -465,7 +501,10 @@ def compute_smoothened_metrics(metrics_deques) -> dict:
     return smoothened_metrics
 
 
-
+def tb_log(writer, metrics: dict, step: int, prefix: str = ""):
+    for k, v in metrics.items():
+        writer.add_scalar(f"{prefix}{k}", float(v), step)
+        
 def log_metrics_to_wandb(metrics, prefix, step, wandb_entity) -> None:
     """
     Log metrics to Weights & Biases.
@@ -487,7 +526,8 @@ def log_metrics_to_wandb(metrics, prefix, step, wandb_entity) -> None:
         # Keep other metrics as is
         else:
             log_dict[f"{prefix}/{name.replace('_', ' ').title()}"] = value
-    wandb_entity.log(log_dict, step=step)
+    # wandb_entity.log(log_dict, step=step)
+    tb_log(wandb_entity, log_dict, step, prefix)
 
 
 
@@ -557,7 +597,11 @@ def save_training_checkpoint(
         if cfg.use_proprio and proprio_projector is not None:
             torch.save(proprio_projector.state_dict(), checkpoint_dir / f"proprio_projector--{checkpoint_name_suffix}")
 
-        if cfg.use_diffusion and noisy_action_projector is not None:
+        # if cfg.use_diffusion and noisy_action_projector is not None:
+        #     torch.save(
+        #         noisy_action_projector.state_dict(), checkpoint_dir / f"noisy_action_projector--{checkpoint_name_suffix}"
+        #     )
+        if noisy_action_projector is not None:
             torch.save(
                 noisy_action_projector.state_dict(), checkpoint_dir / f"noisy_action_projector--{checkpoint_name_suffix}"
             )
@@ -653,6 +697,7 @@ def run_validation(
                 batch=batch,
                 action_tokenizer=action_tokenizer,
                 device_id=device_id,
+                use_flow=cfg.use_flow,
                 use_l1_regression=cfg.use_l1_regression,
                 use_proprio=cfg.use_proprio,
                 use_film=cfg.use_film,
@@ -682,7 +727,7 @@ def run_validation(
 
     # Log validation metrics to W&B
     if distributed_state.is_main_process:
-        log_metrics_to_wandb(avg_val_metrics, "VLA Val", log_step, wandb)
+        log_metrics_to_wandb(avg_val_metrics, "VLA Val", log_step, writer)
 
 
 
@@ -728,7 +773,10 @@ def finetune(cfg: FinetuneConfig) -> None:
 
     # Initialize wandb logging
     if distributed_state.is_main_process:
-        wandb.init(project=cfg.wandb_project, name=f"ft+{run_id}", mode="offline")
+        # wandb.init(project=cfg.wandb_project, name=f"ft+{run_id}", mode="offline")
+        run_name = f"ft+{run_id}"
+        log_dir = os.path.join("runs", f"{cfg.wandb_project}", run_name)  # 自定义目录
+        writer = SummaryWriter(log_dir=log_dir)
 
     # Print detected constants
     print(
@@ -749,17 +797,22 @@ def finetune(cfg: FinetuneConfig) -> None:
     # the file to the downloaded or locally stored checkpoint directory so
     # that the user's changes to the VLA class logic go into effect
 
-    if model_is_on_hf_hub(cfg.config_file_path):
-        # Download model directly from Hugging Face Hub
-        vla_download_path = snapshot_download(repo_id=cfg.config_file_path)
-        # Overwrite VLA path
-        cfg.config_file_path = vla_download_path
-    else:
-        # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
-        AutoConfig.register("openvla", OpenVLAConfig)
-        AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
-        AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
-        AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+    # if model_is_on_hf_hub(cfg.config_file_path):
+    #     # Download model directly from Hugging Face Hub
+    #     vla_download_path = snapshot_download(repo_id=cfg.config_file_path)
+    #     # Overwrite VLA path
+    #     cfg.config_file_path = vla_download_path
+    # else:
+    #     # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
+    #     AutoConfig.register("openvla", OpenVLAConfig)
+    #     AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+    #     AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+    #     AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+    
+    AutoConfig.register("openvla", OpenVLAConfig)
+    AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+    AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+    AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
 
 
     # Update config.json and sync model files
@@ -894,6 +947,13 @@ def finetune(cfg: FinetuneConfig) -> None:
             },
         to_bf16=True,
         )
+    
+    if cfg.use_flow:
+        action_head = FlowMatchingActionHead(
+                    input_dim=vla.module.llm_dim, hidden_dim=vla.module.llm_dim, action_dim=ACTION_DIM, num_flow_steps=10
+                ).to(device=device_id, dtype=torch.bfloat16)
+        noisy_action_projector = NoisyActionProjector(
+                    llm_dim=vla.module.llm_dim).to(device=device_id, dtype=torch.bfloat16)
 
     # Get number of vision patches
     NUM_PATCHES = vla.module.vision_backbone.get_num_patches() * vla.module.vision_backbone.get_num_images_in_input()
@@ -906,6 +966,12 @@ def finetune(cfg: FinetuneConfig) -> None:
 
     if cfg.use_proprio:
         trainable_params += [param for param in proprio_projector.parameters() if param.requires_grad]
+    
+    # breakpoint()
+    if cfg.use_flow:
+        trainable_params += [param for param in action_head.parameters() if param.requires_grad]
+        trainable_params += [param for param in noisy_action_projector.parameters() if param.requires_grad]
+    
     print(f"# total trainable params: {sum(p.numel() for p in trainable_params)}")
     optimizer = AdamW(trainable_params, lr=cfg.learning_rate)
 
@@ -1019,13 +1085,16 @@ def finetune(cfg: FinetuneConfig) -> None:
         for batch_idx, batch in enumerate(dataloader):
             # Compute training metrics and loss
             compute_diffusion_l1 = (cfg.use_l1_regression and batch_idx % cfg.diffusion_sample_freq == 0) or (cfg.use_diffusion and batch_idx % cfg.diffusion_sample_freq == 0)
+            # breakpoint()
             loss, metrics = run_forward_pass(
                 vla=vla,
                 action_head=action_head,
                 proprio_projector=proprio_projector if cfg.use_proprio else None,
+                noisy_action_projector=noisy_action_projector,
                 batch=batch,
                 action_tokenizer=action_tokenizer,
                 device_id=device_id,
+                use_flow=cfg.use_flow,
                 use_l1_regression=cfg.use_l1_regression,
                 use_proprio=cfg.use_proprio,
                 use_film=cfg.use_film,
@@ -1055,7 +1124,7 @@ def finetune(cfg: FinetuneConfig) -> None:
             # Push Metrics to W&B (every wandb_log_freq gradient steps)
             log_step = gradient_step_idx if not cfg.resume else cfg.resume_step + gradient_step_idx
             if distributed_state.is_main_process and log_step % cfg.wandb_log_freq == 0:
-                log_metrics_to_wandb(smoothened_metrics, "VLA Train", log_step, wandb)
+                log_metrics_to_wandb(smoothened_metrics, "VLA Train", log_step, writer)
 
             # [If applicable] Linearly warm up learning rate from 10% to 100% of original
             if cfg.lr_warmup_steps > 0:
@@ -1067,12 +1136,13 @@ def finetune(cfg: FinetuneConfig) -> None:
             if distributed_state.is_main_process and gradient_step_idx % cfg.wandb_log_freq == 0:
                 # Log the learning rate
                 # Make sure to do this AFTER any learning rate modifications (e.g., warmup/decay)
-                wandb.log(
-                    {
-                        "VLA Train/Learning Rate": scheduler.get_last_lr()[0],
-                    },
-                    step=log_step,
-                )
+                # wandb.log(
+                #     {
+                #         "VLA Train/Learning Rate": scheduler.get_last_lr()[0],
+                #     },
+                #     step=log_step,
+                # )
+                writer.add_scalar("VLA Train/Learning Rate", scheduler.get_last_lr()[0], global_step=log_step)
 
             # Optimizer and LR scheduler step
             if (batch_idx + 1) % cfg.grad_accumulation_steps == 0:
@@ -1090,7 +1160,7 @@ def finetune(cfg: FinetuneConfig) -> None:
                     vla=vla,
                     processor=processor,
                     proprio_projector=proprio_projector if cfg.use_proprio else None,
-                    noisy_action_projector=None,
+                    noisy_action_projector=noisy_action_projector,
                     action_head=action_head,
                     train_dataset=train_dataset,
                     distributed_state=distributed_state,

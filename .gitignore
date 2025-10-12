@@ -153,3 +153,4 @@ result_analyse/
 *.pkl
 config.json.back.*
 *.jpg
+events.out.tfevents.*

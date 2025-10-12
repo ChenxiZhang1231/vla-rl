@@ -24,7 +24,7 @@ json_numpy.patch()
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
-from prismatic.models.action_heads import L1RegressionActionHead
+from prismatic.models.action_heads import L1RegressionActionHead, FlowMatchingActionHead
 from prismatic.models.film_vit_wrapper import FiLMedPrismaticVisionBackbone
 from prismatic.models.projectors import NoisyActionProjector, ProprioProjector
 from prismatic.vla.constants import (
@@ -479,7 +479,7 @@ def get_noisy_action_projector(cfg: Any, llm_dim: int) -> NoisyActionProjector:
     return noisy_action_projector
 
 
-def get_action_head(cfg: Any, llm_dim: int) -> Union[L1RegressionActionHead]:
+def get_action_head(cfg: Any, llm_dim: int):
     """
     Get action head for continuous value prediction.
 
@@ -508,33 +508,42 @@ def get_action_head(cfg: Any, llm_dim: int) -> Union[L1RegressionActionHead]:
             action_dim=ACTION_DIM,
             use_pro_version=cfg.use_pro_version,
         )
-
+    elif cfg.use_flow:
+        action_head = FlowMatchingActionHead(
+            input_dim=llm_dim, 
+            hidden_dim=llm_dim, 
+            action_dim=ACTION_DIM,
+        )
     else:
         raise ValueError("Either use_l1_regression or use_diffusion must be True")
 
     action_head = action_head.to(torch.bfloat16).to(DEVICE)
     action_head.eval()
-
+    
     # Find and load checkpoint (may be on Hugging Face Hub or stored locally)
-    if model_is_on_hf_hub(cfg.pretrained_checkpoint):
-        model_path_to_action_head_name = {
-            "VLA-Adapter/LIBERO-Spatial-Pro": "action_head--checkpoint.pt",
-            "VLA-Adapter/LIBERO-Object-Pro": "action_head--checkpoint.pt",
-            "VLA-Adapter/LIBERO-Goal-Pro": "action_head--checkpoint.pt",
-            "VLA-Adapter/LIBERO-Long-Pro": "action_head--checkpoint.pt",
-        }
-        if cfg.pretrained_checkpoint not in model_path_to_action_head_name.keys():
-            raise ValueError("Unsupported HF Hub pretrained checkpoint found!")
-        # Download proprio projector directly from HF Hub
-        action_head_path = hf_hub_download(
-            repo_id=cfg.pretrained_checkpoint, filename=model_path_to_action_head_name[cfg.pretrained_checkpoint]
-        )
-        state_dict = load_component_state_dict(action_head_path)
-        action_head.load_state_dict(state_dict)
-    else:
-        checkpoint_path = find_checkpoint_file(cfg.pretrained_checkpoint, "action_head")
-        state_dict = load_component_state_dict(checkpoint_path)
-        action_head.load_state_dict(state_dict)
+    # if model_is_on_hf_hub(cfg.pretrained_checkpoint):
+    #     model_path_to_action_head_name = {
+    #         "VLA-Adapter/LIBERO-Spatial-Pro": "action_head--checkpoint.pt",
+    #         "VLA-Adapter/LIBERO-Object-Pro": "action_head--checkpoint.pt",
+    #         "VLA-Adapter/LIBERO-Goal-Pro": "action_head--checkpoint.pt",
+    #         "VLA-Adapter/LIBERO-Long-Pro": "action_head--checkpoint.pt",
+    #     }
+    #     if cfg.pretrained_checkpoint not in model_path_to_action_head_name.keys():
+    #         raise ValueError("Unsupported HF Hub pretrained checkpoint found!")
+    #     # Download proprio projector directly from HF Hub
+    #     action_head_path = hf_hub_download(
+    #         repo_id=cfg.pretrained_checkpoint, filename=model_path_to_action_head_name[cfg.pretrained_checkpoint]
+    #     )
+    #     state_dict = load_component_state_dict(action_head_path)
+    #     action_head.load_state_dict(state_dict)
+    # else:
+    #     checkpoint_path = find_checkpoint_file(cfg.pretrained_checkpoint, "action_head")
+    #     state_dict = load_component_state_dict(checkpoint_path)
+    #     action_head.load_state_dict(state_dict)
+    
+    checkpoint_path = find_checkpoint_file(cfg.pretrained_checkpoint, "action_head")
+    state_dict = load_component_state_dict(checkpoint_path)
+    action_head.load_state_dict(state_dict)
 
     return action_head
 

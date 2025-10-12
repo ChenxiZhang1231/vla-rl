@@ -31,8 +31,9 @@
             "vla-scripts/finetune.py",
             "--vlm_path", "/inspire/ssd/project/robotsimulation/public/data/prism-qwen25-extra-dinosiglip-224px-0_5b",
             "--config_file_path", "pretrained_models/configs",
+            // "--data_root_dir", "/inspire/ssd/project/robotsimulation/public/data/OpenVLA/modified_libero_rlds",
             "--data_root_dir", "/inspire/ssd/project/robotsimulation/public/data/modified_libero_rlds",
-            "--dataset_name", "${env:data_name}",
+            "--dataset_name", "libero_spatial_no_noops",
             "--run_root_dir", "outputs",
             "--use_film", "False",
             "--num_images_in_input", "1",
@@ -51,7 +52,28 @@
             "--learning_rate", "0.0002",
             "--lora_rank", "64",
             "--use_pro_version", "True",
-            "--run_id_note", "VLA-Adapter--libero_spatial_no_noops--${currentDate}-${currentTime}"
+            "--run_id_note", "VLA-Adapter--libero_spatial_no_noops--${currentDate}-${currentTime}",
+            "--use_flow", "True",
+          ]
+        },
+        {
+          "name": "Eval LIBERO Spatial (CUDA:0)",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/VLA-Adapter",
+          "program": "experiments/robot/libero/run_libero_eval.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "env": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "args": [
+            "--use_proprio", "False",
+            "--num_images_in_input", "1",
+            "--use_film", "False",
+            "--pretrained_checkpoint", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----5000_chkpt",
+            "--task_suite_name", "libero_spatial",
+            "--use_pro_version", "True"
           ]
         },
         {

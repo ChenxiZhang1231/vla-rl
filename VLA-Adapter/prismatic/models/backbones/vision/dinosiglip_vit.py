@@ -28,7 +28,13 @@ DINOSigLIP_VISION_BACKBONES = {
     "dinosiglip-vit-so-224px": {
         "dino": "vit_large_patch14_reg4_dinov2.lvd142m",
         "siglip": "vit_so400m_patch14_siglip_224",
+        "dino_path": "/inspire/ssd/project/robotsimulation/public/data/vit_large_patch14_reg4_dinov2.lvd142m/pytorch_model.bin",
+        "siglip_path": "/inspire/ssd/project/robotsimulation/public/data/ViT-SO400M-14-SigLIP/open_clip_model.safetensors",
     },
+    # "dinosiglip-vit-so-224px": {
+    #     "dino": "/inspire/ssd/project/robotsimulation/public/data/vit_large_patch14_reg4_dinov2.lvd142m",
+    #     "siglip": "/inspire/ssd/project/robotsimulation/public/data/ViT-SO400M-14-SigLIP",
+    # },
     "dinosiglip-vit-so-384px": {
         "dino": "vit_large_patch14_reg4_dinov2.lvd142m",
         "siglip": "vit_so400m_patch14_siglip_384",
@@ -62,7 +68,8 @@ class DinoSigLIPViTBackbone(VisionBackbone):
         )
         self.dino_timm_path_or_url = DINOSigLIP_VISION_BACKBONES[vision_backbone_id]["dino"]
         self.siglip_timm_path_or_url = DINOSigLIP_VISION_BACKBONES[vision_backbone_id]["siglip"]
-
+        self.dino_timm_path_or_url_path = DINOSigLIP_VISION_BACKBONES[vision_backbone_id]["dino_path"]
+        self.siglip_timm_path_or_url_path = DINOSigLIP_VISION_BACKBONES[vision_backbone_id]["siglip_path"]
         # Initialize both Featurizers (ViTs) by downloading from HF / TIMM Hub if necessary
         self.dino_featurizer: VisionTransformer = timm.create_model(
             self.dino_timm_path_or_url, pretrained=True, num_classes=0, img_size=self.default_image_size

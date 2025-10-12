@@ -1,4 +1,5 @@
-data_name=libero_spatial_no_noops
+# lrm_cu126_main
+data_name=libero_goal_no_noops
 
 torchrun --standalone --nnodes 1 --nproc-per-node 8 vla-scripts/finetune.py \
 --vlm_path /inspire/ssd/project/robotsimulation/public/data/prism-qwen25-extra-dinosiglip-224px-0_5b \
@@ -18,10 +19,11 @@ torchrun --standalone --nnodes 1 --nproc-per-node 8 vla-scripts/finetune.py \
 --save_freq 5000 \
 --save_latest_checkpoint_only False \
 --merge_lora_during_training True \
---batch_size 64 \
+--batch_size 8 \
+--use_flow True \
 --grad_accumulation_steps 1 \
---learning_rate 2e-4 \
+--learning_rate 1e-4 \
 --lora_rank 64 \
 --use_pro_version True \
---run_id_note VLA-Adapter--libero_spatial_no_noops--$current_time \
-# > logs/VLA-Adapter--libero_spatial_no_noops--$current_time.log 2>&1 &
+--run_id_note VLA-Adapter--libero_goal_no_noops--$current_time \
+# > logs/VLA-Adapter--libero_goal_no_noops--$current_time.log 2>&1 &
