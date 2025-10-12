@@ -1659,6 +1659,7 @@ def main_task(config):
 
     # instantiate tokenizer
     from verl_vla.utils import hf_tokenizer
+    breakpoint()
     tokenizer = hf_tokenizer(local_path)
     # tokenizer = None
 
