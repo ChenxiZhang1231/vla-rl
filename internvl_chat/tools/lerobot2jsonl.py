@@ -383,8 +383,8 @@ class LeRobotDataset(Dataset):
 
 
 
-root_path = '/SSD_DISK/users/zhangjiahui/data/pick_black_eraser_kb'
-saved_path = '/SSD_DISK/users/zhangjiahui/data/pick_black_eraser_kb_jsonl'
+root_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/libero_whole'
+saved_path = '/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/libero_whole_jsonl'
 policy_cfg = SmolVLAConfig()
 ds_meta = LeRobotDatasetMetadata(
     {'root': root_path}
@@ -396,7 +396,6 @@ dataset = LeRobotDataset(
     video_backend=get_safe_default_codec(),
 )
 
-print()
 data_list = []
 len_dataset = dataset.__len__()
 for idx in tqdm(range(len_dataset)):
@@ -409,7 +408,8 @@ for idx in tqdm(range(len_dataset)):
     image_path = os.path.join('images', f'ep_{ep_idx:03d}-{frame_idx:06d}.png')
     os.makedirs(os.path.dirname(image_save_path), exist_ok=True)
 
-    image = data['observation.images.front'].to(torch.float32)
+    # image = data['observation.images.front'].to(torch.float32)
+    image = data['observation.images.image'].to(torch.float32)
     image = (image * 255).to(torch.uint8)
     pil_img = TF.to_pil_image(image)
     pil_img.save(image_save_path)
@@ -417,7 +417,7 @@ for idx in tqdm(range(len_dataset)):
     # save image
     data_item = {
         "observation.images.front": [image_path],
-        "observation.images.front_is_pad": data['observation.images.front_is_pad'].to(torch.float32).numpy().tolist(),
+        "observation.images.front_is_pad": data['observation.images.image_is_pad'].to(torch.float32).numpy().tolist(),
         "observation.state": data['observation.state'].to(torch.float32).numpy().tolist(),
         "observation.state_is_pad": data['observation.state_is_pad'].to(torch.float32).numpy().tolist(),
         "action": data['action'].to(torch.float32).numpy().tolist(),

@@ -13,7 +13,8 @@ env.reset()
 obs = env.set_init_state(initial_state)
 
 for _ in range(50):
-    obs, _, _, _ = env.step(get_libero_dummy_action('openvla'))
+    a = get_libero_dummy_action('openvla')
+    obs, _, _, _ = env.step(a)
     
 start_time = time.time()
 for _ in range(50):

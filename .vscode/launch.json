@@ -9,7 +9,72 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+          "name": "Finetune VLA-Adapter (8x GPU, torchrun)",
+          "type": "python",
+          "request": "launch",
+          "module": "torch.distributed.run",
+          "cwd": "${workspaceFolder}/VLA-Adapter",
+          "console": "integratedTerminal",
+          "justMyCode": false,
+          "subProcess": true,
+          "env": {
+            "data_name": "libero_spatial_no_noops"
+          },
+          "args": [
+            "--standalone",
+            "--nnodes", "1",
+            "--nproc-per-node", "1",
+            "vla-scripts/finetune.py",
+            "--vlm_path", "/inspire/ssd/project/robotsimulation/public/data/prism-qwen25-extra-dinosiglip-224px-0_5b",
+            "--config_file_path", "pretrained_models/configs",
+            // "--data_root_dir", "/inspire/ssd/project/robotsimulation/public/data/OpenVLA/modified_libero_rlds",
+            "--data_root_dir", "/inspire/ssd/project/robotsimulation/public/data/modified_libero_rlds",
+            "--dataset_name", "libero_spatial_no_noops",
+            "--run_root_dir", "outputs",
+            "--use_film", "False",
+            "--num_images_in_input", "1",
+            "--use_proprio", "False",
+            "--use_lora", "True",
+            "--use_fz", "False",
+            "--use_minivlm", "True",
+            "--image_aug", "True",
+            "--num_steps_before_decay", "400000",
+            "--max_steps", "400005",
+            "--save_freq", "5000",
+            "--save_latest_checkpoint_only", "False",
+            "--merge_lora_during_training", "True",
+            "--batch_size", "64",
+            "--grad_accumulation_steps", "1",
+            "--learning_rate", "0.0002",
+            "--lora_rank", "64",
+            "--use_pro_version", "True",
+            "--run_id_note", "VLA-Adapter--libero_spatial_no_noops--${currentDate}-${currentTime}",
+            "--use_flow", "True",
+          ]
+        },
+        {
+          "name": "Eval LIBERO Spatial (CUDA:0)",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/VLA-Adapter",
+          "program": "experiments/robot/libero/run_libero_eval.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "env": {
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "args": [
+            "--use_proprio", "False",
+            "--num_images_in_input", "1",
+            "--use_film", "False",
+            "--pretrained_checkpoint", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----150000_chkpt",
+            "--task_suite_name", "libero_spatial",
+            "--use_pro_version", "True"
+          ]
         },
         {
           "name": "Run Action Generate tutorial",
@@ -72,6 +137,41 @@
           }
         },
         {
+          "name": "Debug video2world_action pretrain",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/world_model/ActionWorldModel",
+          "program": "examples/video2world_action_pretrain.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+              "--model_size", "2B",
+              // "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_training_2025-09-05_18-26-32/checkpoints/model/iter_000048000.pt",
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/clips/529_759750_head_color_clip_00008.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/data/AgiBotWorld-Beta-action-processed/metadata/529_759750_head_color_clip_00008.npz",
+              "--dit_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/libero_1008/predict2_video2world_2b_action_conditioned_finetuning_libero_2025-10-07_16-01-00/checkpoints/model/iter_000008000.pt",
+              
+              // "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/clips/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.mp4",
+              // "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_90/metadata/agentview_0a4b2744-c0d0-436e-9ebd-1c78280b75be_clip_00002.npz",
+              "--input_video", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/clips/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.mp4",
+              "--input_annotation", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/LIBERO-WM/libero_object/metadata/agentview_0a2a5c81-57ef-4891-ae75-94bd59aee817_clip_00002.npz",
+              
+              "--num_conditional_frames", "1",
+              "--chunk_size", "20",
+              "--save_path", "output_debug/generated_video_action.mp4",
+              "--guidance", "0",
+              "--seed", "0",
+              "--disable_guardrail",
+              "--disable_prompt_refiner",
+              "--autoregressive",
+              "--use_black",
+              "--use_history",
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Regenerate LIBERO",
           "type": "debugpy",
           "request": "launch",
@@ -87,6 +187,30 @@
             // "MUJOCO_GL": "egl",
             // "MUJOCO_GL": "glx",
             "MUJOCO_GL": "osmesa",
+            // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+            
+          }
+        },
+        {
+          "name": "Convert LIBERO",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
+          "program": "libero_h5.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--src-paths=/inspire/ssd/project/robotsimulation/public/data/Debug-dataset/libero_spatial_no_noops",
+            "--output-path=/inspire/ssd/project/robotsimulation/public/data/Debug-dataset",
+            "--executor=local",
+            "--tasks-per-job=1",
+            "--workers=1",
+            "--debug",
+            "--use_delta_action",
+          ],
+          "env": {
+            "MUJOCO_GL": "egl",
+            // "MUJOCO_GL": "glx",
+            // "MUJOCO_GL": "osmesa",
             // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
             
           }
@@ -268,7 +392,8 @@
               "--model_name_or_path", "/inspire/ssd/project/robotsimulation/public/huggingface_models/smolvla_base",
               "--conv_style", "smolvla",
               "--output_dir", "work_dirs/debug",
-              "--meta_path", "/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/jasonzhang/vla-rl/internvl_chat/shell/data/debug.json",
+              // "--meta_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/shell/data/debug.json",
+              "--meta_path", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/internvl_chat/shell/data/libero/libero_spatial.json",
               "--overwrite_output_dir", "True",
               "--drop_path_rate", "0.0",
               "--dataloader_num_workers", "1",

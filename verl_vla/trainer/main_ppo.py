@@ -56,7 +56,7 @@ class RobRewardManager():
     def __init__(self, num_examine,config) -> None:
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.config=config
-        if config.actor_rollout_ref.model.vla == 'smolvla':
+        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter']:
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'
@@ -1660,6 +1660,7 @@ def main_task(config):
     # instantiate tokenizer
     from verl_vla.utils import hf_tokenizer
     tokenizer = hf_tokenizer(local_path)
+    # tokenizer = None
 
     # define worker classes
     if config.actor_rollout_ref.actor.strategy == 'fsdp':

@@ -14,7 +14,7 @@ export MASTER_PORT=34229
 export TF_CPP_MIN_LOG_LEVEL=3
 export LAUNCHER=pytorch
 
-OUTPUT_DIR='work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img'
+OUTPUT_DIR='work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img-repeat'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"
@@ -39,11 +39,11 @@ torchrun \
   --drop_path_rate 0.0 \
   --dataloader_num_workers 32 \
   --bf16 True \
-  --num_train_epochs 20 \
+  --num_train_epochs 100 \
   --per_device_train_batch_size ${PER_DEVICE_BATCH_SIZE} \
   --gradient_accumulation_steps ${GRADIENT_ACC} \
   --save_strategy "steps" \
-  --save_steps 13304 \
+  --save_steps 10000 \
   --save_total_limit 10 \
   --learning_rate 5e-4 \
   --weight_decay 0.05 \

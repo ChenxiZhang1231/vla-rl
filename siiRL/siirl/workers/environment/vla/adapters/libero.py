@@ -53,6 +53,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
                  max_steps: int,
                  num_steps_wait: int = 10,
                  model_family: str = "openvla",
+                #  delta_action: bool = False,
                  gpu_ids: List[int] = [0],
                  seed: int = 0):
         """
@@ -76,6 +77,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.num_steps_wait = num_steps_wait
         self.model_family = model_family
         self.gpu_ids = gpu_ids
+        # self.delta_action = delta_action
 
         self.env: SubprocVectorEnv = None
         self.step_count = None
@@ -83,7 +85,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.benchmark_dict = benchmark.get_benchmark_dict()
         self.task_suite = self.benchmark_dict[self.task_suite_name]()
 
-    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None, init_state = None) -> List[Dict[str, Any]]:
+    def _blocking_reset(self, task_ids: Optional[List[int]] = None, trial_ids: Optional[List[int]] = None, init_state = None, init_state_len = None) -> List[Dict[str, Any]]:
         """Synchronous implementation of the reset logic."""
 
         # Use provided task_ids or sample new ones
@@ -140,11 +142,18 @@ class LIBEROAdapter(BaseVLAEnvironment):
             state_id = trial_ids[i]
             initial_state_ids.append(state_id)
             if init_state is not None:
-                initial_states_to_set.append(init_state[i])
+                if init_state_len is not None:
+                    init_s = init_state[i][:init_state_len[i][0]]
+                else:
+                    init_s = init_state[i]
+                initial_states_to_set.append(init_s)
             else:
                 initial_states_to_set.append(initial_states_list[i][state_id])
 
         # Set initial state only for the active environments.
+        # breakpoint()
+        # if self.delta_action:
+        #     breakpoint()
         obs_np_list = self.env.set_init_state(initial_states_to_set, id=active_env_ids)
 
         for _ in range(self.num_steps_wait):
@@ -163,8 +172,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 'type': 'init',
                 'obs': obs_np_list[i],
                 "task_description": task_descriptions[i],
-                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
-                'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
+                'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
+                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
                 'task_file_name': f"{self.task_suite_name}_task_{task_id}_trial_{trial_id}",
                 'active': True,
                 'complete': False,
@@ -215,8 +224,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 act_idx = active_indices_list[i]
                 if step_images[act_idx] is None:
                     step_images[act_idx] = []
-                # step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
-                step_images[act_idx].append(obs[i]["agentview_image"][::-1])
+                step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
+                # step_images[act_idx].append(obs[i]["agentview_image"][::-1])
 
                 if use_vlm_rm:
                     if dones[i] or self.step_count[act_idx] >= self.max_steps:

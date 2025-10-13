@@ -42,12 +42,16 @@ class RobDataParallelPPOActor(BasePPOActor):
         self,
         config,
         actor_module: nn.Module,
+        action_head,
+        noisy_action_projector,
         actor_optimizer: torch.optim.Optimizer = None,
     ):
         """When optimizer is None, it is Reference Policy"""
         super().__init__(config)
         self.actor_module = actor_module
         self.actor_optimizer = actor_optimizer
+        self.action_head = action_head
+        self.noisy_action_projector = noisy_action_projector
         self.use_remove_padding = self.config.get('use_remove_padding', False)
         print(f'Actor use_remove_padding={self.use_remove_padding}')
         print(f'PRM use dynamic bsz={self.config.get("use_dynamic_bsz", False)}')

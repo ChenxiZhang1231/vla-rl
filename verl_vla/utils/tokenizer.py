@@ -73,6 +73,14 @@ def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kw
         AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
         processor = AutoProcessor.from_pretrained(name_or_path, trust_remote_code=True)
         tokenizer=processor.tokenizer
+    if model == "vla-adapter":   
+        from verl_vla.utils.vla_utils.vla_adapter.prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
+        from verl_vla.utils.vla_utils.vla_adapter.prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
+        print("*********USE VLA tokenizer*************")
+        AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+        processor = AutoProcessor.from_pretrained(name_or_path, trust_remote_code=True)
+        tokenizer=processor.tokenizer
+
     else:
         tokenizer = AutoTokenizer.from_pretrained(name_or_path, **kwargs)
         

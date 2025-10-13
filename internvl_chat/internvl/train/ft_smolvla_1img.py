@@ -19,6 +19,7 @@ from pathlib import Path
 import packaging.version
 import datasets
 from datasets import concatenate_datasets, load_dataset
+import torchvision.transforms.functional as TF
 
 import numpy as np
 
@@ -35,6 +36,7 @@ from internvl.dist_utils import init_dist
 from internvl.model.smolvla import SmolVLAPolicy1img, SmolVLAConfig
 from internvl.patch.pad_data_collator import concat_pad_data_collator_smovla
 from internvl.train.dataset_packed import PackedDataset, packed_collate_fn
+from internvl.train.vla_trainer import VLATrainer
 from PIL import Image, ImageFile, PngImagePlugin, UnidentifiedImageError
 from torch.utils.data import Dataset
 from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
@@ -507,7 +509,7 @@ class LeRobotDataset(Dataset):
             if key not in self.meta.video_keys
         }
 
-    def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int) -> dict[str, torch.Tensor]:
+    def _query_videos(self, query_timestamps: dict[str, list[float]], ep_idx: int, flip=True) -> dict[str, torch.Tensor]:
         """Note: When using data workers (e.g. DataLoader with num_workers>0), do not call this function
         in the main process (e.g. by using a second Dataloader with num_workers=0). It will result in a
         Segmentation Fault. This probably happens because a memory reference to the video loader is created in
@@ -517,7 +519,10 @@ class LeRobotDataset(Dataset):
         for vid_key, query_ts in query_timestamps.items():
             video_path = self.root / self.meta.get_video_file_path(ep_idx, vid_key)
             frames = decode_video_frames(video_path, query_ts, self.tolerance_s, self.video_backend)
-            flipped_frames = torch.flip(frames, dims=[-1])
+            if flip:
+                flipped_frames = torch.flip(frames, dims=[-1])
+            else:
+                flipped_frames = frames
             item[vid_key] = flipped_frames.squeeze(0)
 
         return item
@@ -572,6 +577,97 @@ class LeRobotDataset(Dataset):
             'batch': item
         }
 
+
+class LeRobotDatasetJsonl(Dataset):
+    def __init__(
+        self,
+        meta,
+        episodes: list[int] | None = None,
+        delta_timestamps: dict[list[float]] | None = None,
+        tolerance_s: float = 1e-4,
+        video_backend: str | None = None,
+        batch_encoding_size: int = 1,
+    ):
+        """
+        Copy form lerobot/src/lerobot/datasets/lerobot_dataset.py
+        """
+        super().__init__()
+        root = meta['root']
+        anno = meta['annotation']
+        repeat_time = meta['repeat_time']
+        self.pred_len = 50
+        # load jsonl file
+        if not os.path.exists(anno):
+            raise FileNotFoundError(f"Annotation file {anno} not found.")
+        with open(anno, 'r') as f:
+            self.data = [json.loads(line) for line in f]
+        if repeat_time > 1:
+            self.data = self.data * repeat_time
+
+        self.root = Path(root)
+
+        # Load metadata
+        self.meta = LeRobotDatasetMetadata(
+            meta,
+        )
+        
+
+    def __len__(self):
+        return len(self.data)
+
+    @property
+    def fps(self) -> int:
+        """Frames per second used during data collection."""
+        return self.meta.fps
+
+    @property
+    def num_frames(self) -> int:
+        """Number of frames in selected episodes."""
+        return len(self.hf_dataset) if self.hf_dataset is not None else self.meta.total_frames
+
+    @property
+    def num_episodes(self) -> int:
+        """Number of episodes selected."""
+        return len(self.episodes) if self.episodes is not None else self.meta.total_episodes
+
+    @property
+    def features(self) -> dict[str, dict]:
+        return self.meta.features
+
+    def __getitem__(self, idx) -> dict:
+        try_cnt, max_try = 0, 10
+        while True:
+            if try_cnt > max_try:
+                raise StopIteration
+            try:
+                ret_dcit = {}
+                item = self.data[idx]
+                if len(item['observation.images.image']) == 1:
+                    image = Image.open(os.path.join(self.root, item['observation.images.image'][0])).convert('RGB')
+                img_tensor = TF.to_tensor(image) 
+                img_tensor = TF.hflip(img_tensor)
+                ret_dcit['observation.images.image'] = img_tensor
+                
+                
+                for key, values in item.items():
+                    if key not in ["task", "observation.images.image"]:
+                        ret_dcit[key] = np.array(item[key])
+                        ret_dcit[key] = torch.from_numpy(ret_dcit[key])
+                        ret_dcit[key] = ret_dcit[key].to(torch.bfloat16)
+                ret_dcit['task'] = item['task']
+                ret_dcit['action'] = ret_dcit['action'][:self.pred_len]
+                ret_dcit['action_is_pad'] = ret_dcit['action_is_pad'][:self.pred_len]
+                break
+            except Exception as e:
+                 try_cnt += 1
+                 print(e, flush=True)
+                 idx = random.randint(0, self.num_frames - 1)
+
+        # return item
+        return {
+            'batch': ret_dcit
+        }
+    
 IMAGENET_STATS = {
     "mean": [[[0.485]], [[0.456]], [[0.406]]],  # (c,1,1)
     "std": [[[0.229]], [[0.224]], [[0.225]]],  # (c,1,1)
@@ -589,7 +685,8 @@ def build_datasets(
             ds_collections[ds_name]
         )
         delta_timestamps = resolve_delta_timestamps(policy_cfg, ds_meta)
-        dataset = LeRobotDataset(
+        dataset = LeRobotDatasetJsonl(
+        # dataset = LeRobotDataset(
             ds_collections[ds_name],
             delta_timestamps=delta_timestamps,
             video_backend=get_safe_default_codec(),
@@ -686,6 +783,7 @@ def main():
     kwargs["dataset_stats"] = ds_meta.stats
     policy_cfg.output_features = {key: ft for key, ft in features.items() if ft.type is FeatureType.ACTION}
     policy_cfg.input_features = {key: ft for key, ft in features.items() if key not in policy_cfg.output_features}
+    # policy_cfg.train_expert_only = False
     kwargs["config"] = policy_cfg
     # kwargs["pretrained_name_or_path"] = model_args.model_name_or_path
     kwargs["pretrained_model_name_or_path"] = model_args.model_name_or_path
@@ -704,7 +802,7 @@ def main():
     
     collator = concat_pad_data_collator_smovla
 
-    trainer = Trainer(
+    trainer = VLATrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
