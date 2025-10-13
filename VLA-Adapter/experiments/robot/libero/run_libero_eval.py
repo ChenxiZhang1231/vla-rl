@@ -97,7 +97,7 @@ class GenerateConfig:
     use_proprio: bool = True                         # Whether to include proprio state in input
 
     center_crop: bool = True                         # Center crop? (if trained w/ random crop image aug)
-    num_open_loop_steps: int = 8                     # Number of actions to execute open-loop before requerying policy
+    num_open_loop_steps: int = 20                     # Number of actions to execute open-loop before requerying policy
     unnorm_key: Union[str, Path] = ""                # Action un-normalization key
 
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
@@ -510,6 +510,8 @@ def eval_libero(cfg: GenerateConfig) -> float:
     # Start evaluation
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks)):
+        # if task_id != 4:
+        #     continue
         total_episodes, total_successes = run_task(
             cfg,
             task_suite,

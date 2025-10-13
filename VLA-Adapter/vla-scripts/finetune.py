@@ -351,7 +351,7 @@ def run_forward_pass(
             diffusion_timestep_embeddings=None,
             use_film=use_film,
             )
-
+    # breakpoint()
     # Get action masks needed for logging
     ground_truth_token_ids = batch["labels"][:,1:].to(device_id)
     current_action_mask = get_current_action_mask(ground_truth_token_ids)

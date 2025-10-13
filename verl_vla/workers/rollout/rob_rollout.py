@@ -657,32 +657,79 @@ def env_worker_pipe(task_name, task_id, trial_id, config, conn: Connection, is_v
         torch.cuda.empty_cache(); gc.collect()
 
   
-LANG_TOKENS = "lang_tokens"
-LANG_MASKS  = "lang_masks"
+# LANG_TOKENS = "lang_tokens"
+# LANG_MASKS  = "lang_masks"
 
-def pad_dataprotos_lang(dp_list, pad_id: int, pad_to: int | None = None):
+# def pad_dataprotos_lang(dp_list, pad_id: int, pad_to: int | None = None, LANG_TOKENS = "lang_tokens", LANG_MASKS  = "lang_masks"):
 
+#     lengths = [dp.batch[LANG_TOKENS].shape[-1] for dp in dp_list]
+#     max_L = max(lengths) if pad_to is None else int(pad_to)
+    
+#     out = []
+#     for dp in dp_list:
+#         bt = dp.batch.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
+#         tok = bt[LANG_TOKENS]  # [B, L_i]
+#         msk = bt[LANG_MASKS]   # [B, L_i]
+#         B, N, L = tok.shape
+
+#         if L < max_L:
+#             pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
+#             pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
+#             tok = torch.cat([tok, pad_tok], dim=-1)
+#             msk = torch.cat([msk, pad_msk], dim=-1)
+
+#         bt[LANG_TOKENS] = tok
+#         bt[LANG_MASKS]  = msk
+
+#         new_dp = type(dp)(batch=bt, non_tensor_batch=dp.non_tensor_batch,)
+#         out.append(new_dp)
+#     return out
+
+def pad_dataprotos_lang(
+    dp_list,
+    pad_id: int,
+    pad_to: int | None = None,
+    LANG_TOKENS: str = "lang_tokens",
+    LANG_MASKS:  str = "lang_masks",
+):
+    """
+    左填充到 max_L（或 pad_to）。若某样本长度 L > max_L，则右对齐截断保留尾部（最后 max_L 个 token）。
+    形状约定：tok/msk 为 [B, N, L]，mask 的 1 表示有效，0 表示 PAD。
+    """
+    # 收集最大长度
     lengths = [dp.batch[LANG_TOKENS].shape[-1] for dp in dp_list]
     max_L = max(lengths) if pad_to is None else int(pad_to)
-    
+
     out = []
     for dp in dp_list:
-        bt = dp.batch.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
-        tok = bt[LANG_TOKENS]  # [B, L_i]
-        msk = bt[LANG_MASKS]   # [B, L_i]
+        bt = dp.batch.clone()
+        tok = bt[LANG_TOKENS]  # [B, N, L]
+        msk = bt[LANG_MASKS]   # [B, N, L]
         B, N, L = tok.shape
 
-        if L < max_L:
-            pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
-            pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
-            tok = torch.cat([tok, pad_tok], dim=-1)
-            msk = torch.cat([msk, pad_msk], dim=-1)
+        if L == max_L:
+            # 不变
+            pass
+
+        elif L < max_L:
+            # 左填充：在左侧补 PAD / 0，使得右侧与原序列对齐
+            pad_len = max_L - L
+            pad_tok = torch.full((B, N, pad_len), pad_id, dtype=tok.dtype, device=tok.device)
+            pad_msk = torch.zeros((B, N, pad_len), dtype=msk.dtype, device=msk.device)
+            tok = torch.cat([pad_tok, tok], dim=-1)
+            msk = torch.cat([pad_msk, msk], dim=-1)
+
+        else:  # L > max_L
+            # 右对齐截断：保留序列尾部（与左填充对齐的语义一致）
+            tok = tok[..., L - max_L :]
+            msk = msk[..., L - max_L :]
 
         bt[LANG_TOKENS] = tok
         bt[LANG_MASKS]  = msk
 
-        new_dp = type(dp)(batch=bt, non_tensor_batch=dp.non_tensor_batch,)
+        new_dp = type(dp)(batch=bt, non_tensor_batch=getattr(dp, "non_tensor_batch", None))
         out.append(new_dp)
+
     return out
 
 def pad_dataprotos_step_images(
@@ -794,14 +841,16 @@ CLIP_VALUE = True                # 是否把 value clip 到 [0, 100]
 
 class RobHFRollout(BaseRollout):
 
-    def __init__(self, module: nn.Module, config):
+    def __init__(self, module: nn.Module, action_head, noisy_action_projector, config):
         super().__init__()
         self.config = config
         self.module = module
-        self.max_steps = {   "libero_spatial": 256,   # max step length 193
+        self.action_head = action_head
+        self.noisy_action_projector = noisy_action_projector
+        self.max_steps = {   "libero_spatial": 512,   # max step length 193
                                     "libero_object": 512,    # max step length 254
                                     "libero_goal": 512,      # max step length 270
-                                    "libero_10": 512,        # max step length 505
+                                    "libero_10": 1024,        # max step length 505
                                     "libero_90": 512         # max step length 373 org 400 now change to 512
                                 }
         if self.config.vla in ["smolvla"]:
@@ -827,11 +876,12 @@ class RobHFRollout(BaseRollout):
             # delta_action=self.config.delta_action
         )
         #oft add
-        # unnorm_key=config.unnorm_key
-        # if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
-        #     unnorm_key = f"{unnorm_key}_no_noops"
-        # assert unnorm_key in self.module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
-        # self.config.unnorm_key = unnorm_key
+        # breakpoint()
+        unnorm_key=config.unnorm_key
+        if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
+            unnorm_key = f"{unnorm_key}_no_noops"
+        assert unnorm_key in self.module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
+        self.config.unnorm_key = unnorm_key
         #add end
         # gpus = tf.config.experimental.list_physical_devices('GPU')
         # if gpus:
@@ -869,6 +919,7 @@ class RobHFRollout(BaseRollout):
             micro_batch_size = self.config.get('micro_batch_size', batch_size)
         num_chunks = max(batch_size // micro_batch_size, 1)
         batch_prompts = prompts.chunk(chunks=num_chunks)
+        # breakpoint()
         if self.config.vla == "smolvla":
             if self.use_world_model and is_train:
                 if self.config.reward_type == 'vlm':
@@ -885,6 +936,19 @@ class RobHFRollout(BaseRollout):
                 output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
                 # output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
             output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
+        elif self.config.vla == "vla-adapter":
+            if self.use_world_model and is_train:
+                pass
+            else:
+                output = [self._generate_minibatch_vla_adapter(p) for p in batch_prompts]
+            output = pad_dataprotos_lang(
+                output, 
+                pad_id=self.processor.tokenizer.pad_token_id, 
+                pad_to=None, 
+                LANG_TOKENS="input_ids", 
+                LANG_MASKS="attention_mask",
+            )
+                
         else:
             output = [self._generate_minibatch(p) for p in batch_prompts]
         
@@ -1012,7 +1076,73 @@ class RobHFRollout(BaseRollout):
         
         return batchdata
    
-    
+    def process_input_vla_adapter(self,inputs:list, task_descriptions:list):
+        # breakpoint()
+        batchdata = {"input_ids":[],"attention_mask":[],"pixel_values":[]}  
+        # breakpoint()
+        for i in range(len(inputs)):
+            input = inputs[i]
+            task_description = task_descriptions[i]
+           
+            image = Image.fromarray(input["full_image"]).convert("RGB")
+            if self.config.center_crop:
+                image = center_crop_image(image)
+            # prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+            prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
+            batch_feature  = self.processor(prompt, image)
+            
+            if "wrist_image" in input.keys():
+                wrist_image = Image.fromarray(input["wrist_image"]).convert("RGB")
+                if self.config.center_crop:
+                    wrist_image = center_crop_image(wrist_image)
+                wrist_batch_feature = self.processor(prompt, wrist_image)
+                primary_pixel_values = batch_feature["pixel_values"]
+                batch_feature["pixel_values"] = torch.cat([primary_pixel_values] + [wrist_batch_feature["pixel_values"]], dim=1)
+                
+            input_ids = batch_feature["input_ids"]
+            attention_mask = batch_feature["attention_mask"]
+            pixel_values = batch_feature["pixel_values"]
+            
+            # if not torch.all(input_ids[:, -1] == 29871):
+            #     input_ids = torch.cat(
+            #         (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1
+            #     )
+            #     if self.config.vla in ["openvla-oft", "vla-adapter"]:
+            #         attention_mask = torch.cat(
+            #             (attention_mask, torch.unsqueeze(torch.Tensor([True]).bool(), dim=0).to(attention_mask.device)), dim=1
+            #         )
+            
+            batchdata["input_ids"].append(input_ids)    
+            batchdata["attention_mask"].append(attention_mask)    
+            batchdata["pixel_values"].append(pixel_values)    
+        
+        
+        device = torch.device('cuda') 
+        
+        if self.config.vla in ["openvla-oft", "vla-adapter"]:
+        # if False:
+            # breakpoint()
+            batchdata["input_ids"] = [x.transpose(0, 1) for x in batchdata["input_ids"]]
+            batchdata["attention_mask"] = [x.transpose(0, 1) for x in batchdata["attention_mask"]]
+            batchdata["input_ids"] = pad_sequence(batchdata["input_ids"], batch_first=True, padding_value=self.processor.tokenizer.pad_token_id).squeeze(-1).to(device)
+            batchdata["attention_mask"] = pad_sequence(batchdata["attention_mask"], batch_first=True, padding_value=0).squeeze(-1).to(device)
+            
+            padding_mask = batchdata["input_ids"].ne(self.processor.tokenizer.pad_token_id)
+            assert  torch.all(padding_mask==batchdata["attention_mask"].ne(0))
+            padding_mask = ~padding_mask
+            padding_mask = padding_mask.int() 
+            sorted_indices = torch.argsort(padding_mask, dim=1, descending=True, stable=True)
+            batchdata["input_ids"] = torch.gather(batchdata["input_ids"], 1, sorted_indices)
+            batchdata["attention_mask"] = torch.gather(batchdata["attention_mask"], 1, sorted_indices)
+            
+            
+            batchdata["pixel_values"] = torch.cat(batchdata["pixel_values"] , dim=0).to(device)
+            assert torch.all(batchdata["attention_mask"].ne(0) == batchdata["input_ids"].ne(self.processor.tokenizer.pad_token_id))
+        else:
+            for key in ["input_ids", "attention_mask", "pixel_values"]:
+                batchdata[key] = torch.cat(batchdata[key], dim=0).to(device)
+
+        return batchdata
         
     def _generate_minibatch(self, prompts):
         self.module.eval()
@@ -2880,6 +3010,148 @@ class RobHFRollout(BaseRollout):
         return DataProto(batch=output_batch)
     
     
+    def _generate_minibatch_vla_adapter(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+        # breakpoint()
+
+        # This is a blocking call
+        init_data_list = self.adapter._blocking_reset(
+            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
+            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy()
+        )
+        
+        
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            # init_data = output_queues[idx].get(timeout=120)
+            init_data = init_data_list[idx]
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs'], is_train))
+            task_records.append({
+                "active": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name']
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            # breakpoint()
+            vla_input = self.process_input_vla_adapter(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_vla_adapter(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            # breakpoint()
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            # step_data["lang_tokens"] = vla_output["lang_tokens"]
+            # step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            
+            # for idx in active_indices:
+            #     input_queues[idx].put(actions[idx])
+            step_results_list = self.adapter._blocking_step({
+                "indices": active_indices,
+                "actions": actions,
+            })
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                result = step_results_list[idx]
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'], is_train)
+                task_records[idx]['active'] = result['active']
+                task_records[idx]['complete'] = result['complete']
+                task_records[idx]['finish_step'] = result['finish_step']
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            
+        torch.cuda.empty_cache()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete
+                )
+        self.module.train()
+        batch = {"input_ids":[], 
+                "attention_mask": [],
+                "pixel_values": [],
+                "x_t": [],
+                # "t": [],
+                "x_next": [],
+                "action_tensor": [],
+                # "lang_tokens": [],
+                # "lang_masks": []
+                }  
+                    
+        for k in ["input_ids", "attention_mask",
+                  "pixel_values", "action_tensor", "x_t", "x_next"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete"] = []
+        batch["finish_step"] = []
+        
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['pixel_values'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['pixel_values'].device)
+        # print(batch)
+        # breakpoint()
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
     @torch.no_grad()
     def _generate_one_step(self, prompts: dict):
         if self.config.vla == "openvla-oft":
@@ -3060,6 +3332,45 @@ class RobHFRollout(BaseRollout):
         batch["return_dict"] = return_dict
         batch["lang_tokens"] = lang_tokens
         batch["lang_masks"] = lang_masks
+        
+        return batch
+    
+    @torch.no_grad()
+    def _generate_one_step_vla_adapter(self, prompts: dict, use_sde: bool = False):
+        if isinstance(self.module, FSDP):
+            # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
+            param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
+        with param_ctx:
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                # actions = self.module.select_action(prompts)
+                # actions, lang_tokens, lang_masks, return_dict = self.module.predict_action(prompts, use_sde=use_sde)
+                # breakpoint()
+                idx = prompts['input_ids']  # (bs, prompt_length)
+                attention_mask = prompts['attention_mask']  # left-padded attention_mask
+                pixel_values = prompts["pixel_values"]
+                # breakpoint()
+                action, return_dict = self.module.predict_action(
+                    input_ids=idx,
+                    pixel_values=pixel_values,
+                    attention_mask=attention_mask,
+                    unnorm_key=self.config.unnorm_key,
+                    do_sample=False,
+                    proprio=None,
+                    proprio_projector=None,
+                    noisy_action_projector=self.noisy_action_projector,
+                    action_head=self.action_head,
+                    use_film=False,
+                    
+                )
+                # breakpoint()
+
+        
+        batch = prompts.copy()
+        batch["action_tensor"] = torch.from_numpy(action).to(pixel_values.device)
+        batch["action"] = action  #.to(torch.float32).cpu().numpy()
+        batch["return_dict"] = return_dict
+        # batch["lang_tokens"] = lang_tokens
+        # batch["lang_masks"] = lang_masks
         
         return batch
 

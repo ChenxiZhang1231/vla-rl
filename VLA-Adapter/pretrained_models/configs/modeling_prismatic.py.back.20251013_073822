@@ -483,86 +483,31 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
             return torch.cat((projected_patch_embeddings, proprio_features), dim=1)
         return projected_patch_embeddings
 
-    # def _build_multimodal_attention(self, input_embeddings, projected_patch_embeddings, attention_mask):
-    #     """Build multimodal embeddings and attention mask"""
-    #     # Update attention mask
-        
-    #     projected_patch_attention_mask = None
-    #     if attention_mask is not None:
-    #         projected_patch_attention_mask = torch.full(
-    #             (projected_patch_embeddings.shape[0], projected_patch_embeddings.shape[1]),
-    #             fill_value=True,
-    #             dtype=attention_mask.dtype,
-    #             device=attention_mask.device,
-    #         )
-
-    #     # Build multimodal embeddings & attention mask; insert embeddings after <BOS> token (1:)
-    #     multimodal_embeddings = torch.cat(
-    #         [input_embeddings[:, :1, :], projected_patch_embeddings, input_embeddings[:, 1:, :]], dim=1
-    #     )
-
-    #     multimodal_attention_mask = None
-    #     if attention_mask is not None:
-    #         multimodal_attention_mask = torch.cat(
-    #             [attention_mask[:, :1], projected_patch_attention_mask, attention_mask[:, 1:]], dim=1
-    #         )
-
-    #     return multimodal_embeddings, multimodal_attention_mask
-
     def _build_multimodal_attention(self, input_embeddings, projected_patch_embeddings, attention_mask):
-        """
-        input_embeddings:            (B, S, D)  左填充：mask 形如 0...0111...
-        projected_patch_embeddings:  (B, P, D)  要插在 <BOS> 之后
-        attention_mask:              (B, S)
-        return:
-            multimodal_embeddings:   (B, S+P, D)
-            multimodal_attention_mask:(B, S+P)
-        """
-        B, S, D = input_embeddings.shape
-        assert projected_patch_embeddings.dim() == 3 and projected_patch_embeddings.size(0) == B
-        P = projected_patch_embeddings.size(1)
-        device = input_embeddings.device
-
-        if attention_mask is None:
-            # 无 mask 的退化路径：默认 BOS 在位置 0，保持原来的“1:”逻辑
-            multimodal_embeddings = torch.cat(
-                [input_embeddings[:, :1, :], projected_patch_embeddings, input_embeddings[:, 1:, :]], dim=1
+        """Build multimodal embeddings and attention mask"""
+        # Update attention mask
+        
+        projected_patch_attention_mask = None
+        if attention_mask is not None:
+            projected_patch_attention_mask = torch.full(
+                (projected_patch_embeddings.shape[0], projected_patch_embeddings.shape[1]),
+                fill_value=True,
+                dtype=attention_mask.dtype,
+                device=attention_mask.device,
             )
-            multimodal_attention_mask = None
-            return multimodal_embeddings, multimodal_attention_mask
 
-        # 1) 计算每个样本的 BOS 位置 = 左侧连续 0 的个数（左填充长度）
-        attn01 = (attention_mask != 0).to(torch.long)                  # 1=有效, 0=PAD
-        left_pad_len = (torch.cumsum(attn01, dim=1) == 0).sum(dim=1)   # [B]
-        # 极端情况防御：全 0 时把 BOS 当作最后一位（不会越界）
-        # bos_idx = torch.clamp(left_pad_len, max=S-1)                   # [B], int64
-        bos_idx = left_pad_len
-        # 2) 预分配新张量
-        new_S = S + P
-        multimodal_embeddings     = input_embeddings.new_zeros((B, new_S, D))
-        multimodal_attention_mask = attention_mask.new_zeros((B, new_S))
+        # Build multimodal embeddings & attention mask; insert embeddings after <BOS> token (1:)
+        multimodal_embeddings = torch.cat(
+            [input_embeddings[:, :1, :], projected_patch_embeddings, input_embeddings[:, 1:, :]], dim=1
+        )
 
-        # 3) 逐样本拼装： [ ..PAD.. | BOS ] + [patches] + [ 余下原token... ]
-        for i in range(B):
-            b = int(bos_idx[i].item())     # BOS 索引
-            a_end = b + 1                  # 含 BOS 的右开端点
-
-            # 复制 <PAD..BOS>
-            multimodal_embeddings[i, :a_end, :]      = input_embeddings[i, :a_end, :]
-            multimodal_attention_mask[i, :a_end]     = attention_mask[i, :a_end]
-
-            # 插入 patches
-            multimodal_embeddings[i, a_end:a_end+P, :]  = projected_patch_embeddings[i]
-            multimodal_attention_mask[i, a_end:a_end+P] = 1
-
-            # 复制 BOS 之后剩余 token
-            tail_len = S - a_end
-            if tail_len > 0:
-                multimodal_embeddings[i, a_end+P:a_end+P+tail_len, :]  = input_embeddings[i, a_end:, :]
-                multimodal_attention_mask[i, a_end+P:a_end+P+tail_len] = attention_mask[i, a_end:]
+        multimodal_attention_mask = None
+        if attention_mask is not None:
+            multimodal_attention_mask = torch.cat(
+                [attention_mask[:, :1], projected_patch_attention_mask, attention_mask[:, 1:]], dim=1
+            )
 
         return multimodal_embeddings, multimodal_attention_mask
-
 
     def _build_multimodal_labels(self, labels, projected_patch_embeddings):
         """Build multimodal labels with IGNORE_INDEX for patch embeddings"""
@@ -803,7 +748,6 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
     def _prepare_input_for_action_prediction(self, input_ids, attention_mask):
         """Prepares input for action prediction by adding necessary tokens"""
         # Add (ACTION_DIM * NUM_ACTIONS_CHUNK) placeholder tokens to input_ids to simulate action tokens
-        # breakpoint()
         placeholder_action_token_ids = (
             torch.ones((input_ids.shape[0], NUM_TOKENS)).to(input_ids.device).to(input_ids.dtype)
         )
@@ -824,55 +768,6 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
         return input_ids, attention_mask
 
-    # def _prepare_input_for_action_prediction(self, input_ids, attention_mask):
-    #     """
-    #     input_ids:        [B, S] (右填充)
-    #     attention_mask:   [B, S] (1=有效, 0=PAD；右填充，单调非增)
-    #     作用：在每个样本的最后一个非PAD后插入 NUM_TOKENS 个 action 占位符 + 1 个 stop token，
-    #         然后把 PAD 续在序列末尾，保持右填充。
-    #     """
-    #     device = input_ids.device
-    #     B, S = input_ids.shape
-    #     # pad_id = self.processor.tokenizer.pad_token_id
-    #     pad_id = 151643
-
-    #     # 你自己的占位符与stop id（建议用明确的常量）
-    #     ACTION_TOKEN_ID = getattr(self, "action_placeholder_id", 1)  # 例：1；请替换成你的实际id
-    #     STOP_ID         = STOP_INDEX                                # 你已有的常量
-
-    #     # 每个样本的有效长度（右填充前缀的1个数）
-    #     lengths = attention_mask.to(torch.long).sum(dim=1)          # [B]
-
-    #     new_S = S + NUM_TOKENS + 1  # 加上 action 段和 stop token
-
-    #     # 先整体开好空间：input_ids 用 pad_id 填充，mask 用 0 填充
-    #     new_input_ids      = torch.full((B, new_S), pad_id, dtype=input_ids.dtype, device=device)
-    #     new_attention_mask = torch.zeros((B, new_S), dtype=attention_mask.dtype, device=device)
-
-    #     # 批量插入
-    #     # 说明：用简单for循环最直观可靠；B一般不大，这样足够快且不易出错
-    #     for i in range(B):
-    #         L = int(lengths[i].item())
-
-    #         # 1) 复制原始有效token
-    #         if L > 0:
-    #             new_input_ids[i, :L] = input_ids[i, :L]
-
-    #         # 2) 插入 action 占位符
-    #         if NUM_TOKENS > 0:
-    #             new_input_ids[i, L:L+NUM_TOKENS] = ACTION_TOKEN_ID
-
-    #         # 3) 插入 stop token
-    #         new_input_ids[i, L+NUM_TOKENS] = STOP_ID
-
-    #         # 4) 更新 mask：有效范围 = 原有效长度 + action 段 + stop
-    #         new_attention_mask[i, :L+NUM_TOKENS+1] = 1
-
-    #     # 可选一致性检查：右填充应为单调非增
-    #     # assert torch.all(new_attention_mask[:, 1:] <= new_attention_mask[:, :-1])
-
-    #     return new_input_ids, new_attention_mask
-
     def _prepare_labels_for_action_prediction(self, labels, input_ids):
         """Creates labels tensor for action prediction if not provided"""
         # Extend labels tensor with fake action labels
@@ -890,7 +785,6 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
     def _unnormalize_actions(self, normalized_actions, unnorm_key=None):
         """Unnormalize actions using dataset statistics"""
-        # breakpoint()
         action_norm_stats = self.get_action_stats(unnorm_key)
 
         if ACTION_PROPRIO_NORMALIZATION_TYPE == NormalizationType.BOUNDS:
@@ -991,125 +885,10 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1)
             normalized_actions = self.bin_centers[discretized_actions]
             normalized_actions = normalized_actions.reshape(NUM_ACTIONS_CHUNK, ACTION_DIM)
-        ret_dict = {}
-        return normalized_actions, ret_dict
+
+        return normalized_actions, actions_hidden_states
 
 
-    def _flow_prediction(
-        self,
-        input_embeddings,
-        all_actions_mask,
-        projected_patch_embeddings,
-        attention_mask,
-        labels,
-        NUM_PATCHES,
-        NUM_PROMPT_TOKENS,
-        action_head=None,
-        noisy_action_projector=None,
-        proprio=None,
-        proprio_projector=None,
-    ):
-        B, L, D = input_embeddings.shape
-        action_queries = self.action_queries.weight  # (1, h)
-        action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)  # (b, chunk_size, h)
-        # Replace action token embeddings with noisy action embeddings
-        input_embeddings = self._replace_input_embeddings(input_embeddings.clone(), all_actions_mask, action_queries)
-
-        # Build multimodal embeddings and attention mask
-        multimodal_embeddings, multimodal_attention_mask = self._build_multimodal_attention(
-            input_embeddings, projected_patch_embeddings, attention_mask
-        )
-
-        # Forward pass through language model
-        language_model_output = self.language_model(
-            input_ids=None,
-            attention_mask=multimodal_attention_mask,
-            position_ids=None,
-            past_key_values=None,
-            inputs_embeds=multimodal_embeddings,
-            labels=None,
-            use_cache=None,
-            output_attentions=False,
-            output_hidden_states=True,
-            return_dict=True,
-        )
-
-
-        # multi_layer_hidden_states = torch.cat(multi_layer_hidden_states, dim = 1)
-        
-        last_hidden_states = language_model_output.hidden_states[-1]  # (B, seq_len, D)
-        # B, S, D = last_hidden_states.shape
-        # attn = multimodal_attention_mask.to(torch.long)
-        attn01 = (multimodal_attention_mask != 0).to(torch.long) 
-        pad_len = (torch.cumsum(attn01, dim=1) == 0).sum(dim=1)
-        # # pad_len = 
-        # breakpoint()
-        def gather_span(x, start_idx, L):
-            """从每个样本的start_idx开始，取长度L的连续片段 -> (B, L, D)"""
-            rng = torch.arange(L, device=x.device)   # [L]
-            idx = start_idx[:, None] + rng[None, :]  # [B, L]
-            # 保险：不越界（若你的长度已保证充足，可改成assert）
-            # idx = idx.clamp_(0, x.size(1) - 1)
-            return x.gather(1, idx.unsqueeze(-1).expand(-1, -1, x.size(-1)))
-        
-        # Get hidden states for text portion of prompt+response (after the vision patches)
-        # text_hidden_states = last_hidden_states[:, NUM_PATCHES:-1]
-        
-        task_start = pad_len 
-        task_latent_states = gather_span(last_hidden_states, task_start, NUM_PATCHES) \
-                                .reshape(B, 1, NUM_PATCHES, D)
-        # task_latent_states = last_hidden_states[:, :NUM_PATCHES].reshape(B, 1, NUM_PATCHES, -1)
-        # breakpoint()
-        actions_start = pad_len + NUM_PATCHES + NUM_PROMPT_TOKENS   # [B]
-        actions_hidden_states = gather_span(last_hidden_states, actions_start, NUM_TOKENS) \
-                                .reshape(B, 1, NUM_TOKENS, D) \
-                                .to(torch.bfloat16)
-        # actions_hidden_states = last_hidden_states[:, NUM_PATCHES+ NUM_PROMPT_TOKENS : NUM_PATCHES + NUM_PROMPT_TOKENS + NUM_TOKENS, :,].reshape(B, 1, NUM_TOKENS, -1).to(torch.bfloat16)
-        # actions_hidden_states = last_hidden_states[:, -NUM_TOKENS-2 :-2, :,].reshape(B, 1, NUM_TOKENS, -1).to(torch.bfloat16)
-        # actions_hidden_states = text_hidden_states[current_action_mask | next_actions_mask].reshape(B, 1,num_tokens, -1).to(torch.bfloat16)
-        # breakpoint()
-        
-        all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
-        
-        device = all_hidden_states.device
-        dt = -1.0 / 10
-        dt = torch.tensor(dt, dtype=torch.float32, device=device)
-
-        actions_shape = (B, 20, 7)
-        noise = action_head.module.sample_noise(actions_shape, device)
-            
-        x_t = noise
-        time = torch.tensor(1.0, dtype=torch.float32, device=device)
-        x_t_all, t_all, x_next_all, log_probs = [], [], [], []
-        # breakpoint()
-        while time >= -dt / 2:
-            expanded_time = time.expand(B)
-            x_t_ = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
-            rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
-            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
-            v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
-            # Euler step
-            # breakpoint()
-            x_next = x_t + dt * v_t
-            
-            x_t_all.append(x_t)
-            t_all.append(expanded_time.detach().cpu())
-            x_next_all.append(x_next)
-            
-            x_t = x_next
-            time += dt
-            
-        return_dict = {
-            "x_t": x_t_all,
-            "t": t_all,
-            "x_next": x_next_all,
-        }
-        normalized_actions = x_t
-        normalized_actions = normalized_actions.reshape(-1, NUM_ACTIONS_CHUNK, ACTION_DIM)
-        normalized_actions = normalized_actions.float().cpu().detach().numpy()
-        
-        return normalized_actions, return_dict
-    
     def predict_action(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1136,7 +915,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         Returns:
             Tuple of (unnormalized_actions, action_hidden_states)
         """
-        
+
         pixel_values = kwargs["pixel_values"] # [1, 12, 224, 224]
         attention_mask = kwargs["attention_mask"] # 
 
@@ -1145,21 +924,17 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         labels[:] = IGNORE_INDEX
 
         # Get number of tokens in prompt (excluding the start token)
-        # NUM_PROMPT_TOKENS = input_ids.shape[-1] - 1  # Subtract action tokens and stop token
-        NUM_PROMPT_TOKENS = attention_mask.sum(dim=1) - 1
-        
+        NUM_PROMPT_TOKENS = input_ids.shape[-1] - 1  # Subtract action tokens and stop token
 
-        # breakpoint()
         # Prepare inputs by adding necessary tokens
         input_ids, attention_mask = self._prepare_input_for_action_prediction(input_ids, attention_mask)
-        # breakpoint()
+
         # Update labels tensor for action mask computation later
         labels = self._prepare_labels_for_action_prediction(labels, input_ids)
 
         # Get input embeddings and action masks
         input_embeddings = self.get_input_embeddings()(input_ids)
         all_actions_mask = self._process_action_masks(labels)
-        # breakpoint()
 
         # Extract language embeddings
         language_embeddings = input_embeddings[~all_actions_mask].reshape(
@@ -1178,38 +953,23 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         NUM_PATCHES = self.vision_backbone.get_num_patches() * self.vision_backbone.get_num_images_in_input()
 
         # Run regression or discrete token-based prediction
-        if noisy_action_projector is not None:
-            normalized_actions, return_dict = self._flow_prediction(
-                input_embeddings,
-                all_actions_mask,
-                projected_patch_embeddings,
-                attention_mask,
-                labels,
-                NUM_PATCHES,
-                NUM_PROMPT_TOKENS,
-                action_head=action_head,
-                noisy_action_projector=noisy_action_projector,
-                proprio=proprio, # [8]
-                proprio_projector=proprio_projector,
-                )
-        else:
-            normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(
-                input_embeddings,
-                all_actions_mask,
-                projected_patch_embeddings,
-                attention_mask,
-                labels,
-                NUM_PATCHES,
-                NUM_PROMPT_TOKENS,
-                action_head=action_head,
-                proprio=proprio, # [8]
-                proprio_projector=proprio_projector,
-                )
+        normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(
+            input_embeddings,
+            all_actions_mask,
+            projected_patch_embeddings,
+            attention_mask,
+            labels,
+            NUM_PATCHES,
+            NUM_PROMPT_TOKENS,
+            action_head=action_head,
+            proprio=proprio, # [8]
+            proprio_projector=proprio_projector,
+            )
            
         # Unnormalize predicted actions
         actions = self._unnormalize_actions(normalized_actions, unnorm_key)
-        # breakpoint()
-        return actions, return_dict
+
+        return actions, actions_hidden_states
 
 
 

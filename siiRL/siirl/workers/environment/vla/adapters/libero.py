@@ -172,8 +172,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 'type': 'init',
                 'obs': obs_np_list[i],
                 "task_description": task_descriptions[i],
-                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
-                'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
+                'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
+                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
                 'task_file_name': f"{self.task_suite_name}_task_{task_id}_trial_{trial_id}",
                 'active': True,
                 'complete': False,
@@ -224,8 +224,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 act_idx = active_indices_list[i]
                 if step_images[act_idx] is None:
                     step_images[act_idx] = []
-                # step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
-                step_images[act_idx].append(obs[i]["agentview_image"][::-1])
+                step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
+                # step_images[act_idx].append(obs[i]["agentview_image"][::-1])
 
                 if use_vlm_rm:
                     if dones[i] or self.step_count[act_idx] >= self.max_steps:

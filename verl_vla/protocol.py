@@ -94,32 +94,79 @@ class DataProtoItem:
     non_tensor_batch: Dict = field(default_factory=dict)
     meta_info: Dict = field(default_factory=dict)
 
-LANG_TOKENS = "lang_tokens"
-LANG_MASKS  = "lang_masks"
+# LANG_TOKENS = "lang_tokens"
+# LANG_MASKS  = "lang_masks"
 
-def pad_dataprotos_lang_dict(dp_list, pad_id: int, pad_to: int | None = None):
+# def pad_dataprotos_lang_dict(dp_list, pad_id: int, pad_to: int | None = None, LANG_TOKENS = "lang_tokens", LANG_MASKS  = "lang_masks"):
+
+#     lengths = [dp[LANG_TOKENS].shape[-1] for dp in dp_list]
+#     max_L = max(lengths) if pad_to is None else int(pad_to)
+    
+#     out = []
+#     for dp in dp_list:
+#         bt = dp.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
+#         tok = bt[LANG_TOKENS]  # [B, L_i]
+#         msk = bt[LANG_MASKS]   # [B, L_i]
+#         B, N, L = tok.shape
+
+#         if L < max_L:
+#             pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
+#             pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
+#             tok = torch.cat([tok, pad_tok], dim=-1)
+#             msk = torch.cat([msk, pad_msk], dim=-1)
+
+#         bt[LANG_TOKENS] = tok
+#         bt[LANG_MASKS]  = msk
+
+#         new_dp = bt
+#         out.append(new_dp)
+#     return out
+
+def pad_dataprotos_lang_dict(
+    dp_list,
+    pad_id: int,
+    pad_to: int | None = None,
+    LANG_TOKENS: str = "lang_tokens",
+    LANG_MASKS:  str = "lang_masks",
+):
+    """
+    对每个样本的 {LANG_TOKENS:[B,N,L], LANG_MASKS:[B,N,L]} 做左填充到相同长度。
+    - 左填充：在左侧补 PAD 与 0（mask=0 表示 PAD）
+    - 截断：若 L > max_L，则右对齐截断，保留最后 max_L 个 token（与左填充对齐）
+    返回：与输入等长的 list，每个元素是 clone 后填充/截断的新 dict/tensordict。
+    """
+    if len(dp_list) == 0:
+        return []
 
     lengths = [dp[LANG_TOKENS].shape[-1] for dp in dp_list]
     max_L = max(lengths) if pad_to is None else int(pad_to)
-    
+
     out = []
     for dp in dp_list:
-        bt = dp.clone()  # tensordict 支持 clone；或者用 deepcopy(dp.batch) 也行
-        tok = bt[LANG_TOKENS]  # [B, L_i]
-        msk = bt[LANG_MASKS]   # [B, L_i]
+        # tensordict 一般支持 .clone()；若是普通 dict，可替换为 copy.deepcopy(dp)
+        bt = dp.clone()
+        tok = bt[LANG_TOKENS]  # [B, N, L]
+        msk = bt[LANG_MASKS]   # [B, N, L]
         B, N, L = tok.shape
 
         if L < max_L:
-            pad_tok = tok.new_full((B, N, max_L - L), pad_id, dtype=tok.dtype)
-            pad_msk = msk.new_zeros((B, N, max_L - L), dtype=msk.dtype)
-            tok = torch.cat([tok, pad_tok], dim=-1)
-            msk = torch.cat([msk, pad_msk], dim=-1)
+            pad_len = max_L - L
+            pad_tok = torch.full((B, N, pad_len), pad_id, dtype=tok.dtype, device=tok.device)
+            pad_msk = torch.zeros((B, N, pad_len), dtype=msk.dtype, device=msk.device)
+            # 左填充：把 PAD/0 放在左侧
+            tok = torch.cat([pad_tok, tok], dim=-1)
+            msk = torch.cat([pad_msk, msk], dim=-1)
 
+        elif L > max_L:
+            # 右对齐截断：保留尾部
+            tok = tok[..., L - max_L :]
+            msk = msk[..., L - max_L :]
+
+        # L == max_L 则不变
         bt[LANG_TOKENS] = tok
         bt[LANG_MASKS]  = msk
+        out.append(bt)
 
-        new_dp = bt
-        out.append(new_dp)
     return out
 
 def pad_dataprotos_step_images(
@@ -506,6 +553,9 @@ class DataProto:
                 batch_lst = pad_dataprotos_lang_dict(batch_lst, 2)
             if 'step_images' in batch_lst[0].keys():
                 batch_lst = pad_dataprotos_step_images(batch_lst)
+            if 'input_ids' in batch_lst[0].keys():
+                batch_lst = pad_dataprotos_lang_dict(batch_lst, 2, LANG_TOKENS = "input_ids", LANG_MASKS  = "attention_mask")
+            # print
             new_batch = torch.cat(batch_lst, dim=0)
         else:
             new_batch = None

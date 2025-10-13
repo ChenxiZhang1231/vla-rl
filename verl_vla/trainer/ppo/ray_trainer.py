@@ -663,6 +663,7 @@ class RayTrainer(object):
                         roll_batch = DataProto.concat(batch_lst)
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)
+                        breakpoint()
 
                     metrics['timing/gen'] += timer.last
                     
@@ -704,7 +705,14 @@ class RayTrainer(object):
                         if self.config.actor_rollout_ref.model.vla == 'smolvla':
                             batch = pad_dataprotos_lang([valid_batch, roll_batch_to_add], 2)
                         else:
-                            batch = [valid_batch, roll_batch_to_add]
+                            # batch = [valid_batch, roll_batch_to_add]
+                            batch = pad_dataprotos_lang(
+                                [valid_batch, roll_batch_to_add], 
+                                pad_id=self.tokenizer.pad_token_id, 
+                                pad_to=None, 
+                                LANG_TOKENS="input_ids", 
+                                LANG_MASKS="attention_mask",
+                            )
                         valid_batch = DataProto.concat(batch)
                     print(
                         f"collected {len(valid_batch)} / {batch_size * n_samples} rollouts and each prompt has {n_samples} responses")
