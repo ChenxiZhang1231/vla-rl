@@ -10,12 +10,12 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp2-action-kl-long-fp16-repeat'
+EXPERIMENT_NAME='exp8-action-ffp-spatial-fp16-repeat'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/internvl_chat/work_dirs/smolvla-0.5b-ft_expert-bf16-20ep-libero_full_fixbug-only_1img/checkpoint-66520"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
-DATASET_NAME="libero_10"
+DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
 NUM_GPUS=8
@@ -53,12 +53,13 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
     actor_rollout_ref.actor.num_images_in_input=1 \
-    actor_rollout_ref.actor.traj_mini_batch_size=11 \
+    actor_rollout_ref.actor.traj_mini_batch_size=6 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.dlogp_clamp=True \
     actor_rollout_ref.actor.dlogp_clamp_max=4.0 \
     actor_rollout_ref.actor.dlogp_clamp_min=-4.0 \
-    actor_rollout_ref.actor.kl_loss_type=kl \
+    actor_rollout_ref.actor.kl_loss_type=kl_ffp \
+    actor_rollout_ref.actor.k_baseline_eta=0.1 \
     actor_rollout_ref.actor.kl_loss_coef=0.04 \
     algorithm.kl_ctrl.kl_coef=0.04 \
     actor_rollout_ref.model.enable_gradient_checkpointing=False \
@@ -92,7 +93,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     trainer.nnodes=$NUM_NODES \
     trainer.save_freq=10 \
     trainer.test_freq=10 \
-    trainer.total_epochs=100 \
+    trainer.total_epochs=5000 \
     trainer.val_only=False \
     ray_init.num_cpus=32 \
     algorithm.adv_estimator=grpo \
