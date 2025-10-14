@@ -3360,10 +3360,12 @@ class RobHFRollout(BaseRollout):
                     noisy_action_projector=self.noisy_action_projector,
                     action_head=self.action_head,
                     use_film=False,
-                    # use_sde=use_sde,
-                    use_sde=True,
+                    use_sde=use_sde,
+                    # use_sde=True,
                 )
                 # breakpoint()
+                # action_len = 8
+                # action = action[:, :action_len]
 
         
         batch = prompts.copy()
