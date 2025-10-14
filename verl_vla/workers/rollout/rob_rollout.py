@@ -3121,7 +3121,7 @@ class RobHFRollout(BaseRollout):
                 "attention_mask": [],
                 "pixel_values": [],
                 "x_t": [],
-                # "t": [],
+                "t": [],
                 "x_next": [],
                 "action_tensor": [],
                 # "lang_tokens": [],
@@ -3129,7 +3129,7 @@ class RobHFRollout(BaseRollout):
                 }  
                     
         for k in ["input_ids", "attention_mask",
-                  "pixel_values", "action_tensor", "x_t", "x_next"]:
+                  "pixel_values", "action_tensor", "x_t", "t", "x_next"]:
             for h in vla_history:
                 batch[k].append(h[k])
                 
@@ -3360,7 +3360,8 @@ class RobHFRollout(BaseRollout):
                     noisy_action_projector=self.noisy_action_projector,
                     action_head=self.action_head,
                     use_film=False,
-                    
+                    # use_sde=use_sde,
+                    use_sde=True,
                 )
                 # breakpoint()
 

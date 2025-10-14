@@ -204,6 +204,97 @@ def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
         raise NotImplementedError
     return data
 
+def compute_advantage_vla_adapter(data: DataProto, gamma, lam, adv_estimator, config):
+    # responses = data.batch['responses']
+    # response_length = responses.size(1) *  responses.size(2)
+    # # attention_mask = data.batch['attention_mask']
+    # finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+    # steps = torch.arange(response_length, device=data.batch['responses'].device)  # (traj_len,)
+    # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+    # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+    B, S, K, CH, D = data.batch['x_t'].shape
+    response_length = S * config.actor_rollout_ref.rollout.action_chunks_len * config.actor_rollout_ref.model.action_token_len 
+    finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+    steps = torch.arange(response_length, device=data.batch['x_t'].device)  # (traj_len,)
+    steps_expanded = steps.unsqueeze(0).expand(data.batch['x_t'].size(0), -1)
+    response_mask = steps_expanded < finish_step.unsqueeze(1)
+    token_level_rewards = data.batch['token_level_rewards'] if 'token_level_rewards' in list(data.batch.keys()) else data.batch['token_level_scores']
+
+    # TODO: add other ways to estimate advantages
+    if adv_estimator == 'rloo':
+        # prompt_ids = data.batch['prompts']
+        # prompt_length = prompt_ids.shape[-1]
+        # valid_response_length = data.batch['attention_mask'][:,prompt_length:].sum(-1)
+        advantages, returns = core_algos.compute_rloo_returns(data=data,
+                                                eos_mask=response_mask,n_samples=config.data.n_samples, config=config)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'gae':
+        values = data.batch['values']
+        # responses = data.batch['responses']
+        # response_length = responses.size(-1)
+        # attention_mask = data.batch['attention_mask']
+        # response_mask = attention_mask[:, -response_length:]
+        # token_level_rewards = data.batch['token_level_rewards']
+        token_level_rewards = token_level_rewards.reshape(B, S, config.actor_rollout_ref.rollout.action_chunks_len, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        response_mask = response_mask.reshape(B, S, config.actor_rollout_ref.rollout.action_chunks_len, config.actor_rollout_ref.model.action_token_len).sum(dim=(-1,-2))
+        macro_mask = (response_mask > 0).float()
+        advantages, returns = core_algos.compute_gae_advantage_return(token_level_rewards=token_level_rewards,
+                                                                      values=values,
+                                                                      eos_mask=macro_mask,
+                                                                      gamma=gamma,
+                                                                      lam=lam)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'grpo':
+        # token_level_rewards = data.batch['token_level_rewards']
+        index = data.non_tensor_batch['uid']
+        # responses = data.batch['responses']
+        # response_length = responses.size(1) *  responses.size(2)
+        # finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
+        # steps = torch.arange(response_length, device=data.batch['responses'].device)  # (traj_len,)
+        # steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+        # response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
+        advantages, returns = core_algos.compute_grpo_outcome_advantage_smolvla(token_level_rewards=token_level_rewards,
+                                                                                eos_mask=response_mask,
+                                                                                index=index,
+                                                                                whiten=config.algorithm['whiten'])
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'reinforce_plus_plus':
+        token_level_rewards = data.batch['token_level_rewards']
+        responses = data.batch['responses']
+        response_length = responses.size(-1)
+        attention_mask = data.batch['attention_mask']
+        response_mask = attention_mask[:, -response_length:]
+        advantages, returns = core_algos.compute_reinforce_plus_plus_outcome_advantage(
+            token_level_rewards=token_level_rewards, eos_mask=response_mask, gamma=gamma)
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+        
+    elif adv_estimator == 'remax':
+        token_level_rewards = data.batch['token_level_rewards']
+        index = data.non_tensor_batch['uid']
+        responses = data.batch['responses']
+        response_length = responses.size(-1)
+        attention_mask = data.batch['attention_mask']
+        response_mask = attention_mask[:, -response_length:]
+
+        reward_baselines = data.batch['reward_baselines']
+
+        advantages, returns = core_algos.compute_remax_outcome_advantage(token_level_rewards=token_level_rewards,
+                                                                         reward_baselines=reward_baselines,
+                                                                         eos_mask=response_mask)
+
+        data.batch['advantages'] = advantages
+        data.batch['returns'] = returns
+    else:
+        raise NotImplementedError
+    return data
+
 def compute_advantage_smolvla(data: DataProto, gamma, lam, adv_estimator, config):
     # responses = data.batch['responses']
     # response_length = responses.size(1) *  responses.size(2)
@@ -311,7 +402,7 @@ def compute_data_metrics(batch, config, model_name):
     returns = batch.batch['returns']
     #add
 
-    if model_name == 'smolvla':
+    if model_name in ['smolvla', 'vla-adapter']:
         B, S, K, CH, D = batch.batch['x_t'].shape
         finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
         response_length = S * config.actor_rollout_ref.rollout.action_chunks_len * config.actor_rollout_ref.model.action_token_len 
@@ -663,7 +754,7 @@ class RayTrainer(object):
                         roll_batch = DataProto.concat(batch_lst)
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)
-                        breakpoint()
+                        # breakpoint()
 
                     metrics['timing/gen'] += timer.last
                     
@@ -782,6 +873,8 @@ class RayTrainer(object):
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
                         if self.config.actor_rollout_ref.model.vla == 'smolvla':
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_smolvla(batch)
+                        if self.config.actor_rollout_ref.model.vla == 'vla-adapter':
+                            ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_vla_adapter(batch)
                         else:
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
                         batch = batch.union(ref_log_prob)
@@ -830,6 +923,12 @@ class RayTrainer(object):
                     # compute advantages, executed on the driver process
                     if self.config.actor_rollout_ref.model.vla == 'smolvla':
                         batch = compute_advantage_smolvla(batch,
+                                                self.config.algorithm.gamma,
+                                                self.config.algorithm.lam,
+                                                adv_estimator=self.config.algorithm.adv_estimator,
+                                                config = self.config)
+                    elif self.config.actor_rollout_ref.model.vla == 'vla-adapter':
+                        batch = compute_advantage_vla_adapter(batch,
                                                 self.config.algorithm.gamma,
                                                 self.config.algorithm.lam,
                                                 adv_estimator=self.config.algorithm.adv_estimator,

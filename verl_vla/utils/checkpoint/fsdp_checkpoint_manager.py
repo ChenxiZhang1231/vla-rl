@@ -17,13 +17,14 @@ import logging
 import os
 import warnings
 from dataclasses import asdict, dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import torch
 import torch.distributed
 from accelerate import init_empty_weights
 from omegaconf import DictConfig
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.fsdp import ShardedOptimStateDictConfig, ShardedStateDictConfig, StateDictType
 from transformers import GenerationConfig, PreTrainedTokenizer, ProcessorMixin
 from transformers.dynamic_module_utils import custom_object_save
@@ -379,3 +380,92 @@ class FSDPCheckpointManager(BaseCheckpointManager):
             torch.distributed.barrier()
 
         self.previous_saved_paths.append(local_path)
+        
+        
+class FSDPCheckpointManager_w_lora_extra_model(FSDPCheckpointManager):
+    """
+    A checkpoint manager that saves and loads
+    - model
+    - action head
+    - proprio projector
+    - noisy action projector
+    - optimizer
+    - lr_scheduler
+    - extra_states
+    """
+    def __init__(self,
+                 model: FSDP,
+                 action_head: FSDP,
+                 noisy_action_projector: DDP,
+                 optimizer: torch.optim.Optimizer,
+                 lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
+                 processing_class: Union[PreTrainedTokenizer, ProcessorMixin] = None,
+                 checkpoint_contents: list = ['model', 'optimizer', 'extra'],
+                 **kwargs):
+        super().__init__(
+            model,
+            optimizer,
+            lr_scheduler=lr_scheduler,
+            processing_class=processing_class,
+            checkpoint_contents=checkpoint_contents,
+            **kwargs
+        )
+        self.action_head = action_head
+        self.noisy_action_projector = noisy_action_projector
+    
+
+    def save_checkpoint(self, local_path, hdfs_path, global_step = 0, max_ckpt_to_keep=None):
+        if 'adapter' in self.checkpoint_contents:
+            from torch.distributed.fsdp import FullStateDictConfig
+            from peft import get_peft_model_state_dict
+
+            if local_path is None:
+                return
+            # record the previous global step
+            self.previous_global_step = global_step
+            ckpt_name_suffix = f'{global_step}_checkpoint.pt'
+
+            # remove previous local_path
+            if max_ckpt_to_keep and isinstance(max_ckpt_to_keep, int) and max_ckpt_to_keep > 0 and len(
+                    self.previous_saved_paths) >= max_ckpt_to_keep:
+                keep_start = len(self.previous_saved_paths) - max_ckpt_to_keep + 1
+                self.remove_previous_save_local_path(self.previous_saved_paths[:keep_start])
+                self.previous_saved_paths = self.previous_saved_paths[keep_start:]
+            if isinstance(local_path, str):
+                local_path = Path(local_path)
+            local_path = Path(self.local_mkdir(local_path))
+            torch.distributed.barrier()
+
+            state_dict_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT, state_dict_cfg):
+                    model_state_dict = self.model._fsdp_wrapped_module.state_dict()
+                # with FSDP.state_dict_type(self.action_head, StateDictType.FULL_STATE_DICT, state_dict_cfg):
+                #     action_head_state_dict = self.action_head._fsdp_wrapped_module.state_dict()
+                
+                if self.rank == 0:
+                    # adapter_state_dict = get_peft_model_state_dict(self.model._fsdp_wrapped_module, state_dict=model_state_dict)
+                    # self.model._fsdp_wrapped_module.save_pretrained(adapter_path, state_dict=model_state_dict)
+                    # torch.save(action_head_state_dict, local_path / f'action_head--{ckpt_name_suffix}')
+                    torch.save(self.action_head.state_dict(), local_path / f'action_head--{ckpt_name_suffix}')
+                    torch.save(self.noisy_action_projector.state_dict(), local_path / f'noisy_action_projector--{ckpt_name_suffix}')
+                    # torch.save(self.proprio_projector.state_dict(), local_path / f'proprio_projector--{ckpt_name_suffix}')
+                    # torch.save(model_state_dict['base_model.model.action_queries.weight'], local_path / f'action_query--{ckpt_name_suffix}')
+
+            torch.distributed.barrier()
+            self.previous_saved_paths.append(local_path)
+
+        else:
+            super().save_checkpoint(local_path, hdfs_path, global_step, max_ckpt_to_keep)
+    def load_checkpoint(self, local_path, hdfs_path = None, del_local_after_load=False):
+        if 'adapter' in self.checkpoint_contents:
+            raise NotImplementedError('adapter is not supported for FSDP')
+            from experiments.robot.openvla_utils import update_auto_map, check_model_logic_mismatch, _load_dataset_stats, find_checkpoint_file, load_component_state_dict
+            if local_path is None:
+                return
+            merged_model_path = os.path.join(local_path,)
+
+
+        else:
+            super().load_checkpoint(local_path, hdfs_path, del_local_after_load)

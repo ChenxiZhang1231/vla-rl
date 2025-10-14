@@ -16,10 +16,11 @@ import tokenizers
 import torch
 import torch.nn as nn
 import transformers
+import math
 from timm.models.vision_transformer import LayerScale
 from transformers import AutoModelForCausalLM, PretrainedConfig, PreTrainedModel
 from transformers.modeling_outputs import ModelOutput
-
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from prismatic.training.train_utils import (
     get_current_action_mask,
     get_next_actions_mask,
@@ -363,6 +364,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         )
 
         # Instantiate LLM Backbone
+        # breakpoint()
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
         )
@@ -444,7 +446,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
         # Move the noisy action features into their correct positions
         # print(noisy_action_features.size())
         
-        repositioned_noisy_action_features[batch_indices, masked_indices] = noisy_action_features
+        repositioned_noisy_action_features[batch_indices, masked_indices] = noisy_action_features.to(input_embeddings.dtype)
 
         # Combine original input embeddings and noisy action embeddings using the mask
         new_input_embeddings = torch.where(
@@ -469,6 +471,12 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
             patch_features = self.vision_backbone(pixel_values)  # (bsz, 256 * num_images, D)
 
         # Project patch embeddings into language embedding space
+        # breakpoint()
+        proj_param = next(self.projector.parameters(), None)
+        if proj_param is not None:
+            # 若 projector 不在同一设备/精度，迁移过去（仅首次生效）
+            if proj_param.device != patch_features.device or proj_param.dtype != patch_features.dtype:
+                self.projector.to(device=patch_features.device, dtype=patch_features.dtype)
         return self.projector(patch_features)
 
     def _process_proprio_features(self, projected_patch_embeddings, proprio, proprio_projector):
@@ -1008,6 +1016,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         noisy_action_projector=None,
         proprio=None,
         proprio_projector=None,
+        use_sde=False,
+        recompute_log_prob=False,
     ):
         B, L, D = input_embeddings.shape
         action_queries = self.action_queries.weight  # (1, h)
@@ -1071,6 +1081,19 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         
         all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
         
+        if use_sde:
+            x_t, return_dict = self.sample_action_sde(all_hidden_states, action_head, noisy_action_projector)
+        else:
+            x_t, return_dict = self.sample_action(all_hidden_states, action_head, noisy_action_projector)
+        
+        normalized_actions = x_t
+        normalized_actions = normalized_actions.reshape(-1, NUM_ACTIONS_CHUNK, ACTION_DIM)
+        normalized_actions = normalized_actions.float().cpu().detach().numpy()
+        
+        return normalized_actions, return_dict
+    
+    def sample_action(self, all_hidden_states, action_head, noisy_action_projector):
+        B = all_hidden_states.shape[0]
         device = all_hidden_states.device
         dt = -1.0 / 10
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
@@ -1104,11 +1127,316 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             "t": t_all,
             "x_next": x_next_all,
         }
-        normalized_actions = x_t
-        normalized_actions = normalized_actions.reshape(-1, NUM_ACTIONS_CHUNK, ACTION_DIM)
-        normalized_actions = normalized_actions.float().cpu().detach().numpy()
+        return x_t, return_dict
+    
+    def sample_action_sde(self, all_hidden_states, action_head, noisy_action_projector):
+        B = all_hidden_states.shape[0]
+        device = all_hidden_states.device
+        dt = -1.0 / 10
+        dt = torch.tensor(dt, dtype=torch.float32, device=device)
+        sqrt_abs_dt = torch.sqrt(-dt)
+        sde_sigma_max = 0.07
+        sde_sigma_power = 1.5
         
-        return normalized_actions, return_dict
+        actions_shape = (B, 20, 7)
+        noise = action_head.module.sample_noise(actions_shape, device)
+            
+        x_t = noise
+        time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        x_t_all, t_all, x_next_all, log_probs = [], [], [], []
+        # breakpoint()
+        while time >= -dt / 2:
+            expanded_time = time.expand(B)
+            x_t_ = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
+            rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
+            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
+            v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            
+            sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
+            index = (10 * (1 - time)).to(torch.long)
+            sigma = sigmas[index]
+            sigma_max = sigmas[1]
+            noise_level = 0.7
+            std_dev_t = torch.sqrt(sigma / (1 - torch.where(sigma == 1, sigma_max, sigma))) * noise_level
+            
+            drift = v_t + (std_dev_t ** 2 / (2 * time + 1e-6)) * (x_t + (1 - time) * v_t)
+            mean = x_t + drift * dt
+            std  = (sqrt_abs_dt * std_dev_t).clamp_min(1e-6)
+            eps = torch.randn_like(x_t)
+            x_next = mean + std * eps
+            
+            x_t_all.append(x_t)
+            t_all.append(expanded_time.detach().cpu())
+            x_next_all.append(x_next)
+            
+            x_t = x_next
+            time += dt
+            
+        return_dict = {
+            "x_t": x_t_all,
+            "t": t_all,
+            "x_next": x_next_all,
+        }
+        return x_t, return_dict
+    
+
+    def _embed_tokens_fsdp_safe(self, input_ids_ext):
+        lm = self.language_model
+        dev = next(lm.parameters()).device
+        ids = input_ids_ext.to(device=dev, dtype=torch.long)
+
+        # 重要：解扁平/聚合成 2-D 权重，再安全地调用 embedding
+        # with torch.no_grad():
+            # recurse=False 只解当前 FSDP 根；writeback=False 不修改原参数
+        with FSDP.summon_full_params(lm, writeback=False, recurse=False):
+            emb_layer = lm.get_input_embeddings()
+            w = emb_layer.weight
+            assert w.dim() == 2, f"expect 2-D, got {w.dim()}-D"
+            out = emb_layer(ids)            # [BS, L_ext, H]
+        return out
+
+    def recompute_logp_from_batch(
+        self,
+        input_ids,          # [B,S,L]
+        pixel_values,       # [B,S,I,H,W]
+        attention_mask,     # [B,S,L] (1=非PAD)
+        x_t,                # [B,S,K,CH,D] 或 [B,K,CH,D]
+        t,                  # [B,S,K]       或 [B,K]
+        x_next,             # [B,S,K,CH,D] 或 [B,K,CH,D]
+        finish_step,        # [B]  以 CH 为基数的全局步计数
+        action_head,
+        noisy_action_projector,
+        use_film: bool = False,
+    ):
+        device = input_ids.device
+        B, S, L = input_ids.shape
+        # ---- 统一 x_t/t/x_next 形状：引入 S 维 ----
+        if x_t.dim() == 4:     # [B,K,CH,D]
+            x_t    = x_t.unsqueeze(1)
+            t      = t.unsqueeze(1)
+            x_next = x_next.unsqueeze(1)
+        _, _, K, CH, D = x_t.shape
+
+        # ---- 展平 S 维到 BS ----
+        BS = B * S
+        input_ids_bs      = input_ids.reshape(BS, L)
+        attention_bs      = attention_mask.reshape(BS, L)
+        I, H, W           = pixel_values.shape[-3:]
+        pixel_values_bs   = pixel_values.reshape(BS, I, H, W)
+
+        # ---- labels & prompt长度（逐样本）----
+        labels_bs = input_ids_bs.clone()
+        labels_bs[:] = IGNORE_INDEX
+        num_prompt_tokens_bs = attention_bs.to(torch.long).sum(dim=-1) - 1   # [BS]
+
+        # ---- 扩展输入：插入 action 占位符与 stop ----
+        input_ids_ext, attention_ext = self._prepare_input_for_action_prediction(input_ids_bs, attention_bs)
+        labels_ext = self._prepare_labels_for_action_prediction(labels_bs, input_ids_ext)
+        all_actions_mask = self._process_action_masks(labels_ext)            # [BS, L_ext] (bool)
+
+        # ---- token 嵌入，并把 action 位置替换为 action_queries ----
+        # breakpoint()
+        # input_embeddings = self.get_input_embeddings()(input_ids_ext)        # [BS, L_ext, H]
+        emb_layer = self.language_model.get_input_embeddings()
+        emb_layer.to(input_ids.device)
+        input_embeddings = emb_layer(input_ids_ext)
+        # input_embeddings = self._embed_tokens_fsdp_safe(input_ids_ext)
+        action_queries = self.action_queries.weight                          # [T,H] 或 [1,H]
+        if action_queries.dim() == 2 and action_queries.size(0) == 1:
+            action_queries = action_queries.expand(self.config.num_action_tokens, -1)
+        aq = action_queries.unsqueeze(0).expand(BS, -1, -1)                  # [BS,T,H]
+        input_embeddings = self._replace_input_embeddings(input_embeddings, all_actions_mask, aq)
+
+        # ---- 视觉投影 & 多模态拼装（支持 left/right pad）----
+        lang_emb_bs = input_embeddings[~all_actions_mask].reshape(BS, -1, input_embeddings.size(-1))
+        proj_patches_bs = self._process_vision_features(pixel_values_bs, lang_emb_bs, use_film)
+        mm_emb, mm_att = self._build_multimodal_attention(input_embeddings, proj_patches_bs, attention_ext)  # [BS,Lmm,H], [BS,Lmm]
+
+        # ---- 过语言模型 ----
+        lm_out = self.language_model(
+            input_ids=None,
+            attention_mask=mm_att,
+            position_ids=None,
+            past_key_values=None,
+            inputs_embeds=mm_emb,
+            labels=None,
+            use_cache=None,
+            output_attentions=False,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+        last_hs = lm_out.hidden_states[-1]   # [BS, Lmm, Hh]
+        BS_, Lmm, Hh = last_hs.shape
+        assert BS_ == BS
+
+        # ---- 提取 task / action 片段（按样本 BOS 插入位置）----
+        att01 = (mm_att != 0).to(torch.long)                                 # [BS, Lmm]
+        bos_idx = (torch.cumsum(att01, dim=1) == 0).sum(dim=1).clamp(max=Lmm-1)  # [BS]
+        NUM_PATCHES = self.vision_backbone.get_num_patches() * self.vision_backbone.get_num_images_in_input()
+        NUM_TOKENS  = 64
+
+        def gather_span(x, start_idx, Ltake):
+            rng = torch.arange(Ltake, device=x.device)[None, :]              # [1,Ltake]
+            idx = start_idx[:, None] + rng                                   # [BS,Ltake]
+            return x.gather(1, idx.unsqueeze(-1).expand(-1, -1, x.size(-1))) # [BS,Ltake,Hh]
+
+        task_latent = gather_span(last_hs, bos_idx + 1, NUM_PATCHES).reshape(BS, 1, NUM_PATCHES, Hh)
+        action_start = bos_idx + 1 + NUM_PATCHES + num_prompt_tokens_bs      # [BS]
+        action_hs = gather_span(last_hs, action_start, NUM_TOKENS).reshape(BS, 1, NUM_TOKENS, Hh).to(torch.bfloat16)
+        all_hidden_states_bs = torch.cat([task_latent, action_hs], dim=2)    # [BS,1,P+T,Hh]
+
+        # ---- 复制到 [BS*K,...] 并计算 v_t ----
+        BSK = BS * K
+        # x_t: [B,S,K,CH,D] -> [BSK,CH,D]
+        x_t_bsk   = x_t.reshape(BSK, CH, D).to(device=device, dtype=torch.bfloat16)
+        t_bsk     = t.reshape(BSK).to(device=device, dtype=torch.float32)
+        all_hs_rep = all_hidden_states_bs.repeat_interleave(K, dim=0)        # [BSK,1,P+T,Hh]
+
+        proj = getattr(noisy_action_projector, "module", noisy_action_projector)
+        x_t_vec = x_t_bsk.reshape(BSK, -1).unsqueeze(-1)                     # [BSK,CH*D,1]
+        obs = proj(x_t_vec).reshape(BSK, CH, -1)                              # [BSK,CH,?]
+
+        head = getattr(action_head, "module", action_head)
+        v_t = head.flow_predictor(
+            obs=obs,
+            hidden_states=all_hs_rep,
+            time_step=t_bsk,
+            proprio_states=None,
+        ).to(torch.float32).reshape(B, S, K, CH, D)
+
+        # ---- SDE / 似然 ----
+        t_f    = t.to(device=device, dtype=torch.float32)
+        t_safe = t_f.clamp(1e-4, 1.0 - 1e-4)
+        t3     = t_safe[..., None, None]                                      # [B,S,K,1,1]
+
+        sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000],
+                            device=device, dtype=torch.float32)
+        # schedN = sigmas.numel() - 1
+        # index  = torch.round(schedN * (1.0 - t_safe)).to(torch.long).clamp_(0, schedN)  # [B,S,K]
+        # sigma  = sigmas[index]
+        # sigma_max = sigmas[0]
+        # noise_level = 0.7
+        # denom = torch.where(index == 0, sigma_max, sigma)
+        # std_dev_t = torch.sqrt(sigma / (1.0 - denom)) * noise_level          # [B,S,K]
+        # std_dev_t = std_dev_t[..., None, None]                               # [B,S,K,1,1]
+
+        sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
+        index = (K * (1 - t)).to(torch.long)
+        sigma = sigmas[index]
+        sigma_max = sigmas[1]
+        noise_level = 0.7
+        std_dev_t = torch.sqrt(sigma / (1 - torch.where(sigma == 1, sigma_max, sigma))) * noise_level
+        std_dev_t = std_dev_t[..., None, None]
+        
+        dt = -1.0 / float(K)
+        sqrt_abs_dt = math.sqrt(-dt)
+
+        x_t_f   = x_t.to(torch.float32)
+        x_nextf = x_next.to(torch.float32)
+        drift = v_t + (std_dev_t**2 / (2.0 * t3 + 1e-6)) * (x_t_f + (1.0 - t3) * v_t)     # [B,S,K,CH,D]
+        mean  = x_t_f + dt * drift
+        std   = torch.clamp(std_dev_t * sqrt_abs_dt, min=1e-6)                             # [B,S,K,1,1]
+
+        # ---- 有效动作 mask（按 finish_step 截断）----
+        CH_idx = torch.arange(CH, device=device)[None, None, :]    # [1,1,CH]
+        S_idx  = torch.arange(S,  device=device)[None, :, None]    # [1,S,1]
+        s_fin  = (finish_step.to(device) // CH).view(B, 1, 1)
+        c_fin  = (finish_step.to(device) %  CH).view(B, 1, 1)
+        mask_before = (S_idx <  s_fin).float()
+        mask_equal  = (S_idx == s_fin).float() * (CH_idx < c_fin).float()
+        mask_actions = (mask_before + mask_equal)                                   # [B,S,CH]
+        mask_elem    = mask_actions[:, :, None, :, None]                            # [B,S,1,CH,1]
+
+        # ---- 高斯 log-prob ----
+        log_sqrt_2pi = math.log(math.sqrt(2.0 * math.pi))
+        diff   = x_nextf - mean
+        lp_elem = -(diff ** 2) / (2.0 * (std ** 2)) - torch.log(std) - log_sqrt_2pi  # [B,S,K,CH,D]
+        lp_elem = lp_elem * mask_elem
+
+        logp_action = lp_elem.sum(dim=-3)                # [B,S,K,D]（保留维度）
+        logp_step   = lp_elem.sum(dim=(-1, -2))          # [B,S,K]
+        logp_outer  = logp_step.sum(dim=2)               # [B,S]
+        logp_joint  = logp_outer.sum(dim=1)              # [B]
+
+        # （可选）熵
+        c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
+        h_per_dim = c0 + torch.log(std).squeeze(-1).squeeze(-1)    # [B,S,K]
+        num_valid_actions = mask_actions.sum(dim=-1)                # [B,S]
+        num_valid_dims    = (num_valid_actions * D).unsqueeze(-1).to(h_per_dim.dtype)
+        ent_step  = h_per_dim * num_valid_dims                      # [B,S,K]
+        ent_outer = ent_step.sum(dim=2)                             # [B,S]
+        ent_joint = ent_outer.sum(dim=1)                            # [B]
+        original_action_dim = 7
+        mean = mean[..., :original_action_dim]
+        std_dev_t = std_dev_t[..., :original_action_dim]
+        std = std[..., :original_action_dim]
+        out_metric = self.summarize_logprob_metrics(
+            logp_step, logp_outer, logp_joint,
+            mean, std, x_nextf, mask_actions, mask_elem,
+            t, sigmas, finish_step, original_action_dim=7
+        )
+        # breakpoint()
+        return {
+            "logp_action": logp_action,  # [B,S,K,D]
+            "logp_step":   logp_step,    # [B,S,K]
+            "logp_outer":  logp_outer,   # [B,S]
+            "logp_elem":  lp_elem, 
+            "logp_joint":  logp_joint,   # [B]
+            "entropy_step":  ent_step,   # [B,S,K]
+            "entropy_outer": ent_outer,  # [B,S]
+            "entropy_joint": ent_joint,  # [B]
+            "mean": mean,                # [B,S,K,CH,D]
+            "std":  std,                 # [B,S,K,1,1]
+            "v_t":  v_t,                 # [B,S,K,CH,D]
+            "mask_actions": mask_actions, # [B,S,CH]
+            "out_metric": out_metric,
+        }
+    
+    def summarize_logprob_metrics(
+        self,
+        logp_step, logp_outer, logp_joint,
+        mean, std, x_next_f, mask_actions, mask_elem,
+        t, sigmas, finish_step, original_action_dim=7
+    ):
+        out = {}
+        # 1) NLL / BPD
+        B = logp_joint.shape[0]
+        num_valid_actions = mask_actions.sum(dim=-1)         # [B,S]
+        valid_dims = (num_valid_actions * original_action_dim).sum(dim=-1)  # [B]
+        bpd_joint = -logp_joint / (valid_dims.clamp_min(1) * math.log(2.0))
+        out["bpd_joint_mean"] = bpd_joint
+        out["logp_joint_mean"] = logp_joint
+
+        # 2) Entropy
+        c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
+        std_use = std[..., :original_action_dim]
+        H_elem = (c0 + torch.log(std_use)) * mask_elem[..., :original_action_dim]
+        H_joint = H_elem.sum(dim=(-1,-2,-3,-4))  # [B]
+        out["H_joint_mean"] = H_joint
+
+        # 3) Calibration
+        err = (x_next_f[..., :7] - mean[..., :7]) / (std[..., :7] + 1e-12)
+        n_action_steps = 20
+        err = err[..., :n_action_steps, :]
+        with torch.autocast('cuda', enabled=False):
+            err = err.to(torch.float64)
+            m = mask_elem[..., :7].expand_as(err).to(torch.float64)   # 显式扩成与 err 同形状
+
+            denom = m.sum(dim=(1,2,3,4)).clamp_min(1)
+            z2 = (err.pow(2) * m).sum(dim=(1,2,3,4)) / denom
+            z4 = (err.pow(4) * m).sum(dim=(1,2,3,4)) / denom
+
+        out["z_m2"], out["z_m4"] = z2, z4
+
+        # 4) K-decomp
+        out["logp_k_first"] = torch.nanmean(logp_step[..., 0], dim=1)
+        out["logp_k_last"]  = torch.nanmean(logp_step[..., -1], dim=1)
+
+        # 5) Masks / stability
+        out["frac_valid_actions"] = mask_actions.float().mean(dim=(1,2))
+
+        return out
+
     
     def predict_action(
         self,
@@ -1119,6 +1447,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         action_head=None,
         noisy_action_projector=None,
         use_film: bool = False,
+        use_sde: bool = False,
+        recompute_log_prob: bool = False,
         **kwargs: str,
     ) -> np.ndarray:
         """Predict actions from input sequence, with options for different prediction methods.
@@ -1157,7 +1487,11 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         labels = self._prepare_labels_for_action_prediction(labels, input_ids)
 
         # Get input embeddings and action masks
-        input_embeddings = self.get_input_embeddings()(input_ids)
+        # breakpoint()
+        # input_embeddings = self.get_input_embeddings()(input_ids)
+        emb_layer = self.language_model.get_input_embeddings()
+        emb_layer.to(input_ids.device)
+        input_embeddings = emb_layer(input_ids)
         all_actions_mask = self._process_action_masks(labels)
         # breakpoint()
 
@@ -1191,6 +1525,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
                 noisy_action_projector=noisy_action_projector,
                 proprio=proprio, # [8]
                 proprio_projector=proprio_projector,
+                use_sde=use_sde,
+                recompute_log_prob=recompute_log_prob,
                 )
         else:
             normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(

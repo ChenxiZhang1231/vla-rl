@@ -39,6 +39,7 @@ actor_rollout_ref:
     lora_alpha: 32  # LoRA scaling factor
     target_modules: all-linear  
   actor:
+    unnorm_key: libero_10
     use_kl_loss: False
     dlogp_clamp: False
     dlogp_clamp_max: None
@@ -106,6 +107,7 @@ actor_rollout_ref:
       
   ref:
     # model:
+    unnorm_key: libero_10
     vla: openvla-oft
     fsdp_config:
       model_dtype: bfloat16

@@ -42,6 +42,7 @@ from verl_vla.utils.fsdp_utils import (
     get_fsdp_wrap_policy_smolvla,
     get_fsdp_wrap_policy_wm,
     get_fsdp_wrap_policy_rm,
+    get_fsdp_wrap_policy_vla_adapter,
 )
 from verl_vla.utils.fsdp_utils import offload_fsdp_optimizer, offload_fsdp_param_and_grad, load_fsdp_optimizer, load_fsdp_param_and_grad
 from verl_vla.utils.import_utils import import_external_libs
@@ -60,7 +61,7 @@ import json
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
 from torch.distributed.fsdp import FullStateDictConfig, ShardedStateDictConfig, LocalStateDictConfig
 from torch.optim.lr_scheduler import LambdaLR
-from verl_vla.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager
+from verl_vla.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager, FSDPCheckpointManager_w_lora_extra_model
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv('VERL_PPO_LOGGING_LEVEL', 'WARN'))
@@ -397,8 +398,12 @@ class RobActorRolloutRefWorker(Worker):
                     dtype="float32",
                 )
             # breakpoint()
-            if torch_dtype != torch.float32:
-                actor_module.to(torch_dtype)
+            # if torch_dtype != torch.float32:
+            #     actor_module.to(torch_dtype)
+            actor_module.to(torch_dtype)
+            self.noisy_action_projector.to(torch_dtype)
+            self.action_head.to(torch_dtype)
+            
             # breakpoint()
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
@@ -464,7 +469,8 @@ class RobActorRolloutRefWorker(Worker):
         elif self.config.model.vla == "openvla-oft":
             auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
         elif self.config.model.vla == "vla-adapter":
-            auto_wrap_policy = get_fsdp_wrap_policy(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=False)
+            # auto_wrap_policy = get_fsdp_wrap_policy(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=False)
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module)
         else:
             raise ValueError()
 
@@ -492,7 +498,8 @@ class RobActorRolloutRefWorker(Worker):
                 device_mesh=self.device_mesh)
         elif self.config.model.vla == 'vla-adapter':
             
-            sharding_strategy = get_sharding_strategy(fsdp_mesh)
+            # sharding_strategy = get_sharding_strategy(fsdp_mesh)
+            sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
             actor_module_fsdp = FSDP(
                 actor_module,
                 # cpu_offload=cpu_offload,
@@ -505,7 +512,7 @@ class RobActorRolloutRefWorker(Worker):
                 sync_module_states=True,
                 device_mesh=self.device_mesh,
                 forward_prefetch=False,
-                ignored_modules=[actor_module.action_queries],)
+                ignored_modules=ignored,)
     
             actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
                 torch.cuda.current_device(), dtype=torch.bfloat16
@@ -831,13 +838,23 @@ class RobActorRolloutRefWorker(Worker):
                                               action_head=self.action_head,
                                               noisy_action_projector=self.noisy_action_projector,
                                               actor_optimizer=self.actor_optimizer)
-            self.checkpoint_manager = FSDPCheckpointManager(
+            # self.checkpoint_manager = FSDPCheckpointManager(
+            #     model=self.actor_module_fsdp,
+            #     optimizer=self.actor_optimizer,
+            #     lr_scheduler=self.actor_lr_scheduler,
+            #     processing_class=None,
+            #     checkpoint_config=None,
+            # )
+            # self.flops_counter = FlopsCounter(self.actor_model_config)
+            self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
                 model=self.actor_module_fsdp,
-                optimizer=self.actor_optimizer,
+                action_head=self.action_head,
+                noisy_action_projector=self.noisy_action_projector,
+                optimizer=self.actor.actor_optimizer,
                 lr_scheduler=self.actor_lr_scheduler,
-                processing_class=None,
-                checkpoint_config=None,
-            )
+                processing_class=self.tokenizer,
+                checkpoint_contents=['model', 'optimizer', 'extra', 'adapter'] )
+            # breakpoint()
             if self.config.model.load_ckpt != "":
                 self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)
                 
@@ -919,6 +936,8 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('Before update policy', logger=logger)
         if self.actor.config.vla == 'smolvla':
             metrics = self.actor.update_policy_smolvla(data=data)
+        if self.actor.config.vla == 'vla-adapter':
+            metrics = self.actor.update_policy_vla_adapter(data=data)
         else:
             metrics = self.actor.update_policy(data=data)
 
@@ -1119,6 +1138,48 @@ class RobActorRolloutRefWorker(Worker):
         data.meta_info['max_token_len'] = self.config.ref.log_prob_max_token_len_per_gpu
         data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
         data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        output = self.ref_policy.compute_log_prob(data=data)
+        # breakpoint()
+        
+        if len(output) == 4:
+            ref_log_prob, ref_mean, ref_std, out_metric = output
+            logp_outer = out_metric['logp_outer']
+            logp_elem = out_metric['logp_elem']
+            output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
+                                                'ref_mean': ref_mean,
+                                                'ref_std': ref_std,
+                                                'ref_logp_outer': logp_outer,
+                                                'ref_logp_elem': logp_elem,
+                                                })
+        else:
+            output = DataProto.from_dict(tensors={'ref_log_prob': output})
+        output = output.to('cpu')
+
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.ref_module_fsdp, offload_grad=self._is_offload_grad)
+        torch.cuda.synchronize()
+        torch.distributed.barrier()
+        torch.cuda.empty_cache()
+        return output
+    
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_ref_log_prob_vla_adapter(self, data: DataProto):
+        assert self._is_ref
+
+        data = data.to('cuda')
+
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.ref_module_fsdp,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        micro_batch_size = self.config.ref.log_prob_micro_batch_size
+        data.meta_info['micro_batch_size'] = micro_batch_size
+        data.meta_info['temperature'] = self.config.rollout.temperature
+        data.meta_info['max_token_len'] = self.config.ref.log_prob_max_token_len_per_gpu
+        data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
+        data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        # print(data['pixel_values'].shape)
+        # breakpoint()
         output = self.ref_policy.compute_log_prob(data=data)
         # breakpoint()
         
