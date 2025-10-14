@@ -60,11 +60,12 @@ class RobDataParallelPPOActor(BasePPOActor):
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
 
         # breakpoint()
-        unnorm_key=config.unnorm_key
-        if  unnorm_key not in self.actor_module.norm_stats and f"{unnorm_key}_no_noops" in self.actor_module.norm_stats:
-            unnorm_key = f"{unnorm_key}_no_noops"
-        assert unnorm_key in self.actor_module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
-        self.config.unnorm_key = unnorm_key
+        if noisy_action_projector is not None:
+            unnorm_key=config.unnorm_key
+            if  unnorm_key not in self.actor_module.norm_stats and f"{unnorm_key}_no_noops" in self.actor_module.norm_stats:
+                unnorm_key = f"{unnorm_key}_no_noops"
+            assert unnorm_key in self.actor_module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
+            self.config.unnorm_key = unnorm_key
         
         self.use_world_model = False
         

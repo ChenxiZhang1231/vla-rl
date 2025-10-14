@@ -241,7 +241,7 @@ def draw_overlay_on_black(clip_path: Path, out_path: Path,
             z = float(Xc[0, 2])
             circle_radius = _depth_to_radius(z, radius_at_z_ref, z_ref, radius_min, radius_max)
 
-            val = float(end_eff_clip[f, ee])
+            val = float(end_eff_clip[f, ee]) * 100
             circle_color = _scalar_to_bgr(val, vmin, vmax)
 
             cv2.circle(overlay, (u0, v0), circle_radius, circle_color, thickness=-1, lineType=cv2.LINE_AA)
@@ -367,7 +367,7 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
     e_res, pos_res, quat_res, eff_res = e_params_orig[idx_map], end_pos_orig[idx_map], end_quat_orig[idx_map], eff_pos_orig[idx_map]
     actions = actions_orig[idx_map]
     clip_dir, meta_dir, overlay_dir, black_dir = out_root / "clips", out_root / "metadata", out_root / "overlays", out_root / "blacks"
-    ensure_dir(clip_dir); ensure_dir(meta_dir); ensure_dir(overlay_dir)
+    ensure_dir(clip_dir); ensure_dir(meta_dir); ensure_dir(overlay_dir); ensure_dir(black_dir)
     products, f0, i = [], 0, 0
     last_processed_f0 = -1
     
@@ -461,51 +461,83 @@ def get_libero_env(task, model_family, resolution=256):
     env.seed(0)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
 
+# def batch_axisangle2quat(vecs: np.ndarray) -> np.ndarray:
+#     """
+#     Converts a batch of scaled axis-angles to quaternions.
+
+#     Args:
+#         vecs (np.ndarray): (N, 3) array of axis-angle exponential coordinates.
+
+#     Returns:
+#         np.ndarray: (N, 4) array of (x, y, z, w) quaternions.
+#     """
+#     # 1. 批量计算所有向量的模长（角度）
+#     #    axis=-1 表示沿着最后一个维度（即3个坐标）计算模长。
+#     #    结果是一个 (N,) 形状的数组。
+#     angles = np.linalg.norm(vecs, axis=-1)
+
+#     # 2. 识别零旋转的情况
+#     #    np.isclose 会返回一个 (N,) 形状的布尔数组（mask）。
+#     zero_mask = np.isclose(angles, 0.0)
+
+#     # 3. 批量计算单位旋转轴
+#     #    为了避免“除以零”的警告，我们使用 np.divide 并通过 `where` 参数
+#     #    指定只在角度不为零的地方进行除法。
+#     #    angles[:, np.newaxis] 将 (N,) 的角度数组变形为 (N, 1)，以便与 (N, 3) 的 vecs 进行广播。
+#     #    对于角度为零的情况，轴向量将被置为 [0, 0, 0]，这是安全的。
+#     axes = np.divide(vecs, angles[:, np.newaxis], where=~zero_mask[:, np.newaxis], out=np.zeros_like(vecs))
+
+#     # 4. 批量应用转换公式
+#     half_angles = angles / 2.0
+#     sin_half_angles = np.sin(half_angles)
+#     cos_half_angles = np.cos(half_angles)
+
+#     # 初始化 (N, 4) 的输出数组
+#     quats = np.zeros((vecs.shape[0], 4))
+    
+#     # 计算 [x, y, z] 部分
+#     quats[:, :3] = axes * sin_half_angles[:, np.newaxis]
+#     # 计算 w 部分
+#     quats[:, 3] = cos_half_angles
+
+#     # 5. 修正零旋转的情况
+#     #    使用之前创建的布尔掩码，将所有零旋转对应的四元数
+#     #    强制设置为单位四元数 [0, 0, 0, 1]。
+#     quats[zero_mask, :3] = 0.0
+#     quats[zero_mask, 3] = 1.0
+
+#     return quats
+
 def batch_axisangle2quat(vecs: np.ndarray) -> np.ndarray:
     """
-    Converts a batch of scaled axis-angles to quaternions.
+    Converts a batch of scaled axis-angles to quaternions (w, x, y, z).
 
     Args:
         vecs (np.ndarray): (N, 3) array of axis-angle exponential coordinates.
 
     Returns:
-        np.ndarray: (N, 4) array of (x, y, z, w) quaternions.
+        np.ndarray: (N, 4) array of (w, x, y, z) quaternions.
     """
-    # 1. 批量计算所有向量的模长（角度）
-    #    axis=-1 表示沿着最后一个维度（即3个坐标）计算模长。
-    #    结果是一个 (N,) 形状的数组。
-    angles = np.linalg.norm(vecs, axis=-1)
+    angles = np.linalg.norm(vecs, axis=-1)          # (N,)
+    zero_mask = np.isclose(angles, 0.0)             # (N,)
 
-    # 2. 识别零旋转的情况
-    #    np.isclose 会返回一个 (N,) 形状的布尔数组（mask）。
-    zero_mask = np.isclose(angles, 0.0)
+    axes = np.divide(
+        vecs, angles[:, None],
+        where=~zero_mask[:, None],
+        out=np.zeros_like(vecs)
+    )                                               # (N,3)
 
-    # 3. 批量计算单位旋转轴
-    #    为了避免“除以零”的警告，我们使用 np.divide 并通过 `where` 参数
-    #    指定只在角度不为零的地方进行除法。
-    #    angles[:, np.newaxis] 将 (N,) 的角度数组变形为 (N, 1)，以便与 (N, 3) 的 vecs 进行广播。
-    #    对于角度为零的情况，轴向量将被置为 [0, 0, 0]，这是安全的。
-    axes = np.divide(vecs, angles[:, np.newaxis], where=~zero_mask[:, np.newaxis], out=np.zeros_like(vecs))
+    half = angles * 0.5
+    s = np.sin(half)                                # (N,)
+    c = np.cos(half)                                # (N,)
 
-    # 4. 批量应用转换公式
-    half_angles = angles / 2.0
-    sin_half_angles = np.sin(half_angles)
-    cos_half_angles = np.cos(half_angles)
+    quats = np.empty((vecs.shape[0], 4), dtype=vecs.dtype)
+    quats[:, 0] = c                                 # w
+    quats[:, 1:] = axes * s[:, None]                # x,y,z
 
-    # 初始化 (N, 4) 的输出数组
-    quats = np.zeros((vecs.shape[0], 4))
-    
-    # 计算 [x, y, z] 部分
-    quats[:, :3] = axes * sin_half_angles[:, np.newaxis]
-    # 计算 w 部分
-    quats[:, 3] = cos_half_angles
-
-    # 5. 修正零旋转的情况
-    #    使用之前创建的布尔掩码，将所有零旋转对应的四元数
-    #    强制设置为单位四元数 [0, 0, 0, 1]。
-    quats[zero_mask, :3] = 0.0
-    quats[zero_mask, 3] = 1.0
-
+    # handle zero-rotation cleanly -> identity quaternion
+    quats[zero_mask, 0] = 1.0
+    quats[zero_mask, 1:] = 0.0
     return quats
 
 # ==============================================================================

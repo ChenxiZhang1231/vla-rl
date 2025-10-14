@@ -95,13 +95,16 @@ def resize_image(img: np.ndarray, resize_size: tuple):
     return numpy_img
 
 
-def get_libero_image(obs, resize_size):
+def get_libero_image(obs, resize_size, flip=False):
     """Extracts image from observations and preprocesses it."""
     assert isinstance(resize_size, int) or isinstance(resize_size, tuple)
     if isinstance(resize_size, int):
         resize_size = (resize_size, resize_size)
     img = obs["agentview_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    if flip:
+        img = img[::-1]
+    else:
+        img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
     # img = img[::-1]
     img = resize_image(img, resize_size)
     return img

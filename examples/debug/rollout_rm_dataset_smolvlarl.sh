@@ -12,7 +12,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 DEFAULT_LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/actor/global_step_9"
-DEFAULT_EXPERIMENT_NAME="rm_train2_default"
+DEFAULT_EXPERIMENT_NAME="debug"
 
 LOAD_MODEL_PATH="${1:-$DEFAULT_LOAD_MODEL_PATH}"
 EXPERIMENT_NAME="${2:-$DEFAULT_EXPERIMENT_NAME}"

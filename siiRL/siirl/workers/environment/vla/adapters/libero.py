@@ -53,6 +53,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
                  max_steps: int,
                  num_steps_wait: int = 10,
                  model_family: str = "openvla",
+                 flip: bool = False,
                 #  delta_action: bool = False,
                  gpu_ids: List[int] = [0],
                  seed: int = 0):
@@ -77,6 +78,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         self.num_steps_wait = num_steps_wait
         self.model_family = model_family
         self.gpu_ids = gpu_ids
+        self.flip = flip
         # self.delta_action = delta_action
 
         self.env: SubprocVectorEnv = None
@@ -172,8 +174,9 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 'type': 'init',
                 'obs': obs_np_list[i],
                 "task_description": task_descriptions[i],
-                'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
+                # 'valid_images': [obs_np_list[i]["agentview_image"][::-1, ::-1]],
                 # 'valid_images': [obs_np_list[i]["agentview_image"][::-1]],
+                'valid_images': [obs_np_list[i]["agentview_image"][::-1] if self.flip else obs_np_list[i]["agentview_image"][::-1, ::-1]],
                 'task_file_name': f"{self.task_suite_name}_task_{task_id}_trial_{trial_id}",
                 'active': True,
                 'complete': False,
@@ -224,7 +227,10 @@ class LIBEROAdapter(BaseVLAEnvironment):
                 act_idx = active_indices_list[i]
                 if step_images[act_idx] is None:
                     step_images[act_idx] = []
-                step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
+                if self.flip:
+                    step_images[act_idx].append(obs[i]["agentview_image"][::-1])
+                else:
+                    step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
                 # step_images[act_idx].append(obs[i]["agentview_image"][::-1])
 
                 if use_vlm_rm:

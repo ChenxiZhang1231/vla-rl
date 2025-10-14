@@ -874,14 +874,16 @@ class RobHFRollout(BaseRollout):
             model_family=self.config.model_family,
             gpu_ids=[self._rank % self._num_gpus_per_node], # Run all workers on the same assigned GPU
             # delta_action=self.config.delta_action
+            flip=True if self.config.vla == "smolvla" else False,
         )
         #oft add
         # breakpoint()
-        unnorm_key=config.unnorm_key
-        if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
-            unnorm_key = f"{unnorm_key}_no_noops"
-        assert unnorm_key in self.module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
-        self.config.unnorm_key = unnorm_key
+        if noisy_action_projector is not None:
+            unnorm_key=config.unnorm_key
+            if  unnorm_key not in self.module.norm_stats and f"{unnorm_key}_no_noops" in self.module.norm_stats:
+                unnorm_key = f"{unnorm_key}_no_noops"
+            assert unnorm_key in self.module.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
+            self.config.unnorm_key = unnorm_key
         #add end
         # gpus = tf.config.experimental.list_physical_devices('GPU')
         # if gpus:
@@ -1319,7 +1321,7 @@ class RobHFRollout(BaseRollout):
             init_data = init_data_list[idx]
             assert init_data['type'] == 'init'
             task_descriptions.append(init_data["task_description"])
-            inputs.append(self._obs_to_input(init_data['obs'], is_train))
+            inputs.append(self._obs_to_input(init_data['obs'], is_train, flip=True))
             task_records.append({
                 "active": init_data['active'],
                 "complete": init_data['complete'],
@@ -1368,7 +1370,7 @@ class RobHFRollout(BaseRollout):
             for idx in active_indices:
                 result = step_results_list[idx]
                 assert result['type'] == 'step'
-                new_inputs[idx] = self._obs_to_input(result['obs'], is_train)
+                new_inputs[idx] = self._obs_to_input(result['obs'], is_train, flip=True)
                 task_records[idx]['active'] = result['active']
                 task_records[idx]['complete'] = result['complete']
                 task_records[idx]['finish_step'] = result['finish_step']
@@ -1495,7 +1497,7 @@ class RobHFRollout(BaseRollout):
             init_data = init_data_list[idx]
             assert init_data['type'] == 'init'
             task_descriptions.append(init_data["task_description"])
-            inputs.append(self._obs_to_input(init_data['obs']))
+            inputs.append(self._obs_to_input(init_data['obs'], flip=True))
             task_records.append({
                 "active": init_data['active'],
                 "complete": init_data['complete'],
@@ -1548,7 +1550,7 @@ class RobHFRollout(BaseRollout):
                 # result = output_queues[idx].get(timeout=30)
                 result = step_results_list[idx]
                 assert result['type'] == 'step'
-                new_inputs[idx] = self._obs_to_input(result['obs'])
+                new_inputs[idx] = self._obs_to_input(result['obs'], flip=True)
                 task_records[idx]['active'] = result['active']
                 task_records[idx]['complete_raw'] = result['complete']
                 task_records[idx]['finish_step_raw'] = result['finish_step']
@@ -3377,7 +3379,7 @@ class RobHFRollout(BaseRollout):
         
         return batch
 
-    def _obs_to_input(self, obs, is_train=True):
+    def _obs_to_input(self, obs, is_train=True, flip=False):
         if self.use_world_model and is_train:
             return {
                 "full_image": obs,
@@ -3385,7 +3387,7 @@ class RobHFRollout(BaseRollout):
         else:
             if self.config.num_images_in_input > 1:
                 return {
-                    "full_image": get_libero_image(obs, 224),
+                    "full_image": get_libero_image(obs, 224, flip=flip),
                     "wrist_image": get_libero_wrist_image(obs, 224),
                     "state": np.concatenate([
                         obs["robot0_eef_pos"],
@@ -3395,7 +3397,7 @@ class RobHFRollout(BaseRollout):
                 }
             else:
                 return {
-                    "full_image": get_libero_image(obs, 224),
+                    "full_image": get_libero_image(obs, 224, flip=flip),
                     "state": np.concatenate([
                         obs["robot0_eef_pos"],
                         quat2axisangle(obs["robot0_eef_quat"]),

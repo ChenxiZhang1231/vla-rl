@@ -61,7 +61,7 @@ import json
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
 from torch.distributed.fsdp import FullStateDictConfig, ShardedStateDictConfig, LocalStateDictConfig
 from torch.optim.lr_scheduler import LambdaLR
-from verl_vla.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager, FSDPCheckpointManager_w_lora_extra_model
+from verl_vla.utils.checkpoint.fsdp_checkpoint_manager import FSDPCheckpointManager, FSDPCheckpointManager_w_lora_extra_model, FSDPCheckpointManagerSmolVLA
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv('VERL_PPO_LOGGING_LEVEL', 'WARN'))
@@ -208,9 +208,9 @@ class RobActorRolloutRefWorker(Worker):
             from verl_vla.utils.vla_utils.smolvla.modeling_smolvla import SmolVLAPolicy
             AutoConfig.register("smolvla", SmolVLAConfig)
             AutoModelForVision2Seq.register(SmolVLAConfig, SmolVLAPolicy)
-            if self.rank == 0:
-                update_auto_map(local_path)
-                check_model_logic_mismatch(local_path)
+            # if self.rank == 0:
+            #     update_auto_map(local_path)
+            #     check_model_logic_mismatch(local_path)
             torch.distributed.barrier()
         elif self.config.model.vla == "vla-adapter":
             import sys
@@ -364,8 +364,9 @@ class RobActorRolloutRefWorker(Worker):
                 # ds_meta = LeRobotDatasetMetadata(
                 #     "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot-DeltaAction/LIBERO-Spatial"
                 # )
+                # meta_path = 
                 ds_meta = LeRobotDatasetMetadata(
-                    meta_path
+                    "/inspire/ssd/project/robotsimulation/public/data/LIBERO-Lerobot/libero_full_lerobot"
                 )
 
                 logger.info('Loading SmolVLA...')
@@ -397,12 +398,16 @@ class RobActorRolloutRefWorker(Worker):
                     device_map={"": "cpu"},
                     dtype="float32",
                 )
+                self.action_head = None
+                self.noisy_action_projector = None
+                
             # breakpoint()
             # if torch_dtype != torch.float32:
             #     actor_module.to(torch_dtype)
             actor_module.to(torch_dtype)
-            self.noisy_action_projector.to(torch_dtype)
-            self.action_head.to(torch_dtype)
+            if self.config.model.vla == 'vla-adapter':
+                self.noisy_action_projector.to(torch_dtype)
+                self.action_head.to(torch_dtype)
             
             # breakpoint()
             if enable_gradient_checkpointing:
@@ -838,22 +843,24 @@ class RobActorRolloutRefWorker(Worker):
                                               action_head=self.action_head,
                                               noisy_action_projector=self.noisy_action_projector,
                                               actor_optimizer=self.actor_optimizer)
-            # self.checkpoint_manager = FSDPCheckpointManager(
-            #     model=self.actor_module_fsdp,
-            #     optimizer=self.actor_optimizer,
-            #     lr_scheduler=self.actor_lr_scheduler,
-            #     processing_class=None,
-            #     checkpoint_config=None,
-            # )
-            # self.flops_counter = FlopsCounter(self.actor_model_config)
-            self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
-                model=self.actor_module_fsdp,
-                action_head=self.action_head,
-                noisy_action_projector=self.noisy_action_projector,
-                optimizer=self.actor.actor_optimizer,
-                lr_scheduler=self.actor_lr_scheduler,
-                processing_class=self.tokenizer,
-                checkpoint_contents=['model', 'optimizer', 'extra', 'adapter'] )
+            if self.config.model.vla == 'smolvla':
+                self.checkpoint_manager = FSDPCheckpointManagerSmolVLA(
+                    model=self.actor_module_fsdp,
+                    optimizer=self.actor_optimizer,
+                    lr_scheduler=self.actor_lr_scheduler,
+                    processing_class=None,
+                    checkpoint_config=None,
+                )
+            elif self.config.model.vla == 'vla-adapter':
+                # self.flops_counter = FlopsCounter(self.actor_model_config)
+                self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
+                    model=self.actor_module_fsdp,
+                    action_head=self.action_head,
+                    noisy_action_projector=self.noisy_action_projector,
+                    optimizer=self.actor.actor_optimizer,
+                    lr_scheduler=self.actor_lr_scheduler,
+                    processing_class=self.tokenizer,
+                    checkpoint_contents=['model', 'optimizer', 'extra', 'adapter'] )
             # breakpoint()
             if self.config.model.load_ckpt != "":
                 self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)
