@@ -508,15 +508,16 @@ class RobActorRolloutRefWorker(Worker):
                 auto_wrap_policy=auto_wrap_policy,
                 device_id=torch.cuda.current_device(),
                 sharding_strategy=sharding_strategy,  # zero3
-                # mixed_precision=mixed_precision,
+                mixed_precision=mixed_precision,
                 sync_module_states=True,
                 device_mesh=self.device_mesh,
                 forward_prefetch=False,
                 ignored_modules=ignored,)
     
             actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
-                torch.cuda.current_device(), dtype=torch.bfloat16
+                torch.cuda.current_device(), dtype=torch_dtype
                 )
+            # breakpoint()
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 

@@ -1031,6 +1031,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         )
 
         # Forward pass through language model
+        # breakpoint()
         language_model_output = self.language_model(
             input_ids=None,
             attention_mask=multimodal_attention_mask,
@@ -1236,10 +1237,11 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
         # ---- token 嵌入，并把 action 位置替换为 action_queries ----
         # breakpoint()
-        # input_embeddings = self.get_input_embeddings()(input_ids_ext)        # [BS, L_ext, H]
-        emb_layer = self.language_model.get_input_embeddings()
-        emb_layer.to(input_ids.device)
-        input_embeddings = emb_layer(input_ids_ext)
+        input_embeddings = self.get_input_embeddings()(input_ids_ext)        # [BS, L_ext, H]
+        # emb_layer = self.language_model.get_input_embeddings()
+        # emb_layer.to(input_ids.device)
+        # input_embeddings = emb_layer(input_ids_ext)
+        
         # input_embeddings = self._embed_tokens_fsdp_safe(input_ids_ext)
         action_queries = self.action_queries.weight                          # [T,H] 或 [1,H]
         if action_queries.dim() == 2 and action_queries.size(0) == 1:
@@ -1488,10 +1490,10 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
 
         # Get input embeddings and action masks
         # breakpoint()
-        # input_embeddings = self.get_input_embeddings()(input_ids)
-        emb_layer = self.language_model.get_input_embeddings()
-        emb_layer.to(input_ids.device)
-        input_embeddings = emb_layer(input_ids)
+        input_embeddings = self.get_input_embeddings()(input_ids)
+        # emb_layer = self.language_model.get_input_embeddings()
+        # emb_layer.to(input_ids.device)
+        # input_embeddings = emb_layer(input_ids)
         all_actions_mask = self._process_action_masks(labels)
         # breakpoint()
 

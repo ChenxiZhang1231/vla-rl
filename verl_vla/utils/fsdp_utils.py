@@ -538,7 +538,12 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy, None
 
-              
+      
+def tag_lm_head(root: nn.Module):
+    for name, m in root.named_modules():
+        if name.endswith(("lm_head")):
+            setattr(m, "_fsdp_wrap_me", True)
+                    
 def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = False):
     """Get FSDP wrap policy for the module.
     
@@ -596,13 +601,26 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
 
     from verl_vla.utils.vla_utils.vla_adapter.prismatic.extern.hf.modeling_prismatic import PrismaticVisionBackbone
     from transformers import Qwen2ForCausalLM
+    from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2RMSNorm
     module_classes_to_wrap = {
         PrismaticVisionBackbone,
-        Qwen2ForCausalLM,
+        # Qwen2ForCausalLM,
+        nn.Embedding,
+        Qwen2DecoderLayer,
+        Qwen2RMSNorm,
     }
     
     module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
     policies.append(module_policy)
+    
+    # tag_lm_head(module)
+    # lm = getattr(module, "language_model", module)
+    # if hasattr(lm, "lm_head"):
+    #     setattr(lm.lm_head, "_fsdp_wrap_me", True)
+    # def is_tagged(m: nn.Module) -> bool:
+    #     return getattr(m, "_fsdp_wrap_me", False)
+    # tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    # policies.append(tag_policy)
     
     if len(policies) > 0:
         auto_wrap_policy = functools.partial(_or_policy, policies=policies)
@@ -611,12 +629,19 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     
     ignored_modules = [m for m in module.modules() if isinstance(m, PrismaticProjector)] + [module.action_queries]
 
-    emb_layer = None
-    lm = getattr(module, "language_model", module)  # 你的模型里一般是 language_model
-    if hasattr(lm, "get_input_embeddings"):
-        emb_layer = lm.get_input_embeddings()
-    assert emb_layer is not None, "找不到 embedding 模块"
-    ignored_modules.append(emb_layer)
+    # emb_layer = None
+    # lm = getattr(module, "language_model", module)  # 你的模型里一般是 language_model
+    # if hasattr(lm, "get_input_embeddings"):
+    #     emb_layer = lm.get_input_embeddings()
+    # assert emb_layer is not None, "找不到 embedding 模块"
+    # ignored_modules.append(emb_layer)
+    
+    #     emb_layer = lm.get_input_embeddings()
+    # assert emb_layer is not None, "找不到 embedding 模块"
+    # ignored_modules.append(emb_layer)
+
+    lm = getattr(module, "language_model", module)
+    ignored_modules.append(lm.lm_head)
     
     return auto_wrap_policy, ignored_modules
 
