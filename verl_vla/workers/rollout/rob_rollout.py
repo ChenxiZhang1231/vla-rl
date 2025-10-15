@@ -3030,6 +3030,7 @@ class RobHFRollout(BaseRollout):
         # breakpoint()
 
         # This is a blocking call
+        # self.adapter.env = None
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
@@ -3118,6 +3119,8 @@ class RobHFRollout(BaseRollout):
                     global_steps,
                     complete
                 )
+        # self.adapter.close()
+        
         self.module.train()
         batch = {"input_ids":[], 
                 "attention_mask": [],

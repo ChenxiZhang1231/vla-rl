@@ -854,14 +854,16 @@ class RobActorRolloutRefWorker(Worker):
                 )
             elif self.config.model.vla == 'vla-adapter':
                 # self.flops_counter = FlopsCounter(self.actor_model_config)
-                self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
+                # self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
+                self.checkpoint_manager = FSDPCheckpointManagerSmolVLA(
                     model=self.actor_module_fsdp,
                     action_head=self.action_head,
                     noisy_action_projector=self.noisy_action_projector,
                     optimizer=self.actor.actor_optimizer,
                     lr_scheduler=self.actor_lr_scheduler,
                     processing_class=self.tokenizer,
-                    checkpoint_contents=['model', 'optimizer', 'extra', 'adapter'] )
+                    checkpoint_contents=None,)
+                    # checkpoint_contents=['model', 'optimizer', 'extra', 'adapter'] )
             # breakpoint()
             if self.config.model.load_ckpt != "":
                 self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)

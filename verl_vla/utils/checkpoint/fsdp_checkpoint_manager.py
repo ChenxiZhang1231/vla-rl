@@ -29,6 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.fsdp import ShardedOptimStateDictConfig, ShardedStateDictConfig, StateDictType
 from transformers import GenerationConfig, PreTrainedTokenizer, ProcessorMixin
 from transformers.dynamic_module_utils import custom_object_save
+from torch.distributed.fsdp import StateDictType, FullStateDictConfig, FullOptimStateDictConfig
 
 from verl_vla.utils.device import is_cuda_available
 from verl_vla.utils.fs import copy_to_local, is_non_local, local_mkdir_safe
@@ -94,6 +95,8 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
         lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
         processing_class: PreTrainedTokenizer | ProcessorMixin = None,
         checkpoint_config: DictConfig = None,
+        action_head = None,
+        noisy_action_projector = None,
         **kwargs,
     ):
         if processing_class is None:
@@ -111,6 +114,8 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
             processing_class=processing_class,
             checkpoint_config=checkpoint_config,
         )
+        self.action_head = action_head
+        self.noisy_action_projector = noisy_action_projector
 
     def load_checkpoint(self, local_path: str, hdfs_path: str = None, del_local_after_load=False):
         """
@@ -270,6 +275,26 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
                     torch.save(extra_state_dict, extra_path)
                     log_with_rank(f"Saved extra_state to {os.path.abspath(extra_path)}", rank=self.rank, logger=logger)
 
+                # if self.action_head is not None:     
+                #     ckpt_name_suffix = f'{global_step}_checkpoint.pt' 
+                #     torch.save(self.action_head.state_dict(), local_path / f'action_head--{ckpt_name_suffix}')
+                #     torch.save(self.noisy_action_projector.state_dict(), local_path / f'noisy_action_projector--{ckpt_name_suffix}')
+
+        if self.action_head is not None:  
+            full_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            full_optim_cfg = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+
+            with get_fsdp_state_ctx(self.model, StateDictType.FULL_STATE_DICT, full_cfg, full_optim_cfg):
+                ah_sd = self.action_head.state_dict() if self.action_head is not None else None
+                nap_sd = self.noisy_action_projector.state_dict() if self.noisy_action_projector is not None else None
+
+            # 只有 rank0 写文件
+            if self.rank == 0 and ah_sd is not None:
+                ckpt_name_suffix = f"{global_step}_checkpoint.pt"
+                torch.save(ah_sd, os.path.join(local_path, f"action_head--{ckpt_name_suffix}"))
+                if nap_sd is not None:
+                    torch.save(nap_sd, os.path.join(local_path, f"noisy_action_projector--{ckpt_name_suffix}"))
+           
         if self.rank == 0:
             # Save HF tokenizer/processor and model config on rank 0 to huggingface/ directory, no matter whether
             # huggingface model is requested to be saved or not.
