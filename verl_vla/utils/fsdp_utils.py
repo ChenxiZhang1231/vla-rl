@@ -628,7 +628,9 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     
     
     ignored_modules = [m for m in module.modules() if isinstance(m, PrismaticProjector)] + [module.action_queries]
-
+    # ignored_modules = []
+    lm = getattr(module, "language_model", module)
+    ignored_modules.append(lm.lm_head)
     # emb_layer = None
     # lm = getattr(module, "language_model", module)  # 你的模型里一般是 language_model
     # if hasattr(lm, "get_input_embeddings"):
@@ -640,8 +642,7 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     # assert emb_layer is not None, "找不到 embedding 模块"
     # ignored_modules.append(emb_layer)
 
-    lm = getattr(module, "language_model", module)
-    ignored_modules.append(lm.lm_head)
+
     
     return auto_wrap_policy, ignored_modules
 

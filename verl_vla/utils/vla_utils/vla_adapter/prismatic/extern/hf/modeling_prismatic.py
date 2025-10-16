@@ -1021,6 +1021,12 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
     ):
         B, L, D = input_embeddings.shape
         action_queries = self.action_queries.weight  # (1, h)
+
+        # Q = NUM_TOKENS
+        # if not hasattr(self, "query_ids") or self.query_ids.numel() != Q:
+        #     ids = torch.arange(Q, device=input_embeddings.device)
+        #     self.register_buffer("query_ids", ids, persistent=False)
+        # action_queries = self.action_queries(self.query_ids)  
         action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)  # (b, chunk_size, h)
         # Replace action token embeddings with noisy action embeddings
         input_embeddings = self._replace_input_embeddings(input_embeddings.clone(), all_actions_mask, action_queries)

@@ -68,6 +68,13 @@ class FSDPConfig:
     FSDP_version: int
     world_size: int
 
+def _is_peft(m):
+    try:
+        from peft import PeftModel, PeftModelForCausalLM
+        return isinstance(m, (PeftModel, PeftModelForCausalLM)) or hasattr(m, "peft_config")
+    except Exception:
+        return hasattr(m, "peft_config")
+
 
 class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
     """
@@ -247,38 +254,47 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
             )
 
         # every rank will save its own model and optim shard
-        state_dict_cfg = ShardedStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
-        optim_cfg = ShardedOptimStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            with get_fsdp_state_ctx(self.model, StateDictType.SHARDED_STATE_DICT, state_dict_cfg, optim_cfg):
-                model_path = os.path.join(local_path, f"model_world_size_{self.world_size}_rank_{self.rank}.pt")
-                optim_path = os.path.join(local_path, f"optim_world_size_{self.world_size}_rank_{self.rank}.pt")
-                extra_path = os.path.join(local_path, f"extra_state_world_size_{self.world_size}_rank_{self.rank}.pt")
+        # with FSDP.summon_full_params(self.model, writeback=False, with_grads=False):
+        if True:
+            state_dict_cfg = ShardedStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
+            optim_cfg = ShardedOptimStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                with get_fsdp_state_ctx(self.model, StateDictType.SHARDED_STATE_DICT, state_dict_cfg, optim_cfg):
+                    model_path = os.path.join(local_path, f"model_world_size_{self.world_size}_rank_{self.rank}.pt")
+                    optim_path = os.path.join(local_path, f"optim_world_size_{self.world_size}_rank_{self.rank}.pt")
+                    extra_path = os.path.join(local_path, f"extra_state_world_size_{self.world_size}_rank_{self.rank}.pt")
 
-                if self.should_save_model:
-                    model_state_dict = self.model.state_dict()
-                    torch.save(model_state_dict, model_path)
-                    log_with_rank(f"Saved model to {os.path.abspath(model_path)}", rank=self.rank, logger=logger)
+                    if self.should_save_model:
+                        model_state_dict = self.model.state_dict()
+                        torch.save(model_state_dict, model_path)
+                        log_with_rank(f"Saved model to {os.path.abspath(model_path)}", rank=self.rank, logger=logger)
 
-                if self.should_save_optimizer:
-                    optimizer_state_dict = self.optimizer.state_dict()
-                    torch.save(optimizer_state_dict, optim_path)
-                    log_with_rank(f"Saved optim to {os.path.abspath(optim_path)}", rank=self.rank, logger=logger)
+                    if self.should_save_optimizer:
+                        optimizer_state_dict = self.optimizer.state_dict()
+                        torch.save(optimizer_state_dict, optim_path)
+                        log_with_rank(f"Saved optim to {os.path.abspath(optim_path)}", rank=self.rank, logger=logger)
 
-                if self.should_save_extra:
-                    lr_scheduler_state_dict = self.lr_scheduler.state_dict() if self.lr_scheduler is not None else None
-                    extra_state_dict = {
-                        "lr_scheduler": lr_scheduler_state_dict,
-                        "rng": self.get_rng_state(),
-                    }
-                    torch.save(extra_state_dict, extra_path)
-                    log_with_rank(f"Saved extra_state to {os.path.abspath(extra_path)}", rank=self.rank, logger=logger)
+                    if self.should_save_extra:
+                        lr_scheduler_state_dict = self.lr_scheduler.state_dict() if self.lr_scheduler is not None else None
+                        extra_state_dict = {
+                            "lr_scheduler": lr_scheduler_state_dict,
+                            "rng": self.get_rng_state(),
+                        }
+                        torch.save(extra_state_dict, extra_path)
+                        log_with_rank(f"Saved extra_state to {os.path.abspath(extra_path)}", rank=self.rank, logger=logger)
 
-                # if self.action_head is not None:     
-                #     ckpt_name_suffix = f'{global_step}_checkpoint.pt' 
-                #     torch.save(self.action_head.state_dict(), local_path / f'action_head--{ckpt_name_suffix}')
-                #     torch.save(self.noisy_action_projector.state_dict(), local_path / f'noisy_action_projector--{ckpt_name_suffix}')
+                    lora_path = os.path.join(local_path, f"lora_adapter_world_size_{self.world_size}_rank_{self.rank}.pt")
+                    from peft import get_peft_model_state_dict
+                    unwrap = self.model._fsdp_wrapped_module if hasattr(self.model, "_fsdp_wrapped_module") else self.model
+                    if _is_peft(unwrap):
+                        lora_sd = get_peft_model_state_dict(unwrap)  # 仅 LoRA 权重
+                        torch.save(lora_sd, os.path.join(local_path, lora_path))
+                        
+                    # if self.action_head is not None:     
+                    #     ckpt_name_suffix = f'{global_step}_checkpoint.pt' 
+                    #     torch.save(self.action_head.state_dict(), local_path / f'action_head--{ckpt_name_suffix}')
+                    #     torch.save(self.noisy_action_projector.state_dict(), local_path / f'noisy_action_projector--{ckpt_name_suffix}')
 
         if self.action_head is not None:  
             full_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -329,9 +345,13 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
 
             # If we have a custom model, we copy the file defining it in the folder and set the attributes so it can be
             # loaded from the Hub.
-            if hasattr(model_config, "auto_map"):
-                custom_object_save(unwrap_model, hf_config_tokenizer_path, config=model_config)
-
+            # if hasattr(model_config, "auto_map"):
+            #     custom_object_save(unwrap_model, hf_config_tokenizer_path, config=model_config)
+            # try:
+            #     custom_object_save(unwrap_model, hf_config_tokenizer_path, config=model_config)
+            # except FileNotFoundError as e:
+            #     print(f"[warn] skip custom_object_save due to missing source: {e}")
+            
             # Also save runtime FSDP config
             fsdp_config_path = os.path.join(local_path, "fsdp_config.json")
             fsdp_config = FSDPConfig(

@@ -409,15 +409,13 @@ class RobActorRolloutRefWorker(Worker):
             # breakpoint()
             # if torch_dtype != torch.float32:
             #     actor_module.to(torch_dtype)
-            actor_module.to(torch_dtype)
-            if self.config.model.vla == 'vla-adapter':
-                self.noisy_action_projector.to(torch_dtype)
-                self.action_head.to(torch_dtype)
+
             
             # breakpoint()
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
             # lora add
+            # breakpoint()
             if self._is_lora:
                 print("Applying LoRA to actor module")
                 
@@ -430,9 +428,16 @@ class RobActorRolloutRefWorker(Worker):
                     'init_lora_weights': "gaussian"
                 }
                 actor_module = get_peft_model(actor_module, LoraConfig(**lora_config))  
+                # for name, param in actor_module.named_parameters():
+                #     if "action_queries" in name:
+                #         print(param.requires_grad)
+                #         param.requires_grad = True
                 actor_module.print_trainable_parameters()
             # lora end
-                
+            actor_module.to(torch_dtype)
+            if self.config.model.vla == 'vla-adapter':
+                self.noisy_action_projector.to(torch_dtype)
+                self.action_head.to(torch_dtype) 
                 
         torch.distributed.barrier()
         def _find_meta_or_zero_storage(mod):
@@ -485,7 +490,7 @@ class RobActorRolloutRefWorker(Worker):
             # else:
             #     auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module)
             # auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter_params_full(actor_module)
-            auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module)
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module, is_lora=self.config.model.get('lora_rank', 0) > 0)
         else:
             raise ValueError()
 
@@ -529,9 +534,9 @@ class RobActorRolloutRefWorker(Worker):
                 forward_prefetch=False,
                 ignored_modules=ignored,)
     
-            actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
-                torch.cuda.current_device(), dtype=torch_dtype
-                )
+            # actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
+            #     torch.cuda.current_device(), dtype=torch_dtype
+            #     )
             # breakpoint()
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
@@ -565,52 +570,89 @@ class RobActorRolloutRefWorker(Worker):
                         return getattr(cfg, key, default) if hasattr(cfg, key) else default
 
                     base_lr = _oget(optim_config, "lr", 1e-4)
+                    lora_lr = _oget(optim_config, "lora_lr", base_lr)  # 可单独给 LoRA 设 lr
                     wd      = _oget(optim_config, "weight_decay", 1e-2)
                     betas   = _oget(optim_config, "betas", (0.9, 0.999))
 
-
+                    if self._is_lora:
+                        lora_params = []
+                        for n, p in actor_module_fsdp.named_parameters():
+                            if p.requires_grad:
+                                lora_params.append((n, p))
+                        # breakpoint()
+                    else:
+                        lora_params = []
+                        
                     # —— Parameter grouping —— #
-                    head_params    = [p for p in self.action_head.parameters() if p.requires_grad]
-                    proj_params    = [p for p in self.noisy_action_projector.parameters() if p.requires_grad]
+                    def split_decay(named_params):
+                        decay, no_decay = [], []
+                        for n, p in named_params:
+                            lname = n.lower()
+                            if lname.endswith("bias") or ("norm" in lname) or ("ln" in lname) or ("layernorm" in lname):
+                                no_decay.append(p)
+                            else:
+                                decay.append(p)
+                        return decay, no_decay
 
+                    # 只在可训练参数上分组
+                    head_named = [(n, p) for n, p in (getattr(self.action_head, "named_parameters", lambda: [])()) if p.requires_grad] if self.action_head else []
+                    proj_named = [(n, p) for n, p in (getattr(self.noisy_action_projector, "named_parameters", lambda: [])()) if p.requires_grad] if self.noisy_action_projector else []
+
+                    head_decay, head_nodecay = split_decay(head_named)
+                    proj_decay, proj_nodecay = split_decay(proj_named)
+                    lora_decay, lora_nodecay = split_decay(lora_params)   # 理论上 LoRA 多数也归到 no_decay，这里仍按规则分
+
+                    # ---------- 统计信息 ----------
                     if self.rank == 0:
-                        print(f"# head params:    {sum(p.numel() for p in head_params):,}")
-                        print(f"# projector params:{sum(p.numel() for p in proj_params):,}")
-                        total = sum(p.numel() for p in (head_params + proj_params))
-                        print(f"# total trainable params: {total:,}")
+                        def _count(ps): return sum(p.numel() for p in ps)
+                        print(f"# head params (trainable):     {_count(head_decay)+_count(head_nodecay):,}")
+                        print(f"# projector params (trainable): {_count(proj_decay)+_count(proj_nodecay):,}")
+                        print(f"# lora params (trainable):      {_count(lora_decay)+_count(lora_nodecay):,}")
+                        total = _count(head_decay) + _count(head_nodecay) + _count(proj_decay) + _count(proj_nodecay) + _count(lora_decay) + _count(lora_nodecay)
+                        print(f"# total trainable params:       {total:,}")
 
-                    param_groups = [
-                        {   # Base group: VLA(Actor/FSDP) + action_head + two projectors
-                            "params": head_params + proj_params,
-                            "lr": base_lr,
-                            "weight_decay": wd,
-                        }
-                    ]
+                    # ---------- param groups ----------
+                    param_groups = []
+
+                    # LoRA：常见做法是不做 weight decay（两组都设 0.0）
+                    if lora_decay:
+                        param_groups.append({"params": lora_decay,   "lr": lora_lr, "weight_decay": 0.0})
+                    if lora_nodecay:
+                        param_groups.append({"params": lora_nodecay, "lr": lora_lr, "weight_decay": 0.0})
+
+                    # head/projector：bias/Norm 不 decay，其余用 wd
+                    if head_decay:
+                        param_groups.append({"params": head_decay,   "lr": base_lr, "weight_decay": wd})
+                    if head_nodecay:
+                        param_groups.append({"params": head_nodecay, "lr": base_lr, "weight_decay": 0.0})
+                    if proj_decay:
+                        param_groups.append({"params": proj_decay,   "lr": base_lr, "weight_decay": wd})
+                    if proj_nodecay:
+                        param_groups.append({"params": proj_nodecay, "lr": base_lr, "weight_decay": 0.0})
+
+                    # 若没有任何可训练参数，给个提示
+                    if len(param_groups) == 0 and self.rank == 0:
+                        print("[warn] No trainable parameters found for optimizer groups.")
 
                     actor_optimizer = optim.AdamW(param_groups, betas=betas)
 
+                    # ---------- scheduler ----------
                     total_steps = _oget(optim_config, "total_training_steps", 0)
                     num_warmup_steps = _oget(optim_config, "lr_warmup_steps", -1)
                     if num_warmup_steps < 0:
                         num_warmup_steps_ratio = _oget(optim_config, "lr_warmup_steps_ratio", 0.0)
-                        num_warmup_steps = int(num_warmup_steps_ratio * total_steps)
+                        num_warmup_steps = int(num_warmup_steps_ratio * max(total_steps, 1))
 
-                    print(f"Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}")
+                    if self.rank == 0:
+                        print(f"Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}")
 
-                    def warmup_factor(step: int) -> float:
-                        # Group 0: linear warmup to 1.0, then constant
+                    def warmup_then_const(step: int) -> float:
                         if num_warmup_steps <= 0:
                             return 1.0
                         return min(1.0, float(step) / float(num_warmup_steps))
 
-                    # Give each param group an independent scaling function:
-                    #   - group 0 (head+proj): use warmup_factor
-                    #   - group 1 (sigma): always 1.0 (i.e., no warmup, use configured sigma_lr directly)
-                    actor_lr_scheduler = LambdaLR(
-                        actor_optimizer,
-                        # lr_lambda=[warmup_factor, lambda step: 1.0]
-                        lr_lambda=warmup_factor
-                    )
+                    # 给所有 param group 用相同的 lr_lambda（也可以传 list 与组数对应）
+                    actor_lr_scheduler = LambdaLR(actor_optimizer, lr_lambda=warmup_then_const)
                 elif optim_config.params == 'full':
                     # breakpoint()
                     from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
