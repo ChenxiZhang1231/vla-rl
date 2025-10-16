@@ -124,6 +124,7 @@ actor_rollout_ref:
     reward_type: env
     delta_action: False
     n_gpus_per_node: 8
+    libero_target_dir: ""
     only_for_gen_rm_data: False
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}

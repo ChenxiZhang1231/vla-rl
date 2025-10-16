@@ -234,14 +234,16 @@
           "type": "debugpy",
           "request": "launch",
           // "cwd": "${workspaceFolder}/any4lerobot/libero2lerobot/",
-          "program": "world_model/data_process/libero_to_json.py",
+          // "program": "world_model/data_process/libero_to_json.py",
+          "program": "world_model/data_process/libero_to_json_addi.py",
           "console": "integratedTerminal",
           "args":[
-            "--dataset_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed/libero_10_no_noops",
-            "--libero_task_suite=libero_10",
+            // "--dataset_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed-Additional",
+            "--dataset_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed-Additional",
+            "--libero_task_suite=libero_spatial",
             "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/debug_data",
             // "--output_dir=/inspire/ssd/project/robotsimulation/public/data/LIBERO-WM/libero_spatial_demo",
-            "--debug=True",
+            "--debug=False",
             "--jobs=1"
           ],
           "env": {

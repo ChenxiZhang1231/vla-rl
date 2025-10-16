@@ -201,6 +201,7 @@ class LIBEROAdapter(BaseVLAEnvironment):
         
         active_indices_list = sorted(list(active_indices_set))
         active_indices_list_step = sorted(list(active_indices_set_step))
+        chunk_buf = [None] * batch_size 
 
         for j in range(actions.shape[1]):
             normalized_actions = []
@@ -233,6 +234,46 @@ class LIBEROAdapter(BaseVLAEnvironment):
                     step_images[act_idx].append(obs[i]["agentview_image"][::-1, ::-1])
                 # step_images[act_idx].append(obs[i]["agentview_image"][::-1])
 
+                if chunk_buf[act_idx] is None:
+                    chunk_buf[act_idx] = dict(
+                        agentview_images=[],
+                        eye_in_hand_images=[],
+                        gripper_qpos=[],
+                        joint_pos=[],
+                        eef_pos=[],
+                        eef_quat=[],
+                        sim_state=[],
+                        actions_applied=[],
+                    )
+
+                obsi = obs[i]
+                # 原始图像（不翻转；保存时再统一旋转 180°）
+                if "agentview_image" in obsi:
+                    chunk_buf[act_idx]["agentview_images"].append(obsi["agentview_image"])
+                if "robot0_eye_in_hand_image" in obsi:
+                    chunk_buf[act_idx]["eye_in_hand_images"].append(obsi["robot0_eye_in_hand_image"])
+
+                # 低维
+                if "robot0_gripper_qpos" in obsi:
+                    chunk_buf[act_idx]["gripper_qpos"].append(np.asarray(obsi["robot0_gripper_qpos"]).reshape(-1))
+                if "robot0_joint_pos" in obsi:
+                    chunk_buf[act_idx]["joint_pos"].append(np.asarray(obsi["robot0_joint_pos"]).reshape(-1))
+                if "robot0_eef_pos" in obsi:
+                    chunk_buf[act_idx]["eef_pos"].append(np.asarray(obsi["robot0_eef_pos"]).reshape(3))
+                if "robot0_eef_quat" in obsi:
+                    chunk_buf[act_idx]["eef_quat"].append(np.asarray(obsi["robot0_eef_quat"]).reshape(4))  # wxyz
+
+                # sim_state 若 obs/infos 提供，也收集
+                if "sim_state" in obsi:
+                    chunk_buf[act_idx]["sim_state"].append(np.asarray(obsi["sim_state"]).reshape(-1))
+                elif isinstance(infos, (list, tuple)) and i < len(infos) and isinstance(infos[i], dict) and "sim_state" in infos[i]:
+                    chunk_buf[act_idx]["sim_state"].append(np.asarray(infos[i]["sim_state"]).reshape(-1))
+
+                # 记录实际送入 env 的动作
+                chunk_buf[act_idx]["actions_applied"].append(np.asarray(normalized_actions[i]).reshape(-1))
+
+
+
                 if use_vlm_rm:
                     if dones[i] or self.step_count[act_idx] >= self.max_steps:
                         if act_idx in active_indices_list_step:
@@ -247,7 +288,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                             'active': False,
                             'complete': dones[i],
                             'finish_step': self.step_count[act_idx],
-                            'valid_images': step_images[act_idx]
+                            'valid_images': step_images[act_idx],
+                            'traj_chunk': chunk_buf[act_idx],
                         }
                         active_indices_set.remove(act_idx)
 
@@ -260,7 +302,8 @@ class LIBEROAdapter(BaseVLAEnvironment):
                     'active': not(dones[i] or self.step_count[act_idx] >= self.max_steps),
                     'complete': dones[i] if not use_vlm_rm else done_raw[i],
                     'finish_step': self.step_count[act_idx],
-                    'valid_images': step_images[act_idx]
+                    'valid_images': step_images[act_idx],
+                    'traj_chunk': chunk_buf[act_idx],
                 }
 
         return results
