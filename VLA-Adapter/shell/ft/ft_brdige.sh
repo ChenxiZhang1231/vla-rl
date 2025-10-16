@@ -1,7 +1,7 @@
 # lrm_cu126_main
 data_name=bridge_orig
 
-torchrun --standalone --nnodes 1 --nproc-per-node 1 vla-scripts/finetune.py \
+torchrun --standalone --nnodes 1 --nproc-per-node 8 vla-scripts/finetune.py \
 --vlm_path /inspire/ssd/project/robotsimulation/public/data/prism-qwen25-extra-dinosiglip-224px-0_5b \
 --config_file_path pretrained_models/configs \
 --data_root_dir /inspire/ssd/project/robotsimulation/public/data/bridge \

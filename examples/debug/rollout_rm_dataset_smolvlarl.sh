@@ -11,11 +11,15 @@ export MUJOCO_GL="egl"
 # export TORCH_USE_CUDA_DSA=1
 # export MUJOCO_GL=egl
 
-DEFAULT_LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/actor/global_step_9"
+DEFAULT_LOAD_MODEL_PATH=""
 DEFAULT_EXPERIMENT_NAME="debug"
+DEFAULT_LIBERO_TARGET_DIR="/inspire/ssd/project/robotsimulation/public/data/debug"
+DEFAULT_DATASET_NAME="libero_spatial"
 
 LOAD_MODEL_PATH="${1:-$DEFAULT_LOAD_MODEL_PATH}"
 EXPERIMENT_NAME="${2:-$DEFAULT_EXPERIMENT_NAME}"
+LIBERO_TARGET_DIR="${3:-$DEFAULT_LIBERO_TARGET_DIR}"
+DATASET_NAME="${4:-$DEFAULT_DATASET_NAME}"
 
 PROJECT_NAME='SimpleVLA-RL'
 # EXPERIMENT_NAME='rm_train2'
@@ -24,7 +28,8 @@ SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vl
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/SimpleVLA-RL/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/actor/global_step_9"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
-DATASET_NAME="libero_spatial"
+# LIBERO_TARGET_DIR="/inspire/ssd/project/robotsimulation/public/data/LIBERO-Processed-Additional"
+# DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
 VLA_NAME="smolvla"
 NUM_GPUS=8
@@ -84,6 +89,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.rollout.name=hf \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.9 \
     actor_rollout_ref.rollout.only_for_gen_rm_data=True \
+    actor_rollout_ref.rollout.libero_target_dir=$LIBERO_TARGET_DIR \
     actor_rollout_ref.ref.log_prob_micro_batch_size=8 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.kl_ctrl.kl_coef=0.00 \

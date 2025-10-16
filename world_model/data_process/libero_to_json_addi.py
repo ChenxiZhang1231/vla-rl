@@ -567,6 +567,7 @@ def extract_libero_data_and_create_video(
     episode_data,
     temp_video_dir: Path,
     env,
+    hdf5_path,
     camera_names: List[str] = ["agentview", "eye_in_hand"],
 ) -> List[Dict[str, Any]]:
     """
@@ -588,16 +589,20 @@ def extract_libero_data_and_create_video(
     agentview = agentview[:, :, ::-1, :]
     eye_in_hand = episode_data["obs"][f"eye_in_hand_rgb"][()]
     eye_in_hand = eye_in_hand[:, :, ::-1, :]
-    
-    env_states = episode_data["states"][()]
-    # env_states = episode_data["env_states"][()]
+    # breakpoint()
+    try:
+        env_states = episode_data["env_states"][()]
+    except:
+        breakpoint()
     
     has_ext = False
     for f in range(num_frames):
         # Robot state
-        cur_states = env_states[f]
+        # cur_states = env_states[f]
+        cur_states = env_states
         if not has_ext: 
             has_ext = True
+            # breakpoint()
             env.set_init_state(cur_states)
             camera_id = env.sim.model.camera_name2id('agentview')
             camera_agentview_fovy = env.sim.model.cam_fovy[camera_id]
@@ -692,7 +697,7 @@ def main():
     parser.add_argument("--stride", type=int, default=16, help="Frame stride between clips")
     parser.add_argument("--crf", type=int, default=20, help="x264 CRF (lower = better quality)")
     parser.add_argument("--preset", type=str, default="veryfast", help="x264 preset")
-    parser.add_argument("--jobs", type=int, default=1, help="Number of parallel workers")
+    parser.add_argument("--jobs", type=int, default=os.cpu_count() or 4, help="Number of parallel workers")
     parser.add_argument("--debug", type=bool, default=False)
     parser.add_argument("--is_addi", type=bool, default=False)
     args = parser.parse_args()
@@ -713,43 +718,47 @@ def main():
         # Get task in suite
         task = task_suite.get_task(task_id)
         env, task_description = get_libero_env(task, "llava", resolution=256)
-        # breakpoint()
-        hdf5_path = os.path.join(args.dataset_dir, f"{task.name}_demo.hdf5")
-    
-        # This function creates temp videos and extracts all numpy arrays
-        try:
-            h5_file = h5py.File(hdf5_path, "r")
-        except Exception as e:
-            print(f"[WARN] Could not open HDF5 file {hdf5_path}: {e}")
-            # return []
-            continue
-
-        for demo_key in list(h5_file["data"].keys()):
-            episode_data = h5_file["data"][demo_key]
-            extracted_tasks = extract_libero_data_and_create_video(args, episode_data, temp_video_dir, env)
+        for trial_id in range(0, 50):
+            trial_id = 26
             
-            # Add other processing params to each task
-            for ta in extracted_tasks:
-                ta.update({
-                    "description": task[1],
-                    "out_root": args.output_dir,
-                    "fps": args.fps,
-                    "clip_len": args.clip_len,
-                    "stride": args.stride,
-                    "crf": args.crf,
-                    "preset": args.preset,
-                })
-            tasks.extend(extracted_tasks)
-            if args.debug and len(tasks) >= 50:
+            name = f"{args.libero_task_suite}_task_{task_id}_trial_{trial_id}"
+            hdf5_path = os.path.join(args.dataset_dir, f"{name}_demo.hdf5")
+            # breakpoint()
+            # This function creates temp videos and extracts all numpy arrays
+            try:
+                h5_file = h5py.File(hdf5_path, "r")
+            except Exception as e:
+                print(f"[WARN] Could not open HDF5 file {hdf5_path}: {e}")
+                # return []
+                continue
+
+            for demo_key in list(h5_file["data"].keys()):
+                episode_data = h5_file["data"][demo_key]
+                extracted_tasks = extract_libero_data_and_create_video(args, episode_data, temp_video_dir, env, hdf5_path)
+                
+                # Add other processing params to each task
+                for ta in extracted_tasks:
+                    ta.update({
+                        "description": task[1],
+                        "out_root": args.output_dir,
+                        "fps": args.fps,
+                        "clip_len": args.clip_len,
+                        "stride": args.stride,
+                        "crf": args.crf,
+                        "preset": args.preset,
+                    })
+                tasks.extend(extracted_tasks)
+                if args.debug and len(tasks) >= 50:
+                    break
+            h5_file.close()
+            if args.debug:
                 break
-        h5_file.close()
-        if args.debug:
-            break
 
     if not tasks:
         print("No valid tasks created. Exiting.")
         shutil.rmtree(temp_video_dir)
         return
+    # breakpoint()
     # process_video_task(tasks[0])
     # raise
     print(f"\nStep 2: Start processing {len(tasks)} videos with {max(1, args.jobs)} workers...")

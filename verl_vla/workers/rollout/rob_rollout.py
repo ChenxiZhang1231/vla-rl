@@ -44,6 +44,10 @@ from verl_vla.utils.libero_utils import get_libero_env, get_libero_dummy_action,
 import numpy as np
 from PIL import Image
 import tensorflow as tf
+import os, json, h5py, numpy as np
+from collections import defaultdict
+import robosuite.utils.transform_utils as T
+import torch
 import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/siiRL")
 from siirl.workers.environment.vla import LIBEROAdapter
@@ -99,6 +103,44 @@ REF_DICT = {
         9: "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/rollouts/smolvla-bs32-n8-mb256-lr5e6-kl004-trainset/step=0--task=libero_spatial_task_9_trial_3--success=True--ran=5920.mp4",
     }
 }
+
+def rotate_180(img):
+    # (H,W,3) or (T,H,W,3) -> 同型返回
+    if img.ndim == 4:
+        return img[:, ::-1, ::-1, :]
+    return img[::-1, ::-1, :]
+
+def as_uint8(arr):
+    arr = np.ascontiguousarray(arr)
+    if arr.dtype != np.uint8:
+        if arr.dtype.kind == "f" and arr.max() <= 1.0 + 1e-6:
+            arr = np.clip(np.round(arr * 255.0), 0, 255).astype(np.uint8)
+        else:
+            arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return arr
+
+def h5_create_dset(grp, name, data, img_like=False):
+    data = np.ascontiguousarray(data)
+    kwargs = dict(compression="gzip", compression_opts=4, shuffle=True)
+    if img_like:
+        assert data.ndim == 4 and data.shape[-1] in (1, 3, 4)
+        chunks = (1, data.shape[1], data.shape[2], data.shape[3])
+        return grp.create_dataset(name, data=data, chunks=chunks, **kwargs)
+    else:
+        if data.ndim >= 2:
+            chunks = (min(1024, data.shape[0]),) + tuple(data.shape[1:])
+        elif data.ndim == 1:
+            chunks = (min(4096, data.shape[0]),)
+        else:
+            chunks = None
+        return grp.create_dataset(name, data=data, chunks=chunks, **kwargs)
+
+def open_or_create_h5(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    f = h5py.File(path, "a")
+    if "data" not in f:
+        f.create_group("data")
+    return f
 
 
 def crop_and_resize(image, crop_scale, batch_size):
@@ -847,10 +889,11 @@ class RobHFRollout(BaseRollout):
         self.module = module
         self.action_head = action_head
         self.noisy_action_projector = noisy_action_projector
-        self.max_steps = {   "libero_spatial": 512,   # max step length 193
+        self.max_steps = {   "libero_spatial": 300,   # max step length 193
                                     "libero_object": 512,    # max step length 254
                                     "libero_goal": 512,      # max step length 270
-                                    "libero_10": 1024,        # max step length 505
+                                    # "libero_10": 1024,        # max step length 505
+                                    "libero_10": 512,        # max step length 505
                                     "libero_90": 512         # max step length 373 org 400 now change to 512
                                 }
         if self.config.vla in ["smolvla"]:
@@ -933,7 +976,7 @@ class RobHFRollout(BaseRollout):
             elif self.config.reward_type == 'vlac' and is_train:
                 output = [self._generate_minibatch_smolvla_vlac_reward(p) for p in batch_prompts]
             elif self.config.only_for_gen_rm_data and (not is_train):
-                output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
+                output = [self._generate_minibatch_smolvla_vlm_reward_gendata(p) for p in batch_prompts]
             else:
                 output = [self._generate_minibatch_smolvla(p) for p in batch_prompts]
                 # output = [self._generate_minibatch_smolvla_vlm_reward(p) for p in batch_prompts]
@@ -941,6 +984,8 @@ class RobHFRollout(BaseRollout):
         elif self.config.vla == "vla-adapter":
             if self.use_world_model and is_train:
                 pass
+            elif self.config.reward_type == 'vlm' and is_train:
+                output = [self._generate_minibatch_vla_adapter_vlm_reward(p) for p in batch_prompts]
             else:
                 output = [self._generate_minibatch_vla_adapter(p) for p in batch_prompts]
             output = pad_dataprotos_lang(
@@ -1582,6 +1627,457 @@ class RobHFRollout(BaseRollout):
                     complete,
                     finish_step
                 )
+        self.module.train()
+        batch = {"observation.images.image":[], 
+                "observation.images.image_is_pad": [],
+                # "observation.images.wrist_image":[], 
+                # "observation.images.wrist_image_is_pad": [],
+                "observation.state":[], 
+                "observation.state_is_pad": [],
+                "action_tensor": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "lang_tokens": [],
+                "lang_masks": [],
+                }  
+        # for k in ["observation.images.image", "observation.images.wrist_image", "observation.images.image_is_pad", "observation.images.wrist_image_is_pad",
+        #           "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+        for k in ["observation.images.image", "observation.images.image_is_pad",
+                  "observation.state", "observation.state_is_pad", "action_tensor", "x_t", "t", "x_next", "lang_tokens", "lang_masks"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete_raw"] = []
+        batch["finish_step_raw"] = []
+        batch["step_images"] = []
+        for k in task_records:
+            batch["complete_raw"].append(k["complete_raw"])
+            batch["finish_step_raw"].append(k["finish_step_raw"])
+            batch["step_images"].append(np.stack(k["step_images"]))
+            
+        
+        batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['observation.images.image'].device)
+        batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # breakpoint()
+        padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
+        batch["step_images"] = padded_step_images.to(device=batch['observation.images.image'].device)
+        batch["step_images_mask"] = padded_step_images_mask.to(device=batch['observation.images.image'].device)
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+    def _generate_minibatch_vla_adapter_vlm_reward(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+            
+        init_data_list = self.adapter._blocking_reset(
+            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
+            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy(),
+        )
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+        for idx in range(batch_size):
+            # init_data = output_queues[idx].get(timeout=120)
+            init_data = init_data_list[idx]
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs'], flip=False))
+            task_records.append({
+                "active": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name'],
+                "step_images": [init_data['obs']['agentview_image'][::-1]]
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            # active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            active_indices = [i for i, r in enumerate(task_records)]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_vla_adapter(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_vla_adapter(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            # step_data["lang_tokens"] = vla_output["lang_tokens"]
+            # step_data["lang_masks"] = vla_output["lang_masks"]
+            step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in current_inputs])).to(vla_output["action_tensor"].device)
+
+            vla_history.append(step_data)
+            
+            # for idx in active_indices:
+            #     input_queues[idx].put(actions[idx])
+            step_results_list = self.adapter._blocking_step({
+                "indices": active_indices,
+                "actions": actions,
+                },
+                use_vlm_rm=True,
+            )
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                # result = output_queues[idx].get(timeout=30)
+                result = step_results_list[idx]
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'], flip=False)
+                task_records[idx]['active'] = result['active']
+                task_records[idx]['complete_raw'] = result['complete']
+                task_records[idx]['finish_step_raw'] = result['finish_step']
+                task_records[idx]['step_images'].extend(result['valid_images']) 
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+            
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            
+        # for q in input_queues:
+        #     q.put(None)
+        # for p in processes:
+        #     p.join(timeout=20)
+        #     if p.is_alive():
+        #         p.terminate()
+        torch.cuda.empty_cache()
+        # breakpoint()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete_raw'] for r in task_records if r['task_file_name'] == task_file)
+                # breakpoint()
+                finish_step = [r['finish_step_raw'] for r in task_records if r['task_file_name'] == task_file][0]
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete,
+                    finish_step
+                )
+        self.module.train()
+        batch = {"input_ids":[], 
+                "attention_mask": [],
+                # "pixel_values": [], 
+                "full_image": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "action_tensor": [],
+                # "lang_tokens": [],
+                # "lang_masks": []
+                }  
+        for k in ["input_ids", "attention_mask",
+                #   "pixel_values", 
+                  "full_image",
+                  "action_tensor", "x_t", "t", "x_next"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        batch["complete_raw"] = []
+        batch["finish_step_raw"] = []
+        batch["step_images"] = []
+        for k in task_records:
+            batch["complete_raw"].append(k["complete_raw"])
+            batch["finish_step_raw"].append(k["finish_step_raw"])
+            batch["step_images"].append(np.stack(k["step_images"]))
+            
+        
+        batch["complete_raw"] = torch.tensor(batch["complete_raw"], dtype=torch.bool, device=batch['action_tensor'].device)
+        batch["finish_step_raw"] = torch.tensor(batch["finish_step_raw"], dtype=torch.int64, device=batch['action_tensor'].device)
+        batch["complete"] = (torch.zeros_like(batch["complete_raw"]) == 1)
+        batch["finish_step"] = torch.ones_like(batch["finish_step_raw"]) * max_steps
+        # breakpoint()
+        padded_step_images, padded_step_images_mask = pad_dataprotos_step_images(batch["step_images"])
+        padded_step_images = padded_step_images.flip(dims=[3])
+        batch["step_images"] = padded_step_images.to(device=batch['action_tensor'].device)
+        batch["step_images_mask"] = padded_step_images_mask.to(device=batch['action_tensor'].device)
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+    def _generate_minibatch_smolvla_vlm_reward_gendata(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        is_train = meta_info.get('is_train', False)
+            
+        init_data_list = self.adapter._blocking_reset(
+            task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
+            trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
+            init_state=init_state.cpu().numpy(),
+            init_state_len=init_state_len.cpu().numpy(),
+        )
+        
+        inputs = []
+        task_descriptions = []
+        task_records = []
+        valid_video = defaultdict(list)
+    
+        traj_buf = [
+            dict(
+                task_file_name=None,
+                agentview_images=[],
+                eye_in_hand_images=[],
+                gripper_qpos=[],
+                joint_pos=[],
+                eef_pos=[],
+                eef_quat=[],
+                sim_state=[],
+                actions_applied=[],   # 每 env step 的实际动作
+                complete_raw=False,
+                finish_step_raw=None,
+            )
+            for _ in range(batch_size)
+        ]
+        
+
+
+        for idx in range(batch_size):
+            # init_data = output_queues[idx].get(timeout=120)
+            init_data = init_data_list[idx]
+            assert init_data['type'] == 'init'
+            task_descriptions.append(init_data["task_description"])
+            inputs.append(self._obs_to_input(init_data['obs'], flip=True))
+            task_records.append({
+                "active": init_data['active'],
+                "complete": init_data['complete'],
+                "finish_step": init_data['finish_step'],
+                "task_file_name": init_data['task_file_name'],
+                "step_images": [init_data['obs']['agentview_image'][::-1]]
+            })
+            if is_valid:
+                valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
+            traj_buf[idx]["task_file_name"] = init_data['task_file_name']
+        
+        step = 0
+        vla_history = []
+        while step < max_steps:
+            # active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            active_indices = [i for i, r in enumerate(task_records)]
+            
+            current_inputs = inputs
+            current_task_descriptions = task_descriptions
+           
+            
+            vla_input = self.process_input_smolvla(current_inputs, current_task_descriptions)
+            vla_input.update(meta_info)
+
+            vla_output = self._generate_one_step_smolvla(vla_input, use_sde=is_train)
+            actions = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            step_data["lang_tokens"] = vla_output["lang_tokens"]
+            step_data["lang_masks"] = vla_output["lang_masks"]
+
+            vla_history.append(step_data)
+            
+            # for idx in active_indices:
+            #     input_queues[idx].put(actions[idx])
+            step_results_list = self.adapter._blocking_step({
+                "indices": active_indices,
+                "actions": actions,
+                },
+                use_vlm_rm=True,
+            )
+            
+            new_inputs = inputs.copy()
+            for idx in active_indices:
+                # result = output_queues[idx].get(timeout=30)
+                result = step_results_list[idx]
+                assert result['type'] == 'step'
+                new_inputs[idx] = self._obs_to_input(result['obs'], flip=True)
+                task_records[idx]['active'] = result['active']
+                task_records[idx]['complete_raw'] = result['complete']
+                task_records[idx]['finish_step_raw'] = result['finish_step']
+                task_records[idx]['step_images'].extend(result['valid_images']) 
+                if is_valid:
+                    valid_video[task_records[idx]['task_file_name']].extend(result['valid_images'])
+                # breakpoint()
+                ch = result.get("traj_chunk", None)
+                if ch is not None:
+                    # 拼接各序列
+                    traj_buf[idx]["agentview_images"].extend(ch.get("agentview_images", []))
+                    traj_buf[idx]["eye_in_hand_images"].extend(ch.get("eye_in_hand_images", []))
+                    traj_buf[idx]["gripper_qpos"].extend(ch.get("gripper_qpos", []))
+                    traj_buf[idx]["joint_pos"].extend(ch.get("joint_pos", []))
+                    traj_buf[idx]["eef_pos"].extend(ch.get("eef_pos", []))
+                    traj_buf[idx]["eef_quat"].extend(ch.get("eef_quat", []))
+                    traj_buf[idx]["sim_state"].extend(ch.get("sim_state", []))
+                    traj_buf[idx]["actions_applied"].extend(ch.get("actions_applied", []))
+                # 记录完成信息
+                traj_buf[idx]["complete_raw"] = bool(result['complete'])
+                traj_buf[idx]["finish_step_raw"] = int(result['finish_step'])
+                
+            inputs = new_inputs
+            step += self.config.action_chunks_len
+            
+        torch.cuda.empty_cache()
+        # breakpoint()
+        if is_valid:
+            for task_file, images in valid_video.items():
+                complete = any(r['complete_raw'] for r in task_records if r['task_file_name'] == task_file)
+                # breakpoint()
+                finish_step = [r['finish_step_raw'] for r in task_records if r['task_file_name'] == task_file][0]
+                save_rollout_video(
+                    images,
+                    self.config.experiment_name,
+                    task_file,
+                    global_steps,
+                    complete,
+                    finish_step
+                )
+                
+            target_root = getattr(self.config, "libero_target_dir", "./LIBERO/libero/datasets/generated")
+            os.makedirs(target_root, exist_ok=True)
+
+            for idx in range(batch_size):
+                tb = traj_buf[idx]
+                # 任务名解析
+                base = os.path.splitext(os.path.basename(tb["task_file_name"] or "unknown_task"))[0]
+                if base.endswith("_demo"):
+                    task_name = base
+                elif base.endswith("_demo.hdf5"):
+                    task_name = base[:-5]
+                else:
+                    task_name = base + "_demo"
+                # breakpoint()
+                h5_path = os.path.join(target_root, f"{task_name}.hdf5")
+
+                # 把 list -> np.array，并做必要转换/兜底
+                def _stack(name, allow_empty=False, default=None):
+                    seq = tb.get(name, [])
+                    if len(seq) == 0:
+                        if allow_empty:
+                            return default
+                        raise ValueError(f"Empty sequence for {name} (idx={idx})")
+                    return np.stack(seq, axis=0)
+
+                agentview_rgb = _stack("agentview_images")  # (T,H,W,3)
+                eye_in_hand_rgb = _stack("eye_in_hand_images", allow_empty=True, default=None)
+                if eye_in_hand_rgb is None:
+                    eye_in_hand_rgb = np.zeros_like(agentview_rgb)
+
+                gripper_states = _stack("gripper_qpos")
+                joint_states   = _stack("joint_pos")
+                ee_pos         = _stack("eef_pos")
+                ee_quat        = _stack("eef_quat")
+
+                # quat(wxyz)->axis-angle(3)
+                ee_ori_axisangle = np.stack([T.quat2axisangle(q) for q in ee_quat], axis=0).astype(np.float32)
+
+                actions_applied = _stack("actions_applied")  # 真正送入 env 的动作（建议存这个）
+                robot_states = np.concatenate([
+                    gripper_states,
+                    ee_pos,
+                    ee_quat,
+                ], axis=-1).astype(np.float32)
+
+                # states：优先 sim_state；若无，用 robot_states 兜底
+                try:
+                    states = _stack("sim_state")
+                except Exception:
+                    states = robot_states
+
+                Tlen = actions_applied.shape[0]
+                rewards = np.zeros((Tlen,), dtype=np.uint8)
+                dones   = np.zeros((Tlen,), dtype=np.uint8)
+                fs = tb.get("finish_step_raw", None)
+                if isinstance(fs, (int, np.integer)) and 0 <= fs < Tlen:
+                    rewards[fs] = 1; dones[fs] = 1
+                else:
+                    rewards[-1] = 1; dones[-1] = 1
+
+                # 旋转 180° 与再生脚本对齐；并转 uint8
+                agentview_rgb   = as_uint8(rotate_180(agentview_rgb))
+                eye_in_hand_rgb = as_uint8(rotate_180(eye_in_hand_rgb))
+
+                # 写 H5
+                f = open_or_create_h5(h5_path)
+                try:
+                    # breakpoint()
+                    demo_i = len(f["data"])
+                    g = f["data"].create_group(f"demo_{demo_i}")
+                    obs = g.create_group("obs")
+
+                    h5_create_dset(obs, "gripper_states", gripper_states.astype(np.float32, copy=False))
+                    h5_create_dset(obs, "joint_states",   joint_states.astype(np.float32, copy=False))
+                    ee_states = np.hstack((ee_pos, ee_ori_axisangle)).astype(np.float32, copy=False)
+                    h5_create_dset(obs, "ee_states",      ee_states)
+                    h5_create_dset(obs, "ee_pos",         ee_pos.astype(np.float32, copy=False))
+                    h5_create_dset(obs, "ee_ori",         ee_ori_axisangle.astype(np.float32, copy=False))
+                    h5_create_dset(obs, "agentview_rgb",  agentview_rgb,  img_like=True)
+                    h5_create_dset(obs, "eye_in_hand_rgb",eye_in_hand_rgb,img_like=True)
+                    
+                    h5_create_dset(g, "actions",      actions_applied.astype(np.float32, copy=False))
+                    h5_create_dset(g, "states",       states.astype(np.float32, copy=False))
+                    
+                    h5_create_dset(g, "robot_states", robot_states.astype(np.float32, copy=False))
+                    h5_create_dset(g, "rewards",      rewards)
+                    h5_create_dset(g, "dones",        dones)
+                    try:
+                        h5_create_dset(g, "env_states",        init_state[idx].cpu().numpy().astype(np.float32, copy=False))
+                    except:
+                        breakpoint()
+                finally:
+                    f.close()
+        # breakpoint()
         self.module.train()
         batch = {"observation.images.image":[], 
                 "observation.images.image_is_pad": [],
