@@ -534,9 +534,9 @@ class RobActorRolloutRefWorker(Worker):
                 forward_prefetch=False,
                 ignored_modules=ignored,)
     
-            # actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
-            #     torch.cuda.current_device(), dtype=torch_dtype
-            #     )
+            actor_module_fsdp._fsdp_wrapped_module.action_queries.to(
+                torch.cuda.current_device(), dtype=torch_dtype
+                )
             # breakpoint()
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
