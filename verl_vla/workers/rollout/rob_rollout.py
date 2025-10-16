@@ -3361,6 +3361,7 @@ class RobHFRollout(BaseRollout):
         # breakpoint()
 
         # This is a blocking call
+        # self.adapter.env = None
         init_data_list = self.adapter._blocking_reset(
             task_ids=task_id.reshape(-1).cpu().numpy().tolist(),
             trial_ids=trial_id.reshape(-1).cpu().numpy().tolist(),
@@ -3414,6 +3415,7 @@ class RobHFRollout(BaseRollout):
             step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
             # step_data["lang_tokens"] = vla_output["lang_tokens"]
             # step_data["lang_masks"] = vla_output["lang_masks"]
+            step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in current_inputs])).to(vla_output["action_tensor"].device)
 
             vla_history.append(step_data)
             
@@ -3449,10 +3451,14 @@ class RobHFRollout(BaseRollout):
                     global_steps,
                     complete
                 )
+        # self.adapter.close()
+        
         self.module.train()
+        # breakpoint()
         batch = {"input_ids":[], 
                 "attention_mask": [],
-                "pixel_values": [],
+                # "pixel_values": [], 
+                "full_image": [],
                 "x_t": [],
                 "t": [],
                 "x_next": [],
@@ -3462,7 +3468,9 @@ class RobHFRollout(BaseRollout):
                 }  
                     
         for k in ["input_ids", "attention_mask",
-                  "pixel_values", "action_tensor", "x_t", "t", "x_next"]:
+                #   "pixel_values", 
+                  "full_image",
+                  "action_tensor", "x_t", "t", "x_next"]:
             for h in vla_history:
                 batch[k].append(h[k])
                 
@@ -3476,8 +3484,8 @@ class RobHFRollout(BaseRollout):
             batch["complete"].append(k["complete"])
             batch["finish_step"].append(k["finish_step"])
         
-        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['pixel_values'].device)
-        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['pixel_values'].device)
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['action_tensor'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['action_tensor'].device)
         # print(batch)
         # breakpoint()
         output_batch = TensorDict(

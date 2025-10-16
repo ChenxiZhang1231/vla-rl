@@ -84,7 +84,7 @@ class LIBERO_Dataset(Dataset):
         
         if self.task_suite_name in ["libero_10", "libero_90", "libero_goal",  "libero_object",  "libero_spatial"]:
             for task_id in range(num_tasks_in_suite):
-                # if task_id != 4:
+                # if task_id != 4 and self.train_val == "valid":
                 #     continue
                 if self.train_val == "train":
                     if self.libero_raw_data_dir == "":
