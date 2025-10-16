@@ -21,6 +21,9 @@ import math
 import torch
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from PIL import Image
+
+from transformers import GenerationConfig, AutoProcessor
 
 from verl_vla import DataProto
 from verl_vla.trainer.ppo import core_algos
@@ -45,6 +48,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         action_head,
         noisy_action_projector,
         actor_optimizer: torch.optim.Optimizer = None,
+        processor_path = None
     ):
         """When optimizer is None, it is Reference Policy"""
         super().__init__(config)
@@ -59,6 +63,10 @@ class RobDataParallelPPOActor(BasePPOActor):
         self.use_ulysses_sp = False #self.ulysses_sequence_parallel_size > 1
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
 
+        if self.config.vla in ["smolvla"]:
+            self.processor = None
+        else:
+            self.processor = AutoProcessor.from_pretrained(processor_path, trust_remote_code=True)
         # breakpoint()
         if noisy_action_projector is not None:
             unnorm_key=config.unnorm_key
@@ -257,6 +265,40 @@ class RobDataParallelPPOActor(BasePPOActor):
 
             return ent_outer, logp_action, mean, std, out_metric
 
+    def to_pixel_values_with_processor(self,
+                                    full_image: torch.Tensor,
+                                    device="cuda",
+                                    wrist_image: torch.Tensor | None = None):
+        """
+        full_image: [B, S, H, W, 3] (uint8 或 float), CPU/GPU 都可
+        wrist_image: 可选 [B, S, H, W, 3]
+        返回: pixel_values [B, S or 2S, 3, H', W']
+        """
+        assert full_image.ndim == 5 and full_image.shape[-1] == 3
+        B, S, H, W, C = full_image.shape
+
+        # 把图像展平成 list[ PIL.Image ]
+        fi = full_image.detach().cpu()
+        imgs = [Image.fromarray(fi[b, s].numpy().astype("uint8") if fi.dtype != torch.uint8 else fi[b, s].numpy())
+                for b in range(B) for s in range(S)]
+
+        # 主视角
+        out = self.processor(text=[""]*len(imgs), images=imgs, return_tensors="pt")
+        pv = out["pixel_values"]              # [B*S, 3, H', W']
+        pv = pv.view(B, S, *pv.shape[1:])     # [B, S, 3, H', W']
+
+        # 可选：腕部视角，同样处理后在 S 维拼接
+        if wrist_image is not None:
+            wi = wrist_image.detach().cpu()
+            wimgs = [Image.fromarray(wi[b, s].numpy().astype("uint8") if wi.dtype != torch.uint8
+                                    else wi[b, s].numpy())
+                    for b in range(B) for s in range(S)]
+            wout = self.processor(images=wimgs, return_tensors="pt")
+            wpv = wout["pixel_values"].view(B, S, *pv.shape[2:])  # [B, S, 3, H', W']
+            pv = torch.cat([pv, wpv], dim=1)                      # [B, 2S, 3, H', W']
+
+        return pv.to(device, non_blocking=True)
+
     def _forward_micro_batch_vla_adapter(self, micro_batch, return_logprob=False) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         micro_batch:
@@ -271,10 +313,13 @@ class RobDataParallelPPOActor(BasePPOActor):
         
         # breakpoint()
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            # breakpoint()
+            
+            full_image = micro_batch["full_image"]  # torch.Size([B, S, 224, 224, 3])
+            pixel_values = self.to_pixel_values_with_processor(full_image, device=micro_batch["x_t"].device)
             return_dict = self.actor_module.recompute_logp_from_batch(
                 micro_batch["input_ids"],
-                micro_batch["pixel_values"],
+                # micro_batch["pixel_values"],
+                pixel_values,
                 micro_batch["attention_mask"],
                 micro_batch["x_t"],
                 micro_batch["t"],
@@ -382,9 +427,12 @@ class RobDataParallelPPOActor(BasePPOActor):
         """
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
             # breakpoint()
+            full_image = micro_batch["full_image"]  # torch.Size([B, S, 224, 224, 3])
+            pixel_values = self.to_pixel_values_with_processor(full_image, device=micro_batch["x_t"].device)
             return_dict = self.actor_module.recompute_logp_from_batch(
                 micro_batch["input_ids"],
-                micro_batch["pixel_values"],
+                # micro_batch["pixel_values"],
+                pixel_values,
                 micro_batch["attention_mask"],
                 micro_batch["x_t"],
                 micro_batch["t"],
@@ -520,7 +568,9 @@ class RobDataParallelPPOActor(BasePPOActor):
                            "x_t", "t", "x_next",
                            "lang_tokens", "lang_masks", "finish_step"]
         elif self.config.vla == 'vla-adapter':
-            select_keys = ['input_ids', 'attention_mask', 'pixel_values',
+            select_keys = ['input_ids', 'attention_mask',
+                        #    'pixel_values',
+                           'full_image',
                            'action_tensor', 
                            "x_t", "t", "x_next", "finish_step"]
         else:
@@ -1087,7 +1137,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                             "lang_tokens", "lang_masks", "finish_step",
                             'old_log_probs', 'advantages',]
         elif self.config.vla == 'vla-adapter':
-            select_keys = ['pixel_values',
+            select_keys = [ #'pixel_values',
+                            'full_image',
                             'action_tensor', 
                             "x_t", "t", "x_next",
                             "input_ids", "attention_mask", "finish_step",

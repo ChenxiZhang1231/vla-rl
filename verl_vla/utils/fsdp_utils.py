@@ -645,6 +645,116 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     
     return auto_wrap_policy, ignored_modules
 
+def get_fsdp_wrap_policy_vla_adapter_params_full(module, config = None, is_lora: bool = False):
+    """Get FSDP wrap policy for the module.
+    
+    Args:
+        module: The module to get wrap policy for
+        config: Configuration for wrap policy
+        is_lora: Whether to enable lambda policy for LoRA modules
+    """
+    if config is None:
+        config = {}
+
+    if config.get('disable', False):
+        return None
+
+    default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+    fsdp_transformer_layer_cls_to_wrap = config.get("transformer_layer_cls_to_wrap",
+                                                    default_transformer_cls_names_to_wrap)
+    min_num_params = config.get('min_num_params', 0)
+    auto_wrap_policy = None
+
+    policies = []
+
+    from torch.distributed.fsdp.wrap import _or_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy
+
+    # Add lambda policy for LoRA modules if is_lora is True
+    if is_lora:
+
+        def lambda_policy_fn(module):
+            if (len(list(module.named_children())) == 0 and getattr(module, "weight", None) is not None and
+                    module.weight.requires_grad):
+                return True
+            return False
+
+        lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
+        policies.append(lambda_policy)
+
+    if min_num_params > 0:
+        size_policy = functools.partial(size_based_auto_wrap_policy, min_num_params=min_num_params)
+        policies.append(size_policy)
+    elif fsdp_transformer_layer_cls_to_wrap is not None:
+        transformer_cls_to_wrap = set()
+        for layer_class in fsdp_transformer_layer_cls_to_wrap:
+            transformer_cls = get_module_class_from_name(module, layer_class)
+            if transformer_cls is None:
+                raise Exception("Could not find the transformer layer class to wrap in the model.")
+            else:
+                transformer_cls_to_wrap.add(transformer_cls)
+
+        transformer_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls=transformer_cls_to_wrap,
+        )
+        policies.append(transformer_policy)
+
+
+    from verl_vla.utils.vla_utils.vla_adapter.prismatic.extern.hf.modeling_prismatic import PrismaticVisionBackbone, PrismaticProjector
+    from transformers import Qwen2ForCausalLM
+    from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2RMSNorm
+    module_classes_to_wrap = {
+        PrismaticVisionBackbone,
+        # Qwen2ForCausalLM,
+        nn.Embedding,
+        Qwen2DecoderLayer,
+        Qwen2RMSNorm,
+        PrismaticProjector,
+    }
+    
+    module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    policies.append(module_policy)
+    
+    # tag_lm_head(module)
+    # lm = getattr(module, "language_model", module)
+    # if hasattr(lm, "lm_head"):
+    #     setattr(lm.lm_head, "_fsdp_wrap_me", True)
+    # def is_tagged(m: nn.Module) -> bool:
+    #     return getattr(m, "_fsdp_wrap_me", False)
+    # tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    # policies.append(tag_policy)
+    
+    # action_queries = getattr(module, "action_queries", module)
+    # setattr(action_queries, "_fsdp_wrap_me", True)
+    # def is_tagged(m: nn.Module) -> bool:
+    #     return getattr(m, "_fsdp_wrap_me", False)
+    # tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    # policies.append(tag_policy)
+    
+    if len(policies) > 0:
+        auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+
+    
+    
+    # ignored_modules = [m for m in module.modules() if isinstance(m, PrismaticProjector)] + [module.action_queries]
+    ignored_modules = [module.action_queries]
+    # emb_layer = None
+    # lm = getattr(module, "language_model", module)  # 你的模型里一般是 language_model
+    # if hasattr(lm, "get_input_embeddings"):
+    #     emb_layer = lm.get_input_embeddings()
+    # assert emb_layer is not None, "找不到 embedding 模块"
+    # ignored_modules.append(emb_layer)
+    
+    #     emb_layer = lm.get_input_embeddings()
+    # assert emb_layer is not None, "找不到 embedding 模块"
+    # ignored_modules.append(emb_layer)
+
+    lm = getattr(module, "language_model", module)
+    ignored_modules.append(lm.lm_head)
+
+    
+    return auto_wrap_policy, ignored_modules
+
 def tag_action_embedder(root: nn.Module):
     name_list = []
     for name, m in root.named_modules():

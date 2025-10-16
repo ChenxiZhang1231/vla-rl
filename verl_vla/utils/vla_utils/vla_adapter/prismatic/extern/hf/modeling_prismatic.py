@@ -1140,7 +1140,9 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         sde_sigma_power = 1.5
         
         actions_shape = (B, 20, 7)
-        noise = action_head.module.sample_noise(actions_shape, device)
+        # noise = action_head.module.sample_noise(actions_shape, device)
+        head = getattr(action_head, "module", action_head)
+        noise = head.sample_noise(actions_shape, device)
             
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
@@ -1149,9 +1151,14 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         while time >= -dt / 2:
             expanded_time = time.expand(B)
             x_t_ = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
-            rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
+            # rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
+            proj = getattr(noisy_action_projector, "module", noisy_action_projector)
+            rearranged_actions_hidden_states = proj(x_t_)
             rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
-            v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            # v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+        
+            head = getattr(action_head, "module", action_head)
+            v_t = head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
             
             sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
             index = (10 * (1 - time)).to(torch.long)
