@@ -931,7 +931,7 @@ class RobVLMRewardManager():
             self.vlm_input_num_ref_frames = self.config.reward_model.vlm_input_num_ref_frames
         self.return_env_score = self.config.reward_model.return_env_score
         self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
-        if config.actor_rollout_ref.model.vla == 'smolvla':
+        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter']:
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'

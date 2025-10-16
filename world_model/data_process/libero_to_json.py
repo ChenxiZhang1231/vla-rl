@@ -589,8 +589,8 @@ def extract_libero_data_and_create_video(
     eye_in_hand = episode_data["obs"][f"eye_in_hand_rgb"][()]
     eye_in_hand = eye_in_hand[:, :, ::-1, :]
     
-    # env_states = episode_data["states"][()]
-    env_states = episode_data["env_states"][()]
+    env_states = episode_data["states"][()]
+    # env_states = episode_data["env_states"][()]
     
     has_ext = False
     for f in range(num_frames):
