@@ -445,6 +445,7 @@ class PrismaticForConditionalGeneration(PrismaticPreTrainedModel):
 
         # Move the noisy action features into their correct positions
         # print(noisy_action_features.size())
+        noisy_action_features = noisy_action_features.to(repositioned_noisy_action_features.device)
         
         repositioned_noisy_action_features[batch_indices, masked_indices] = noisy_action_features.to(input_embeddings.dtype)
 
@@ -1158,13 +1159,13 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             expanded_time = time.expand(B)
             x_t_ = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
             # rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
-            proj = getattr(noisy_action_projector, "module", noisy_action_projector)
-            rearranged_actions_hidden_states = proj(x_t_)
+            # proj = getattr(noisy_action_projector, "module", noisy_action_projector)
+            rearranged_actions_hidden_states = self.noisy_action_projector(x_t_)
             rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
             # v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
         
-            head = getattr(action_head, "module", action_head)
-            v_t = head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            # head = getattr(action_head, "module", action_head)
+            v_t = self.action_head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
             
             sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
             index = (10 * (1 - time)).to(torch.long)
@@ -1307,12 +1308,12 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         t_bsk     = t.reshape(BSK).to(device=device, dtype=torch.float32)
         all_hs_rep = all_hidden_states_bs.repeat_interleave(K, dim=0)        # [BSK,1,P+T,Hh]
 
-        proj = getattr(noisy_action_projector, "module", noisy_action_projector)
+        # proj = getattr(noisy_action_projector, "module", noisy_action_projector)
         x_t_vec = x_t_bsk.reshape(BSK, -1).unsqueeze(-1)                     # [BSK,CH*D,1]
-        obs = proj(x_t_vec).reshape(BSK, CH, -1)                              # [BSK,CH,?]
+        obs = self.noisy_action_projector(x_t_vec).reshape(BSK, CH, -1)                              # [BSK,CH,?]
 
-        head = getattr(action_head, "module", action_head)
-        v_t = head.flow_predictor(
+        # head = getattr(action_head, "module", action_head)
+        v_t = self.action_head.flow_predictor(
             obs=obs,
             hidden_states=all_hs_rep,
             time_step=t_bsk,

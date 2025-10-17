@@ -260,6 +260,7 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
             optim_cfg = ShardedOptimStateDictConfig(offload_to_cpu=True if is_cuda_available else False)
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                # with FSDP.state_dict_type(self.model, StateDictType.SHARDED_STATE_DICT, state_dict_cfg, optim_cfg):
                 with get_fsdp_state_ctx(self.model, StateDictType.SHARDED_STATE_DICT, state_dict_cfg, optim_cfg):
                     model_path = os.path.join(local_path, f"model_world_size_{self.world_size}_rank_{self.rank}.pt")
                     optim_path = os.path.join(local_path, f"optim_world_size_{self.world_size}_rank_{self.rank}.pt")
@@ -284,32 +285,32 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
                         torch.save(extra_state_dict, extra_path)
                         log_with_rank(f"Saved extra_state to {os.path.abspath(extra_path)}", rank=self.rank, logger=logger)
 
-                    lora_path = os.path.join(local_path, f"lora_adapter_world_size_{self.world_size}_rank_{self.rank}.pt")
-                    from peft import get_peft_model_state_dict
-                    unwrap = self.model._fsdp_wrapped_module if hasattr(self.model, "_fsdp_wrapped_module") else self.model
-                    if _is_peft(unwrap):
-                        lora_sd = get_peft_model_state_dict(unwrap)  # 仅 LoRA 权重
-                        torch.save(lora_sd, os.path.join(local_path, lora_path))
+                    # lora_path = os.path.join(local_path, f"lora_adapter_world_size_{self.world_size}_rank_{self.rank}.pt")
+                    # from peft import get_peft_model_state_dict
+                    # unwrap = self.model._fsdp_wrapped_module if hasattr(self.model, "_fsdp_wrapped_module") else self.model
+                    # if _is_peft(unwrap):
+                    #     lora_sd = get_peft_model_state_dict(unwrap)  # 仅 LoRA 权重
+                    #     torch.save(lora_sd, os.path.join(local_path, lora_path))
                         
                     # if self.action_head is not None:     
                     #     ckpt_name_suffix = f'{global_step}_checkpoint.pt' 
                     #     torch.save(self.action_head.state_dict(), local_path / f'action_head--{ckpt_name_suffix}')
                     #     torch.save(self.noisy_action_projector.state_dict(), local_path / f'noisy_action_projector--{ckpt_name_suffix}')
 
-        if self.action_head is not None:  
-            full_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-            full_optim_cfg = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        # if self.action_head is not None:  
+        #     full_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        #     full_optim_cfg = FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True)
 
-            with get_fsdp_state_ctx(self.model, StateDictType.FULL_STATE_DICT, full_cfg, full_optim_cfg):
-                ah_sd = self.action_head.state_dict() if self.action_head is not None else None
-                nap_sd = self.noisy_action_projector.state_dict() if self.noisy_action_projector is not None else None
+        #     with get_fsdp_state_ctx(self.model, StateDictType.FULL_STATE_DICT, full_cfg, full_optim_cfg):
+        #         ah_sd = self.action_head.state_dict() if self.action_head is not None else None
+        #         nap_sd = self.noisy_action_projector.state_dict() if self.noisy_action_projector is not None else None
 
-            # 只有 rank0 写文件
-            if self.rank == 0 and ah_sd is not None:
-                ckpt_name_suffix = f"{global_step}_checkpoint.pt"
-                torch.save(ah_sd, os.path.join(local_path, f"action_head--{ckpt_name_suffix}"))
-                if nap_sd is not None:
-                    torch.save(nap_sd, os.path.join(local_path, f"noisy_action_projector--{ckpt_name_suffix}"))
+        #     # 只有 rank0 写文件
+        #     if self.rank == 0 and ah_sd is not None:
+        #         ckpt_name_suffix = f"{global_step}_checkpoint.pt"
+        #         torch.save(ah_sd, os.path.join(local_path, f"action_head--{ckpt_name_suffix}"))
+        #         if nap_sd is not None:
+        #             torch.save(nap_sd, os.path.join(local_path, f"noisy_action_projector--{ckpt_name_suffix}"))
            
         if self.rank == 0:
             # Save HF tokenizer/processor and model config on rank 0 to huggingface/ directory, no matter whether
@@ -363,7 +364,6 @@ class FSDPCheckpointManagerSmolVLA(BaseCheckpointManagerSmolVLA):
 
         # wait for everyone to dump to local
         torch.distributed.barrier()
-
         if self.should_save_hf_model:
             # Only rank 0 will save hf model and,
             # offload to cpu to save LLMs which may be too large to fit in one GPU

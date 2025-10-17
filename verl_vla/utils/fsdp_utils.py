@@ -569,16 +569,16 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     from torch.distributed.fsdp.wrap import _or_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy
 
     # Add lambda policy for LoRA modules if is_lora is True
-    if is_lora:
+    # if is_lora:
 
-        def lambda_policy_fn(module):
-            if (len(list(module.named_children())) == 0 and getattr(module, "weight", None) is not None and
-                    module.weight.requires_grad):
-                return True
-            return False
+    #     def lambda_policy_fn(module):
+    #         if (len(list(module.named_children())) == 0 and getattr(module, "weight", None) is not None and
+    #                 module.weight.requires_grad):
+    #             return True
+    #         return False
 
-        lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
-        policies.append(lambda_policy)
+    #     lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
+    #     policies.append(lambda_policy)
 
     if min_num_params > 0:
         size_policy = functools.partial(size_based_auto_wrap_policy, min_num_params=min_num_params)
@@ -602,12 +602,19 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     from verl_vla.utils.vla_utils.vla_adapter.prismatic.extern.hf.modeling_prismatic import PrismaticVisionBackbone
     from transformers import Qwen2ForCausalLM
     from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2RMSNorm
+    from verl_vla.utils.vla_utils.vla_adapter.prismatic.models.action_heads import FlowMatchingActionHead
+    from verl_vla.utils.vla_utils.vla_adapter.prismatic.models.projectors import NoisyActionProjector
+    from prismatic.models.diffusion_transformer import  DiT_SingleTokenAction_OneCtx
     module_classes_to_wrap = {
         PrismaticVisionBackbone,
         # Qwen2ForCausalLM,
         nn.Embedding,
         Qwen2DecoderLayer,
         Qwen2RMSNorm,
+        PrismaticProjector,
+        NoisyActionProjector,
+        # FlowMatchingActionHead,
+        DiT_SingleTokenAction_OneCtx,
     }
     
     module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
@@ -627,8 +634,8 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
 
     
     
-    ignored_modules = [m for m in module.modules() if isinstance(m, PrismaticProjector)] + [module.action_queries]
-    # ignored_modules = []
+    # ignored_modules = [m for m in module.modules() if isinstance(m, PrismaticProjector)] + [module.action_queries]
+    ignored_modules = [module.action_queries]
     lm = getattr(module, "language_model", module)
     ignored_modules.append(lm.lm_head)
     # emb_layer = None
