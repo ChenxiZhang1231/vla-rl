@@ -608,7 +608,7 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     module_classes_to_wrap = {
         PrismaticVisionBackbone,
         # Qwen2ForCausalLM,
-        nn.Embedding,
+        # nn.Embedding,
         Qwen2DecoderLayer,
         Qwen2RMSNorm,
         PrismaticProjector,
@@ -648,8 +648,6 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     #     emb_layer = lm.get_input_embeddings()
     # assert emb_layer is not None, "找不到 embedding 模块"
     # ignored_modules.append(emb_layer)
-
-
     
     return auto_wrap_policy, ignored_modules
 

@@ -546,6 +546,7 @@ class RobActorRolloutRefWorker(Worker):
             bad = []
             for n, p in actor_module_fsdp.named_parameters():
                 if p.requires_grad and not hasattr(p, "_fsdp_flattened"):
+                    p.requires_grad = False
                     bad.append(n)
             print("trainable but NOT managed by FSDP:", bad)
             # breakpoint()

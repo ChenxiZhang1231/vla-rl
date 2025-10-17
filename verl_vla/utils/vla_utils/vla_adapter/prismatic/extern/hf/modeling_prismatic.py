@@ -1023,11 +1023,6 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         B, L, D = input_embeddings.shape
         action_queries = self.action_queries.weight  # (1, h)
 
-        # Q = NUM_TOKENS
-        # if not hasattr(self, "query_ids") or self.query_ids.numel() != Q:
-        #     ids = torch.arange(Q, device=input_embeddings.device)
-        #     self.register_buffer("query_ids", ids, persistent=False)
-        # action_queries = self.action_queries(self.query_ids)  
         action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)  # (b, chunk_size, h)
         # Replace action token embeddings with noisy action embeddings
         input_embeddings = self._replace_input_embeddings(input_embeddings.clone(), all_actions_mask, action_queries)
@@ -1107,7 +1102,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
 
         actions_shape = (B, 20, 7)
-        noise = action_head.module.sample_noise(actions_shape, device)
+        # noise = action_head.module.sample_noise(actions_shape, device)
+        noise = self.action_head.sample_noise(actions_shape, device)
             
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
@@ -1116,9 +1112,11 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         while time >= -dt / 2:
             expanded_time = time.expand(B)
             x_t_ = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
-            rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
+            # rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
+            rearranged_actions_hidden_states = self.noisy_action_projector(x_t_)
             rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
-            v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            # v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
+            v_t = self.action_head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
             # Euler step
             # breakpoint()
             x_next = x_t + dt * v_t
@@ -1148,8 +1146,9 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         
         actions_shape = (B, 20, 7)
         # noise = action_head.module.sample_noise(actions_shape, device)
-        head = getattr(action_head, "module", action_head)
-        noise = head.sample_noise(actions_shape, device)
+        # head = getattr(action_head, "module", action_head)
+        
+        noise = self.action_head.sample_noise(actions_shape, device)
             
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
@@ -1257,11 +1256,20 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         input_embeddings = emb_layer(input_ids_ext)
         
         # input_embeddings = self._embed_tokens_fsdp_safe(input_ids_ext)
-        action_queries = self.action_queries.weight                          # [T,H] 或 [1,H]
-        if action_queries.dim() == 2 and action_queries.size(0) == 1:
-            action_queries = action_queries.expand(self.config.num_action_tokens, -1)
-        aq = action_queries.unsqueeze(0).expand(BS, -1, -1)                  # [BS,T,H]
-        input_embeddings = self._replace_input_embeddings(input_embeddings, all_actions_mask, aq)
+        # action_queries = self.action_queries.weight                          # [T,H] 或 [1,H]
+        # if action_queries.dim() == 2 and action_queries.size(0) == 1:
+        #     action_queries = action_queries.expand(self.config.num_action_tokens, -1)
+        # aq = action_queries.unsqueeze(0).expand(BS, -1, -1)                  # [BS,T,H]
+        action_queries = self.action_queries.weight  # (1, h)
+        # breakpoint()
+        # with FSDP.summon_full_params(self.action_queries, writeback=False, rank0_only=False):
+        #     w_full = self.action_queries.weight  # 现在是完整的 2D
+        #     # 如果你设计的是 (1,h)：
+        #     w_full = w_full.view(1, -1)         # (1, h)
+        #     assert w_full.size(1) == D, f"hidden mismatch: {w_full.size(1)} vs {D}"
+        #     action_queries = w_full.expand(B, self.chunk_size, D)  # (B, chunk, h)
+        action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)
+        input_embeddings = self._replace_input_embeddings(input_embeddings, all_actions_mask, action_queries)
 
         # ---- 视觉投影 & 多模态拼装（支持 left/right pad）----
         lang_emb_bs = input_embeddings[~all_actions_mask].reshape(BS, -1, input_embeddings.size(-1))
