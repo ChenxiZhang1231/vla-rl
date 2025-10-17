@@ -22,6 +22,8 @@ import torch
 from torch import nn
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from PIL import Image
+import tensorflow as tf
+import numpy as np
 
 from transformers import GenerationConfig, AutoProcessor
 
@@ -37,7 +39,74 @@ from flash_attn.bert_padding import pad_input, unpad_input, rearrange, index_fir
 
 __all__ = ['RobDataParallelPPOActor', 'RobDataParallelPPOActorWM']
 
+def crop_and_resize(image, crop_scale, batch_size):
+    """
+    Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
+    to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
+    distribution shift at test time.
 
+    Args:
+        image: TF Tensor of shape (batch_size, H, W, C) or (H, W, C) and datatype tf.float32 with
+               values between [0,1].
+        crop_scale: The area of the center crop with respect to the original image.
+        batch_size: Batch size.
+    """
+    # Convert from 3D Tensor (H, W, C) to 4D Tensor (batch_size, H, W, C)
+    assert image.shape.ndims == 3 or image.shape.ndims == 4
+    expanded_dims = False
+    if image.shape.ndims == 3:
+        image = tf.expand_dims(image, axis=0)
+        expanded_dims = True
+
+    # Get height and width of crop
+    new_heights = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+    new_widths = tf.reshape(tf.clip_by_value(tf.sqrt(crop_scale), 0, 1), shape=(batch_size,))
+
+    # Get bounding box representing crop
+    height_offsets = (1 - new_heights) / 2
+    width_offsets = (1 - new_widths) / 2
+    bounding_boxes = tf.stack(
+        [
+            height_offsets,
+            width_offsets,
+            height_offsets + new_heights,
+            width_offsets + new_widths,
+        ],
+        axis=1,
+    )
+
+    # Crop and then resize back up
+    image = tf.image.crop_and_resize(image, bounding_boxes, tf.range(batch_size), (224, 224))
+
+    # Convert back to 3D Tensor (H, W, C)
+    if expanded_dims:
+        image = image[0]
+
+    return image
+
+
+def center_crop_image(image):
+    batch_size = 1
+    crop_scale = 0.9
+
+    # Convert to TF Tensor and record original data type (should be tf.uint8)
+    image = tf.convert_to_tensor(np.array(image))
+    orig_dtype = image.dtype
+
+    # Convert to data type tf.float32 and values between [0,1]
+    image = tf.image.convert_image_dtype(image, tf.float32)
+
+    # Crop and then resize back to original size
+    image = crop_and_resize(image, crop_scale, batch_size)
+
+    # Convert back to original data type
+    image = tf.clip_by_value(image, 0, 1)
+    image = tf.image.convert_image_dtype(image, orig_dtype, saturate=True)
+
+    # Convert back to PIL Image
+    image = Image.fromarray(image.numpy())
+    image = image.convert("RGB")
+    return image
 
 class RobDataParallelPPOActor(BasePPOActor):
 
@@ -279,8 +348,13 @@ class RobDataParallelPPOActor(BasePPOActor):
 
         # 把图像展平成 list[ PIL.Image ]
         fi = full_image.detach().cpu()
-        imgs = [Image.fromarray(fi[b, s].numpy().astype("uint8") if fi.dtype != torch.uint8 else fi[b, s].numpy())
-                for b in range(B) for s in range(S)]
+        imgs = []
+        for b in range(B):
+            for s in range(S):
+                im = Image.fromarray(fi[b, s].numpy()).convert("RGB")
+                im = center_crop_image(im)
+                imgs.append(im)
+
 
         # 主视角
         out = self.processor(text=[""]*len(imgs), images=imgs, return_tensors="pt")
@@ -316,6 +390,14 @@ class RobDataParallelPPOActor(BasePPOActor):
             
             full_image = micro_batch["full_image"]  # torch.Size([B, S, 224, 224, 3])
             pixel_values = self.to_pixel_values_with_processor(full_image, device=micro_batch["x_t"].device)
+            
+            # a=micro_batch["pixel_values"]
+            # assert a.shape == pixel_values.shape
+            # a_cmp = a.to(pixel_values.dtype).to(pixel_values.device)
+            # b_cmp = pixel_values
+            # diff = (a_cmp - b_cmp).abs()
+            # diff_max = diff.max().item()
+            # diff_mean = diff.mean().item()
             return_dict = self.actor_module.recompute_logp_from_batch(
                 micro_batch["input_ids"],
                 # micro_batch["pixel_values"],
@@ -425,8 +507,9 @@ class RobDataParallelPPOActor(BasePPOActor):
             entropy: # (bs, response_len)
             log_probs: # (bs, response_len)
         """
+        was_training = self.actor_module.training
+        self.actor_module.eval()                                    
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            # breakpoint()
             full_image = micro_batch["full_image"]  # torch.Size([B, S, 224, 224, 3])
             pixel_values = self.to_pixel_values_with_processor(full_image, device=micro_batch["x_t"].device)
             return_dict = self.actor_module.recompute_logp_from_batch(
@@ -449,6 +532,32 @@ class RobDataParallelPPOActor(BasePPOActor):
             out_metric['logp_outer'] = logp_outer
             out_metric['logp_elem'] = logp_elem
             
+            # def f():
+            #     return self.actor_module.recompute_logp_from_batch(
+            #         micro_batch["input_ids"],
+            #         pixel_values,                        # 同一个张量
+            #         micro_batch["attention_mask"],
+            #         micro_batch["x_t"],
+            #         micro_batch["t"],
+            #         micro_batch["x_next"],
+            #         micro_batch["finish_step"],
+            #         action_head=self.action_head,
+            #         noisy_action_projector=self.noisy_action_projector,
+            #         use_film=False,
+            #     )["logp_action"]
+
+            # was_training = self.actor_module.training
+            # # self.actor_module.eval()  # max abs diff: 0.0
+            # # self.actor_module.train()  # max abs diff: 2.0347788333892822
+
+            # with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            #     y1 = f()
+            #     y2 = f()
+
+            # self.actor_module.train(was_training)
+
+            # print("max abs diff:", (y1 - y2).abs().max().item())
+            self.actor_module.train(was_training)
             
             return None, logp_action, mean, std, logp_outer, logp_elem
         
@@ -1220,6 +1329,17 @@ class RobDataParallelPPOActor(BasePPOActor):
                 entropy, log_prob, mean, std, logp_outer, logp_elem = self._forward_micro_batch_update_vla_adapter(data)
                 print("[chk] log_prob.requires_grad:", log_prob.requires_grad)
                 print("[chk] loss.requires_grad(before):", (log_prob.reshape(1,-1).mean()).requires_grad)
+                # a = log_prob
+                # b = old_log_prob
+                # # b = data['ref_log_prob']
+                # # a = mean
+                # # b = data['old_mean']
+                # assert a.shape == b.shape
+                # a_cmp = a.to(b.dtype).to(b.device)
+                # b_cmp = b
+                # diff = (a_cmp - b_cmp).abs()
+                # diff_max = diff.max().item()
+                # diff_mean = diff.mean().item()
                 # breakpoint()
 
                 old_log_prob_tmp = old_log_prob.reshape(B, -1)
@@ -1571,7 +1691,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                     if kl_type == 'dwc_pg':
                         loss_info["actor/dwc_pg_c"] = c.mean().item()
 
-                    
+                # breakpoint()    
                 loss = policy_loss / self.gradient_accumulation
                 loss.backward()
                     

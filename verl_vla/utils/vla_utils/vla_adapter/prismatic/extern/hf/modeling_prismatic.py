@@ -1298,14 +1298,15 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         bos_idx = (torch.cumsum(att01, dim=1) == 0).sum(dim=1).clamp(max=Lmm-1)  # [BS]
         NUM_PATCHES = self.vision_backbone.get_num_patches() * self.vision_backbone.get_num_images_in_input()
         NUM_TOKENS  = 64
+        # breakpoint()
 
         def gather_span(x, start_idx, Ltake):
             rng = torch.arange(Ltake, device=x.device)[None, :]              # [1,Ltake]
             idx = start_idx[:, None] + rng                                   # [BS,Ltake]
             return x.gather(1, idx.unsqueeze(-1).expand(-1, -1, x.size(-1))) # [BS,Ltake,Hh]
 
-        task_latent = gather_span(last_hs, bos_idx + 1, NUM_PATCHES).reshape(BS, 1, NUM_PATCHES, Hh)
-        action_start = bos_idx + 1 + NUM_PATCHES + num_prompt_tokens_bs      # [BS]
+        task_latent = gather_span(last_hs, bos_idx, NUM_PATCHES).reshape(BS, 1, NUM_PATCHES, Hh)
+        action_start = bos_idx + NUM_PATCHES + num_prompt_tokens_bs      # [BS]
         action_hs = gather_span(last_hs, action_start, NUM_TOKENS).reshape(BS, 1, NUM_TOKENS, Hh).to(torch.bfloat16)
         all_hidden_states_bs = torch.cat([task_latent, action_hs], dim=2)    # [BS,1,P+T,Hh]
 
@@ -1345,7 +1346,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         # std_dev_t = std_dev_t[..., None, None]                               # [B,S,K,1,1]
 
         sigmas = torch.tensor([1.0000, 0.9601, 0.9133, 0.8577, 0.7904, 0.7073, 0.6022, 0.4649, 0.2780, 0.0089, 0.0000], device=v_t.device, dtype=v_t.dtype)
-        index = (K * (1 - t)).to(torch.long)
+        index = (K * (1 - t_f)).to(torch.long)
         sigma = sigmas[index]
         sigma_max = sigmas[1]
         noise_level = 0.7
@@ -1372,9 +1373,15 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         mask_elem    = mask_actions[:, :, None, :, None]                            # [B,S,1,CH,1]
 
         # ---- 高斯 log-prob ----
-        log_sqrt_2pi = math.log(math.sqrt(2.0 * math.pi))
-        diff   = x_nextf - mean
-        lp_elem = -(diff ** 2) / (2.0 * (std ** 2)) - torch.log(std) - log_sqrt_2pi  # [B,S,K,CH,D]
+        # log_sqrt_2pi = math.log(math.sqrt(2.0 * math.pi))
+        # diff   = x_nextf - mean
+        lp_elem = (
+            -((x_nextf.detach() - mean) ** 2) / (2 * ((std)**2))
+            - torch.log(std)
+            - torch.log(torch.sqrt(2 * torch.as_tensor(math.pi)))
+        )
+        n_action_steps = 20
+        lp_elem = lp_elem[..., :n_action_steps, :]
         lp_elem = lp_elem * mask_elem
 
         logp_action = lp_elem.sum(dim=-3)                # [B,S,K,D]（保留维度）
