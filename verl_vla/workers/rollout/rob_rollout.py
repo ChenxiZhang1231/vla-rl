@@ -3390,7 +3390,7 @@ class RobHFRollout(BaseRollout):
             current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
 
             step += self.config.action_chunks_len
-            trajectory_video_batch.append(next_obs_batch_np[:, :, ::-1, :, :])
+            trajectory_video_batch.append(next_obs_batch_np[:, :, :, ::-1, :])
 
             if is_valid:
                 num_frames_in_chunk = next_obs_batch_np.shape[1]
@@ -3423,9 +3423,9 @@ class RobHFRollout(BaseRollout):
                     complete
                 )
         initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
-        video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
+        video_chunks = [initial_frame_expanded[:, :, :, ::-1, :] ] + trajectory_video_batch[1:]
         full_trajectory_video = np.concatenate(video_chunks, axis=1)
-        breakpoint()
+        # breakpoint()
         # self.world_model.save_trajectory_grid_image(
         #     full_trajectory_video, 
         #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
@@ -3499,10 +3499,11 @@ class RobHFRollout(BaseRollout):
             batch["finish_step"].append(k["finish_step"])
             
         
-        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['observation.images.image'].device)
-        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['observation.images.image'].device)
-        batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['observation.images.image'].device)
-        batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['observation.images.image'].device)
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['action_tensor'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['action_tensor'].device)
+        full_trajectory_video = np.flip(full_trajectory_video, axis=3).copy()
+        batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['action_tensor'].device)
+        batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['action_tensor'].device)
         
         output_batch = TensorDict(
             batch,
@@ -4100,7 +4101,7 @@ class RobHFRollout(BaseRollout):
     def _obs_to_input(self, obs, is_train=True, flip=False):
         if self.use_world_model and is_train:
             return {
-                "full_image": obs[::-1] if not flip else obs,
+                "full_image": obs[:, ::-1] if not flip else obs,
             }
         else:
             if self.config.num_images_in_input > 1:

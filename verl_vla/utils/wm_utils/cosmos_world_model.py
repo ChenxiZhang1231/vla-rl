@@ -13,8 +13,8 @@ from megatron.core import parallel_state
 
 import sys
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel")
-from cosmos_predict2.configs.action_conditioned.config import get_cosmos_predict2_action_conditioned_pipeline
-from cosmos_predict2.pipelines.video2world_action import Video2WorldActionConditionedBatchPipeline
+from cosmos_predict2.configs.action_conditioned.config_libero import get_cosmos_predict2_action_conditioned_pipeline
+from cosmos_predict2.pipelines.video2world_action import Video2WorldActionConditionedBatchPipeline, Video2WorldActionConditionedPipeline
 from imaginaire.constants import (
     CosmosPredict2ActionConditionedModelSize,
     get_cosmos_predict2_action_conditioned_checkpoint,
@@ -65,8 +65,13 @@ class CosMosWorldModel(nn.Module):
         pipeline_config.net.action_dim = self.config.get("action_dim", 14) * (self.config.get("pred_len", 21) - 1)
         pipeline_config.net.use_black = self.config.get("use_black", False)
         pipeline_config.net.use_history = self.config.get("use_history", False)
-        self.history_video_length = self.config.get("history_video_length", 60)
-        self.history_frams = deque(maxlen=self.history_video_length)
+        pipeline_config.guardrail_config.enabled = False
+        pipeline_config.prompt_refiner_config.enabled = False
+        self.use_history = self.config.get("use_history", False)
+        
+        if self.use_history:
+            self.history_video_length = self.config.get("history_video_length", 60)
+            self.history_frames = deque(maxlen=self.history_video_length)
         
         if hasattr(args, "dit_path") and args.dit_path:
             dit_path = args.dit_path
@@ -91,7 +96,7 @@ class CosMosWorldModel(nn.Module):
             load_ema_to_reg=args.load_ema,
             load_prompt_refiner=False,
         )
-        self.pipe.eval() # 确保模型在推理模式
+        self.pipe.eval()
         
         print(f"--- [CosMosWorldModel] Initialization complete on device {self.device} ---")
 
@@ -113,9 +118,9 @@ class CosMosWorldModel(nn.Module):
             np.ndarray: 下一步的批量观测，形状与输入相同 [B, H, W, 3]，uint8
         """
         # breakpoint()
-        # self.history_frams.append()
+        # self.history_frames.append()
         if self.use_history:
-            history_obs_batch = np.array(self.history_frams)
+            history_obs_batch = np.array(self.history_frames)
             
         B = int(current_obs_batch.shape[0])
 
@@ -134,13 +139,20 @@ class CosMosWorldModel(nn.Module):
         # --------- 1) Preprocess actions (match your current logic) ---------
         actions = actions.copy()
         # Normalize the last action dimension to [-1, +1], then sign and flip
-        actions[..., -1] = 2.0 * (actions[..., -1] - 0.0) / (1.0 - 0.0) - 1.0
-        actions[..., -1] = np.sign(actions[..., -1]) * -1.0
-
+        # For wm, 0 is open, 1 is close.
+        # For libero, 1 is open, -1 is close.
+        # For vla, 0 is open, 1 is close.
+        # actions[..., -1] = 2.0 * (actions[..., -1] - 0.0) / (1.0 - 0.0) - 1.0
+        # actions[..., -1] = np.sign(actions[..., -1]) * -1.0
+        
+        actions[..., -1] = (actions[..., -1] >= 0.5)*1  # (B, chunk, 7)
+        c_act_scaler = np.array([5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 1.0])[None, None].reshape(1, 1, 7)
+        actions = actions * c_act_scaler
         # Dual concat (keep your current behavior: concat zeros on the last dimension)
         dummy = np.zeros_like(actions)
         actions_dual = np.concatenate([actions, dummy], axis=-1)   # [B, T, 2A]
-
+        # os.makedirs("out", exist_ok=True)
+        # np.save("out/actions_dual.npy", actions_dual) 
         # --------- 2) Chunking plan ---------
         max_len = int(self.config.get("wm_max_steps", 20))  # WM一次支持的最大帧数（默认20）
         if max_len <= 0:
@@ -149,10 +161,14 @@ class CosMosWorldModel(nn.Module):
         # First frames for the first chunk
         cur_first_frames: List[np.ndarray] = [frame for frame in current_obs_batch]  # B x (H,W,3), uint8
         if self.use_history:
-            history_obs_list = [frame for frame in history_obs_batch]
+            history_obs_list = []
+            for i in range(B):
+                frame = history_obs_batch[:, i].transpose(3, 0, 1, 2)  # (3, 60, 256, 256)
+                history_obs_list.append(frame)
         out_chunks: List[np.ndarray] = []
 
         # --------- 3) Loop over chunks ---------
+        # breakpoint()
         for s in range(0, T, max_len):
             e = min(s + max_len, T)                         # [s, e) chunk interval
             chunk_len = e - s
@@ -170,17 +186,17 @@ class CosMosWorldModel(nn.Module):
                 chunk_actions_list.append(chunk)
                 
             # Run the WM pipeline for this chunk
-            breakpoint()
+            
             predicted_videos = self.pipe(
                 first_frames=cur_first_frames,              # list of B images, H W 3
                 actions_list=chunk_actions_list,            # list of B arrays, (chunk_len, 2A)
                 blacks_list=None,
                 num_conditional_frames=1,
-                guidance=self.config.get("guidance", 7.0),
+                guidance=0.0,
                 seed=self.config.get("seed", 0),
                 num_sampling_step=self.config.get("num_sampling_step", 10),
                 use_cuda_graphs=self.config.get("use_cuda_graphs", False),
-                history_list=history_obs_list if self.use_history else None,
+                history_list=history_obs_list if self.use_history else None,  # list of B images, (1, 3, 60, 256, 256)
             )
 
             # Convert the pipeline outputs to uint8 frames & drop the conditional frame at index 0
@@ -193,19 +209,18 @@ class CosMosWorldModel(nn.Module):
             frames_uint8_full = (batch_hwc * 255).astype(np.uint8)[:, 1:]       # [B, chunk_len, H, W, 3]
             frames_uint8 = frames_uint8_full[:, :chunk_len]
             out_chunks.append(frames_uint8)
-
+            if self.use_history:
+                for t in range(frames_uint8.shape[1]):
+                    self.history_frames.append(frames_uint8[:, t])
+                    
             # Next chunk starts from the last predicted frame of this chunk
             cur_first_frames = [frames_uint8[b, -1] for b in range(B)]
         # breakpoint()
         # --------- 4) Concatenate along time ---------
         out = np.concatenate(out_chunks, axis=1)   # [B, T, H, W, 3]
-        # breakpoint()
-        # self.save_video_grid(videos_batch_uint8, f'debug{step}.mp4')
-        # self.save_trajectory_grid_image(videos_batch_uint8, 'debug.png')
-        breakpoint()
-        if self.use_history:
-            for t in out.shape[1]:
-                self.history_frams.append(out[:, t])
+        # self.save_video_grid(out, f'debug{step}.mp4')
+        # self.save_trajectory_grid_image(out, 'debug.png')
+
         return out  # B, chunk_size, H, W, C
     
     def reset(self, current_obs_batch_np):

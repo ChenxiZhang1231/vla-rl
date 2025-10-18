@@ -1563,15 +1563,16 @@ class RobVLMRewardManager():
         if self.use_world_model and (global_steps != -1):
             # breakpoint()
             ran_id = random.randint(1, 10000)
-            save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}.mp4"
-            self.save_video_grid(
-                step_images, save_path, fps=10,
-                scores=scores,
-                scores_env=scores_env,
-                # score_text_fn=lambda s: f"{int(s)}",
-                # score_env_text_fn=lambda s: f"{int(s)}",
-                label_scores="S",
-                label_scores_env="E",)
+            if global_steps % 10 == 0:
+                save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}.mp4"
+                self.save_video_grid(
+                    step_images, save_path, fps=10,
+                    scores=scores,
+                    scores_env=scores_env,
+                    # score_text_fn=lambda s: f"{int(s)}",
+                    # score_env_text_fn=lambda s: f"{int(s)}",
+                    label_scores="S",
+                    label_scores_env="E",)
     
         format = [1.0 for _ in range(len(scores))]
 

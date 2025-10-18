@@ -782,20 +782,26 @@ def tag_action_embedder(root: nn.Module):
 def get_fsdp_wrap_policy_wm(root_module):
     
     tag_action_embedder(root_module)
+    def tag_mem_head(root: nn.Module):
+        for name, m in root.named_modules():
+            if (name.endswith(("mem_to_k"))) or (name.endswith(("mem_to_v"))):
+                setattr(m, "_fsdp_wrap_me", True)
+    tag_mem_head(root_module)
     policies = []
-    
     def is_tagged(m: nn.Module) -> bool:
         return getattr(m, "_fsdp_wrap_me", False)
     tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
     policies.append(tag_policy)
 
-    # from world_model.ActionWorldModel.cosmos_predict2.models.text2image_dit import Block
-    # module_classes_to_wrap = {
-    #     Block
-    # }
-    # module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
-    # policies.append(module_policy)
-    
+    import sys
+    sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel")
+    from cosmos_predict2.models.video2world_action_dit import FramePackMemory
+    module_classes_to_wrap = {
+        FramePackMemory
+    }
+    module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    policies.append(module_policy)
+
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy
 
