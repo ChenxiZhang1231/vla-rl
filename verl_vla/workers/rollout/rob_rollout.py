@@ -893,7 +893,7 @@ class RobHFRollout(BaseRollout):
                                     "libero_object": 512,    # max step length 254
                                     "libero_goal": 512,      # max step length 270
                                     # "libero_10": 1024,        # max step length 505
-                                    "libero_10": 512,        # max step length 505
+                                    "libero_10": 560,        # max step length 505
                                     "libero_90": 512         # max step length 373 org 400 now change to 512
                                 }
         if self.config.vla in ["smolvla"]:

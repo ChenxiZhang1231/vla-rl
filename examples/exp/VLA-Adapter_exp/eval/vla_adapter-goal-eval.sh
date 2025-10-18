@@ -10,9 +10,9 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='vla_adapter-goal-eval-15w'
+EXPERIMENT_NAME='vla_adapter-goal-eval-1w'  # 0.8185483813285828
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
-SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_goal_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_goal_no_noops----150000_chkpt"
+SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_goal_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_goal_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
@@ -39,10 +39,9 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.max_response_length=128 \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
     actor_rollout_ref.model.meta_path=$META_PATH \
-    actor_rollout_ref.model.load_ckpt=$LOAD_MODEL_PATH \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
-    actor_rollout_ref.model.action_chunks_len=50 \
+    actor_rollout_ref.model.action_chunks_len=20 \
     actor_rollout_ref.actor.optim.lr=5e-6 \
     actor_rollout_ref.actor.optim.warmup_style=constant \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -67,6 +66,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.model.enable_gradient_checkpointing=False \
     actor_rollout_ref.model.use_remove_padding=False \
     actor_rollout_ref.actor.entropy_coeff=0. \
+    actor_rollout_ref.actor.unnorm_key=$DATASET_NAME \
     actor_rollout_ref.rollout.num_images_in_input=1 \
     actor_rollout_ref.rollout.val_micro_batch_size=8 \
     actor_rollout_ref.rollout.temperature=1.6 \
@@ -87,6 +87,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size=32 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     actor_rollout_ref.ref.vla=$VLA_NAME \
+    actor_rollout_ref.ref.unnorm_key=$DATASET_NAME \
     trainer.logger=['console','tensorboard'] \
     trainer.project_name=$PROJECT_NAME \
     trainer.experiment_name=$EXPERIMENT_NAME \
