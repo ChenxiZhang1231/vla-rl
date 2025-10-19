@@ -34,6 +34,7 @@ import cv2
 import h5py
 import numpy as np
 import torch
+import uuid
 
 import packaging.version
 from lerobot.datasets.video_utils import get_video_info
@@ -501,20 +502,21 @@ def draw_overlay_on_black(clip_path: Path, out_path: Path,
 
 def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, stride: int,
                   crf: int = 20, preset: str = "veryfast",
-                  e_params_orig: np.ndarray = None,    # (N, 4, 4)
-                  k_params: np.ndarray = None,         # (3, 3)
                   action: np.ndarray = None,
                   obs_state: np.ndarray = None,
                   ) -> Tuple[Path, List[Tuple[Path, int]]]:
-    stem = make_video_stem(video_path)
+    stem = make_video_stem(Path(video_path))
     resampled_path = out_root / "resampled" / f"{stem}_resampled.mp4"
     ensure_dir(resampled_path.parent)
 
     # get original fps + frame count
     orig_fps = ffprobe_fps(video_path)
     # resample video
-    if not resampled_path.exists():
-        resample_to_fps(video_path, resampled_path, fps=fps, crf=crf, preset=preset)
+    if clip_len == -1:
+        resampled_path = video_path
+    else:
+        if not resampled_path.exists():
+            resample_to_fps(video_path, resampled_path, fps=fps, crf=crf, preset=preset)
 
     # after resampling, estimate total frames
     duration = ffprobe_duration(resampled_path)
@@ -523,9 +525,8 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
     total_frames_est = max(0, int(round(duration * fps)))
 
     # map metadata to resampled timeline
-    N = e_params_orig.shape[0]
+    N = action.shape[0]
     idx_map = indices_for_resampled(total_frames_est, orig_fps=orig_fps if orig_fps>0 else fps, new_fps=fps, n_orig=N)
-    e_res = e_params_orig[idx_map]                    # (F,4,4)
     action_res = action[idx_map]
     obs_state_res = obs_state[idx_map]
 
@@ -540,20 +541,19 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
     f0 = 0
     i = 0
     last_processed_f0 = -1
+    if clip_len == -1:
+        clip_len = total_frames_est
     while f0 + clip_len <= total_frames_est:
         clip_path = clip_dir / f"{stem}_clip_{i:05d}.mp4"
         if not clip_path.exists():
             cut_clip_by_frames(resampled_path, start_frame=f0, num_frames=clip_len, fps=fps,
                            output_path=clip_path, crf=crf, preset=preset)
         # slice metadata
-        e_clip = e_res[f0:f0+clip_len]
         action_clip = action_res[f0:f0+clip_len]
         obs_state_clip = obs_state_res[f0:f0+clip_len]
         # save sidecar npz
         npz_path = meta_dir / f"{stem}_clip_{i:05d}.npz"
         np.savez_compressed(npz_path,
-                            extrinsics=e_clip,
-                            intrinsics=k_params,
                             action=action_clip,
                             obs_state=obs_state_clip,
                             start_frame=f0,
@@ -576,10 +576,10 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
         f0 += stride
         i += 1
         
-    if total_frames_est >= clip_len:
+    if total_frames_est > clip_len:
         final_f0 = total_frames_est - clip_len
         # Only add this clip if it wasn't the same as the last one processed in the loop
-        # if final_f0 < last_processed_f0:
+        # if final_f0 > last_processed_f0:
         if True:
             clip_path = clip_dir / f"{stem}_clip_{i:05d}.mp4"
             if not clip_path.exists():
@@ -620,8 +620,6 @@ def process_video_task(task: Dict[str, Any]) -> Dict[str, Any]:
             stride=task["stride"],
             crf=task["crf"],
             preset=task["preset"],
-            e_params_orig=task["e_params"],
-            k_params=task["k_params"],
             action=task["action"],
             obs_state=task["obs_state"]
         )
@@ -630,113 +628,223 @@ def process_video_task(task: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         return {"ok": False, "err": f"{vp}: {e}", "video": str(vp)}
 
- 
+
+def _as_uint8_rgb(frames: np.ndarray) -> np.ndarray:
+    """确保帧为 (T,H,W,3) uint8 RGB。"""
+    assert frames.ndim == 4 and frames.shape[-1] == 3, f"frames shape should be (T,H,W,3), got {frames.shape}"
+    if frames.dtype != np.uint8:
+        frames = frames.astype(np.uint8)
+    return frames
+
+def _write_temp_video_rgb(frames_rgb: np.ndarray, out_path: Path, fps: int = 10) -> None:
+    """
+    将 RGB 帧写成 mp4v 视频。若未提供 fps，则使用默认 10。
+    frames_rgb: (T, H, W, 3) 的 uint8 或可转为 uint8 的数组（RGB 顺序）
+    """
+    if frames_rgb.ndim != 4 or frames_rgb.shape[-1] != 3:
+        raise ValueError(f"frames_rgb must be (T,H,W,3), got {frames_rgb.shape}")
+
+    # 确保目录存在
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 保证类型与内存布局
+    if frames_rgb.dtype != np.uint8:
+        frames_rgb = frames_rgb.astype(np.uint8)
+    frames_rgb = np.ascontiguousarray(frames_rgb)
+
+    T, H, W, _ = frames_rgb.shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    vw = cv2.VideoWriter(str(out_path), fourcc, float(fps), (W, H))
+    if not vw.isOpened():
+        raise RuntimeError(f"Failed to open VideoWriter for {out_path}")
+
+    # OpenCV 需要 BGR
+    for t in range(T):
+        vw.write(cv2.cvtColor(frames_rgb[t], cv2.COLOR_RGB2BGR))
+
+    vw.release()
+    
+
+def extract_rlds_data_and_create_video(args, rlds_batch: Dict[str, Any], temp_video_dir: str) -> List[Dict[str, Any]]:
+    """
+    从单个 RLDS batch 中：
+      1) 抽取每路相机的帧串，写出临时 mp4（位于 temp_video_dir）
+      2) 组装与后续处理契约一致的 task 字典列表（每路相机一个 task）
+         返回的 task 字段：
+           - video_path: 临时 mp4 路径
+           - e_params:   (F, 4, 4) 外参（占位/或真实）
+           - k_params:   (3, 3)    内参（占位/或真实）
+           - action:     (F, 2, A) 动作（第二通道零填）
+           - obs_state:  (F, 2, S) 观测状态（如无则零填；S 默认 8，可用 args.state_dim 覆盖）
+    说明：
+      - description/out_root/fps/clip_len/stride/crf/preset 由上层 ta.update(...) 统一补齐（保持与你 LIBERO 代码一致）。
+    """
+    # 识别本 episode 的基本信息
+    dataset_name = rlds_batch["dataset_name"][0].decode()
+    language = rlds_batch["task"]["language_instruction"][0].decode().lower()  # 由上层 update() 填入 description
+
+    obs_dict = rlds_batch["observation"]
+    # 选择要导出的相机键：优先用 args.cams，否则抓取 observation 中以 "image" 开头的字段
+    # if hasattr(args, "cams") and args.cams:
+    #     cam_keys = [k for k in args.cams if k in obs_dict]
+    # else:
+    #     cam_keys = [k for k in obs_dict.keys() if isinstance(k, str) and k.startswith("image")]
+    cam_keys = ['image_primary']
+
+    if len(cam_keys) == 0:
+        raise ValueError("No camera/image keys found in RLDS batch. "
+                         "Provide args.cams or ensure observation has image_* fields.")
+
+    # 抽取动作与状态
+    action = rlds_batch["action"][:, 0] # 期望 (F, A)
+    if action.ndim != 2:
+        raise ValueError(f"Expect action shape (F, A), got {action.shape}")
+    action = action.astype(np.float32)
+    F = action.shape[0]
+    A = action.shape[1]
+
+    obs_state = obs_dict["proprio"][:,0].astype(np.float32)  # (F, S)
+    if obs_state.ndim != 2:
+        raise ValueError(f"Expect obs_state shape (F, S), got {obs_state.shape}")
+    S = obs_state.shape[1]
+
+    # 扩成 (F, 2, ·)：第二通道零填（与你原管道一致）
+    action_2 = np.concatenate([action[:, None, :], np.zeros_like(action[:, None, :])], axis=1)     # (F,2,A)
+    state_2  = np.concatenate([obs_state[:, None, :], np.zeros_like(obs_state[:, None, :])], axis=1)  # (F,2,S)
+
+    # 临时视频输出目录
+    temp_dir = Path(temp_video_dir)
+    ensure_dir(temp_dir)
+
+    # episode 唯一 id（若没有显式 episode_id，这里生成一个短 uuid）
+    ep_uid = None
+    if "episode_id" in rlds_batch:
+        # 有的 RLDS 会带 bytes；也可能是标量数组
+        raw = rlds_batch["episode_id"]
+        try:
+            if isinstance(raw, (bytes, bytearray)):
+                ep_uid = raw.decode()
+            elif hasattr(raw, "item"):
+                ep_uid = str(raw.item())
+            else:
+                ep_uid = str(raw)
+        except Exception:
+            ep_uid = None
+    if not ep_uid:
+        ep_uid = uuid.uuid4().hex[:8]
+
+    tasks: List[Dict[str, Any]] = []
+
+    # 针对每路相机，写临时视频 + 组装 task
+    for cam_key in cam_keys:
+        frames = obs_dict[cam_key][:,0]    # 期望 (F, H, W, 3)
+        frames = _as_uint8_rgb(frames)
+        if frames.shape[0] != F:
+            raise ValueError(f"Frame length mismatch between action ({F}) and {cam_key} ({frames.shape[0]}).")
+
+        # 生成临时 mp4（直接用 target fps 写出，后续 resample_to_fps 会是恒等）
+        stem = f"{dataset_name}_ep{ep_uid}_{cam_key}"
+        temp_mp4 = temp_dir / f"{stem}.mp4"
+        if not temp_mp4.exists():
+            _write_temp_video_rgb(frames, temp_mp4)
+
+        ta = {
+            "video_path": str(temp_mp4),
+            "action":   action_2,   # (F,2,A)
+            "obs_state": state_2,   # (F,2,S)
+        }
+        tasks.append(ta)
+
+    return tasks
+
 # 覆盖写
-# python utils/openx/openx_to_json.py > run-openx.log 2>&1
+# python utils/bridge/bridge_to_json.py > run-bridge.log 2>&1
 # 追加写
 # python utils/openx/openx_to_json.py >> run-openx.log 2>&1
 # python utils/openx/openx_to_json.py 2>&1 | tee -a run-openx.log
-
-
 def main():
     parser = argparse.ArgumentParser(description="Process dataset videos with synchronized metadata + 2D projections.")
-    parser.add_argument("--dataset_dirs", type=Path, default='/inspire/hdd/global_public/public_datas/openx-embodiment-lerobot/OXE_lerobot', help="the dataset root")
-    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/openx', help="processed output path")
+    parser.add_argument("--dataset_dirs", type=Path, default='/inspire/ssd/project/robotsimulation/public/data/bridge', help="the dataset root")
+    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_orig', help="processed output path")
+    parser.add_argument("--data_mix", type=str, default='bridge_orig')
     parser.add_argument("--fps", type=int, default=10, help="output fps for initial sampling")
-    parser.add_argument("--clip_len", type=int, default=121, help="frames per clip")
+    parser.add_argument("--clip_len", type=int, default=-1, help="frames per clip")
     parser.add_argument("--stride", type=int, default=60, help="frame stride between clips")
     parser.add_argument("--crf", type=int, default=20, help="x264 CRF (lower = better quality, larger size)")
     parser.add_argument("--preset", type=str, default="veryfast", help="x264 preset")
+    parser.add_argument("--debug", type=bool, default=False, help="x264 preset")
     parser.add_argument("--jobs", type=int, default=128, help="parallel workers (number of concurrent videos)")
     args = parser.parse_args()
 
-    dataset_item_list = os.listdir(args.dataset_dirs)
-    for dataset_item in dataset_item_list:
-        if dataset_item in ['.git']:
-            continue
-        print(f"Start to process {dataset_item}")
-        out_root: Path = args.output_dir / dataset_item
-        ensure_dir(out_root)
-        dataset_dir = args.dataset_dirs / dataset_item
-        
-        meta = LRMeta(dataset_dir)
-        # breakpoint()
-        ep_list = list(range(meta.total_episodes))
-        video_keys = meta.video_keys()
-        print(f"{dataset_item} has {len(ep_list)} episodes.")
-        tasks = []
-        for ep_idx in tqdm(ep_list, desc="Export episodes"):
-            start, end = meta.episode_frame_range(ep_idx)
-            N = end - start
-            if N <= 0:
-                continue
-            
-            first = meta.hf[start]
-            if isinstance(first["task_index"], int):
-                task_index = first["task_index"]
-            else:
-                task_index = int(first["task_index"].item())
-            task_name = meta.tasks[task_index]
-            
-            action_list = []
-            obs_state_list = []
-            for step in range(start, end):
-                step_item = meta.hf[step]
-                action = step_item['action']
-                obs_state = step_item['observation.state']
-                if isinstance(action, list):
-                    action = torch.tensor(action)
-                if isinstance(obs_state, list):
-                    obs_state = torch.tensor(obs_state)
-                action_list.append(action)
-                obs_state_list.append(obs_state)
-            action_single = torch.stack(action_list).unsqueeze(1)
-            action_pad = torch.zeros_like(action_single)
-            action = torch.cat([action_single, action_pad], dim=1).numpy()  # B, 2, 7
-            obs_state_single = torch.stack(obs_state_list).unsqueeze(1)
-            obs_state_pad = torch.zeros_like(obs_state_single)
-            obs_state = torch.cat([obs_state_single, obs_state_pad], dim=1).numpy()  # B, 2, 8
-            
-            e_params = np.zeros([N, 4, 4])
-            k_params = np.zeros([3, 3])
-            
-            
-            
-            for vid_key in video_keys:
-                video_path = meta.get_video_file_path(ep_idx, vid_key)
-                tasks.append(dict(
-                    video_path=video_path,
-                    out_root=out_root,
-                    fps=args.fps,
-                    clip_len=args.clip_len,
-                    stride=args.stride,
-                    crf=args.crf,
-                    preset=args.preset,
-                    description=task_name,
-                    e_params=e_params,
-                    k_params=k_params,
-                    action=action,
-                    obs_state=obs_state,
-                ))
+    import sys
+    sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter")
+    from prismatic.vla.datasets import RLDSDataset, RLDSBatchTransform, EpisodicRLDSDataset
+
+    dataset = EpisodicRLDSDataset(
+        str(args.dataset_dirs),
+        args.data_mix,
+        batch_transform=None,
+        resize_resolution=(256,256),
+        shuffle_buffer_size=100_000,
+        train=True,
+        image_aug=False,
+    )
+    out_root = Path(args.output_dir) / args.data_mix
+    ensure_dir(out_root)
+    temp_video_dir = Path(args.output_dir) / "temp_videos"
+    ensure_dir(temp_video_dir)
+    dataset_length = dataset.dataset_length
+
+    meta_items: List[Dict[str, str]] = []
+    ep_idx = 0
+    tasks = []
+    for rlds_batch in tqdm(dataset.dataset.as_numpy_iterator(), total=dataset_length, desc="Processing episodes"):
+        if ep_idx >= dataset_length:
             break
-                        
-        # process_video_task(tasks[0])  # debug
-        data: List[Dict[str, str]] = []
-        if len(tasks) == 0:
-            print("No valid videos found.")
-        else:
-            print(f"Start processing {len(tasks)} videos with {max(1, args.jobs)} workers...")
-            with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
-                future2task = {ex.submit(process_video_task, t): t for t in tasks}
-                done_cnt = 0
-                for fut in as_completed(future2task):
-                    result = fut.result()
-                    done_cnt += 1
-                    if result["ok"]:
-                        data.extend(result["items"])
-                        print(f"[{done_cnt}/{len(tasks)}] OK: {result['video']} -> {len(result['items'])} clips")
-                    else:
-                        print(f"[{done_cnt}/{len(tasks)}] FAIL: {result['err']}")
+        ep_idx += 1
+        
+        
+        try:
+            # 这里的函数名/签名请用你项目里真实实现的那个
+            extracted_tasks = extract_rlds_data_and_create_video(args, rlds_batch, temp_video_dir)
+        except Exception as e:
+            print(f"[WARN] RLDS extract failed at episode {ep_idx}: {e}")
+            continue
+
+        # 与你给的 LIBERO 代码完全一致的 update 方式与键集合
+        for ta in extracted_tasks:
+            ta.update({
+                "description": rlds_batch["task"]["language_instruction"][0].decode().lower(),
+                "out_root": args.output_dir,
+                "fps": args.fps,
+                "clip_len": args.clip_len,
+                "stride": args.stride,
+                "crf": args.crf,
+                "preset": args.preset,
+            })
+        tasks.extend(extracted_tasks)
+
+        if args.debug and len(tasks) >= 50:
+            break
+    # process_video_task(tasks[0])  # debug
+    
+    data: List[Dict[str, str]] = []
+    if len(tasks) == 0:
+        print("No valid videos found.")
+    else:
+        print(f"Start processing {len(tasks)} videos with {max(1, args.jobs)} workers...")
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as ex:
+            future2task = {ex.submit(process_video_task, t): t for t in tasks}
+            done_cnt = 0
+            for fut in as_completed(future2task):
+                result = fut.result()
+                done_cnt += 1
+                if result["ok"]:
+                    data.extend(result["items"])
+                    print(f"[{done_cnt}/{len(tasks)}] OK: {result['video']} -> {len(result['items'])} clips")
+                else:
+                    print(f"[{done_cnt}/{len(tasks)}] FAIL: {result['err']}")
 
         meta_path = out_root / 'dataset.json'
         with open(meta_path, "w", encoding="utf-8") as f:

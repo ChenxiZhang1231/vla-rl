@@ -19,7 +19,7 @@ torchrun --standalone --nnodes 1 --nproc-per-node 1 vla-scripts/finetune.py \
 --save_freq 5000 \
 --save_latest_checkpoint_only False \
 --merge_lora_during_training True \
---batch_size 8 \
+--batch_size 1 \
 --use_flow True \
 --grad_accumulation_steps 1 \
 --learning_rate 1e-4 \

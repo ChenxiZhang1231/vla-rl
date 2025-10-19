@@ -616,7 +616,8 @@ def process_one_camera_episode(
 
     if total_frames_est >= clip_len:
         final_f0 = total_frames_est - clip_len
-        if final_f0 > last_f0:
+        # if final_f0 > last_f0:
+        if True:
             clip_path = clip_dir / f"{nice_stem}_clip_{i:05d}.mp4"
             if not clip_path.exists():
                 cut_clip_by_frames(resampled_path, final_f0, clip_len, fps_out, clip_path, crf, preset)
