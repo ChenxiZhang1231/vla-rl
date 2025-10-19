@@ -71,10 +71,43 @@
             "--use_proprio", "False",
             "--num_images_in_input", "1",
             "--use_film", "False",
-            "--pretrained_checkpoint", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----150000_chkpt",
+            "--pretrained_checkpoint", "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----10000_chkpt",
             "--task_suite_name", "libero_spatial",
             "--use_pro_version", "True"
           ]
+        },
+        {
+          "name": "Run simpler_env/main_inference.py",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/SimplerEnv-OpenVLA",
+          "program": "simpler_env/main_inference.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+            "--policy-model", "spatialvla",
+            "--ckpt-path", "/inspire/ssd/project/robotsimulation/public/data/spatialvla-4b-224-pt",
+            "--action-ensemble-temp", "-0.8",
+            "--logging-dir", "results/debug",
+            "--robot", "widowx",
+            "--policy-setup", "widowx_bridge",
+            "--control-freq", "5",
+            "--sim-freq", "500",
+            "--max-episode-steps", "60",
+            "--env-name", "PutCarrotOnPlateInScene-v0",
+            "--scene-name", "bridge_table_1_v1",
+            "--rgb-overlay-path", "ManiSkill2_real2sim/data/real_inpainting/bridge_real_eval_1.png",
+            "--robot-init-x", "0.147", "0.147", "1",
+            "--robot-init-y", "0.028", "0.028", "1",
+            "--obj-variation-mode", "episode",
+            "--obj-episode-range", "0", "24",
+            "--robot-init-rot-quat-center", "0", "0", "0", "1",
+            "--robot-init-rot-rpy-range", "0", "0", "1", "0", "0", "1", "0", "0", "1"
+          ],
+          "env": {
+            "CUDA_VISIBLE_DEVICES": "0",
+            "DISPLAY": "" 
+          }
         },
         {
           "name": "Run Action Generate tutorial",
@@ -250,6 +283,24 @@
             // "MUJOCO_GL": "egl",
             // "MUJOCO_GL": "glx",
             "MUJOCO_GL": "osmesa",
+            // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+            
+          }
+        },
+        {
+          "name": "Debug Process Bridge 2 Json",
+          "type": "debugpy",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/wm_data_process/",
+          "program": "utils/bridge/bridge_to_json.py",
+          "console": "integratedTerminal",
+          "args":[
+            "--jobs=1",
+            "--debug=True",
+          ],
+          "env": {
+            // "MUJOCO_GL": "egl",
+            // "MUJOCO_GL": "glx",
             // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
             
           }
