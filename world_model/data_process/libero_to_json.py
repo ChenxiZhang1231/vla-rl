@@ -417,7 +417,8 @@ def process_video(video_path: Path, out_root: Path, fps: int, clip_len: int, str
     if total_frames_est >= clip_len:
         final_f0 = total_frames_est - clip_len
         # Only add this clip if it wasn't the same as the last one processed in the loop
-        if final_f0 > last_processed_f0:
+        # if final_f0 > last_processed_f0:
+        if True:
             clip_path = clip_dir / f"{stem}_clip_{i:05d}.mp4"
             if not clip_path.exists():
                 cut_clip_by_frames(resampled_path, start_frame=final_f0, num_frames=clip_len, fps=fps, output_path=clip_path, crf=crf, preset=preset)

@@ -44,6 +44,7 @@ class RLDSBatchTransform:
         img = Image.fromarray(rlds_batch["observation"]["image_primary"][0])
         lang = rlds_batch["task"]["language_instruction"].decode().lower()
         actions = rlds_batch["action"]
+        print(f"lang: {lang}")
 
         # Construct Chat-based Prompt =>> Input is default query + language instruction, output are the action tokens
         prompt_builder = self.prompt_builder_fn("openvla")
@@ -242,7 +243,7 @@ class EpisodicRLDSDataset(RLDSDataset):
     def make_dataset(self, rlds_config):
         per_dataset_kwargs = rlds_config["dataset_kwargs_list"]
         assert len(per_dataset_kwargs) == 1, "Only support single-dataset `mixes` for episodic datasets."
-
+        per_dataset_kwargs[0]['action_proprio_normalization_type'] = 'NAIVE'
         return make_single_dataset(
             per_dataset_kwargs[0],
             train=rlds_config["train"],
@@ -252,11 +253,11 @@ class EpisodicRLDSDataset(RLDSDataset):
 
     def __iter__(self) -> Dict[str, Any]:
         for rlds_batch in self.dataset.as_numpy_iterator():
-            out = [
-                self.batch_transform(tree_map(lambda x: x[i], rlds_batch))  # noqa: B023
-                for i in range(rlds_batch["action"].shape[0])
-            ]
-            yield out
+            # out = [
+            #     self.batch_transform(tree_map(lambda x: x[i], rlds_batch))  # noqa: B023
+            #     for i in range(rlds_batch["action"].shape[0])
+            # ]
+            yield rlds_batch
 
 
 class DummyDataset(Dataset):
