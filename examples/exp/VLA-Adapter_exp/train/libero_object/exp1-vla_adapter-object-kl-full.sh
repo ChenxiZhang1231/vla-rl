@@ -10,7 +10,7 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp3-vla_adapter-object-kl-ffp-fp16-1w-faster-full-fixedbug-repeat2'
+EXPERIMENT_NAME='exp1-vla_adapter-object-kl-fp16-1w-faster-full-fixedbug-repeat2'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_object_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_object_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
@@ -60,7 +60,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.dlogp_clamp=True \
     actor_rollout_ref.actor.dlogp_clamp_max=4.0 \
     actor_rollout_ref.actor.dlogp_clamp_min=-4.0 \
-    actor_rollout_ref.actor.kl_loss_type=kl_ffp \
+    actor_rollout_ref.actor.kl_loss_type=kl \
     actor_rollout_ref.actor.k_baseline_eta=0.1 \
     actor_rollout_ref.actor.kl_loss_coef=0.04 \
     algorithm.kl_ctrl.kl_coef=0.04 \
