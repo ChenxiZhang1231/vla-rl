@@ -930,6 +930,8 @@ class RobVLMRewardManager():
         if self.use_ref:
             self.vlm_input_num_ref_frames = self.config.reward_model.vlm_input_num_ref_frames
         self.return_env_score = self.config.reward_model.return_env_score
+        self.env_rollout = self.config.reward_model.env_rollout
+        self.gen_data_for_wm_rm = self.config.reward_model.gen_data_for_wm_rm
         self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
         if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter']:
             self.data_key = 'action_tensor'
@@ -1179,11 +1181,11 @@ class RobVLMRewardManager():
         padding: int = 5,
         pad_value: int = 0,
         scores=None,                 # 新增：模型/判别器分数（长度=B）
-        scores_env=None,             # 新增：环境返回的分数（长度=B）
+        scores_gt=None,             # 新增：环境返回的分数（长度=B）
         score_text_fn=None,          # 可选：主分数文本格式化函数
         score_env_text_fn=None,      # 可选：环境分数文本格式化函数
         label_scores: str = "S",     # 可选：主分数标签
-        label_scores_env: str = "E", # 可选：环境分数标签
+        label_scores_gt: str = "E", # 可选：环境分数标签
         font_scale: float = None,    # 可选：字体大小（不传则按H自适应）
         thickness: int = None        # 可选：线宽（不传则按H自适应）
     ):
@@ -1213,12 +1215,12 @@ class RobVLMRewardManager():
             return list(x)
 
         scores     = _to_list(scores)
-        scores_env = _to_list(scores_env)
+        scores_gt = _to_list(scores_gt)
 
         if scores is not None and len(scores) != B:
             raise ValueError(f"len(scores)={len(scores)} != batch size B={B}")
-        if scores_env is not None and len(scores_env) != B:
-            raise ValueError(f"len(scores_env)={len(scores_env)} != batch size B={B}")
+        if scores_gt is not None and len(scores_gt) != B:
+            raise ValueError(f"len(scores_gt)={len(scores_gt)} != batch size B={B}")
 
         # 自适应字体和线宽
         if font_scale is None:
@@ -1286,8 +1288,8 @@ class RobVLMRewardManager():
                 lines = []
                 if scores is not None:
                     lines.append((f"{label_scores}:{score_text_fn(scores[i])}", score_to_color(scores[i])))
-                if scores_env is not None:
-                    lines.append((f"{label_scores_env}:{score_env_text_fn(scores_env[i])}", score_to_color(scores_env[i])))
+                if scores_gt is not None:
+                    lines.append((f"{label_scores_gt}:{score_env_text_fn(scores_gt[i])}", score_to_color(scores_gt[i])))
 
                 if lines:
                     # 计算整体文本框尺寸
@@ -1504,13 +1506,7 @@ class RobVLMRewardManager():
             "coverage_pred_success_over_gt_success": cov,
         }
         
-    def verify(self, data, global_steps=-1):
-        if self.return_env_score and ('complete' in data.batch):
-            score_env, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
-        else:
-            scores_env = None
-        step_images = data.batch["step_images"]
-        step_images_mask = data.batch["step_images_mask"]
+    def get_reward(self, data, step_images, step_images_mask):
         task_lang = data.non_tensor_batch['task_lang']
         task_suite_name = data.non_tensor_batch['task_suite_name']
         task_id = list(data.batch['task_id'])
@@ -1550,45 +1546,305 @@ class RobVLMRewardManager():
                 agg_s, agg_f = self.aggregate_success_and_finish(seg_succ, seg_finish, m=self.vote_m, strategy="min")
                 pred_success.append(int(agg_s))
                 pred_finish.append(int(agg_f))
+        return pred_success, pred_finish
+    
+    def _as_numpy(self, x):
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().numpy()
+        return x
+
+    def _get_field(self, batch, i, keys, default):
+        # 尝试多种常见 key，按样本 i 取值并转为 str
+        for k in keys:
+            if k in batch:
+                v = batch[k]
+                # 标量张量或一维张量 / 列表
+                if torch.is_tensor(v):
+                    if v.ndim == 0:
+                        return str(v.item())
+                    if i < v.shape[0]:
+                        val = v[i]
+                        try:
+                            return str(val.item())
+                        except Exception:
+                            return str(val)
+                elif isinstance(v, (list, tuple)):
+                    if i < len(v):
+                        return str(v[i])
+                else:
+                    # 单一字符串或其他标量
+                    return str(v)
+        return default
+
+    def _infer_length_from_mask(self, mask_i, N):
+        if mask_i is None:
+            return N
+        if torch.is_tensor(mask_i):
+            mask_i = mask_i.detach().cpu().numpy()
+        # 支持 bool mask 或 0/1 mask
+        try:
+            length = int(mask_i.astype(np.int32).sum())
+        except Exception:
+            length = int(np.sum(mask_i))
+        # 保守夹取范围
+        length = max(1, min(length, N))
+        return length
+
+    def _save_video_rgb_uint8(self, frames_uint8_rgb, path, fps: int = 10):
+        # frames_uint8_rgb: [T, H, W, 3], uint8, RGB
+        import cv2
+        T, H, W, C = frames_uint8_rgb.shape
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        vw = cv2.VideoWriter(path, fourcc, float(fps), (W, H))
+        if not vw.isOpened():
+            raise RuntimeError(f"Failed to open VideoWriter for {path}")
+        for t in range(T):
+            bgr = cv2.cvtColor(frames_uint8_rgb[t], cv2.COLOR_RGB2BGR)
+            vw.write(bgr)
+        vw.release()
         
-        scores = pred_success
-        finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
+    def verify(self, data, global_steps=-1):
+        # breakpoint()
+        if self.return_env_score and ('complete' in data.batch):
+            scores_gt, reward_metrics_env, format_metrics_env, reward_format_metrics_env = self.verify_env(data)
+        else:
+            scores_gt = None
+            
+        if not self.gen_data_for_wm_rm:
+            step_images = data.batch["step_images"]
+            step_images_mask = data.batch["step_images_mask"]
+            pred_success, pred_finish = self.get_reward(data, step_images, step_images_mask)
+            B, N, H, W, C = step_images.shape
+            scores = pred_success
+            finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
+        
+            complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
+            if self.return_env_score:
+                cls_stat = self.compute_all_metrics(scores_gt, pred_success)
+                gt_finish = data.batch["finish_step_raw"]
+                step_stat = self.compute_finish_step_metrics(gt_finish, torch.tensor(pred_finish))
+            if self.env_rollout:
+                step_images_env = data.batch["step_images_env"]
+                step_images_mask_env = data.batch["step_images_mask_env"]
+                pred_success_env, pred_finish_env = self.get_reward(data, step_images_env, step_images_mask_env)
+                scores_env = pred_success_env
+                cls_stat_env = self.compute_all_metrics(scores_gt, pred_success_env)
+                gt_finish = data.batch["finish_step_raw"]
+                complete_env = (torch.tensor(scores_env) == 1).to(device=data.batch[self.data_key].device)
+                finish_step_env = torch.tensor([p if p != -1 else N - 1 for p in pred_finish_env], device=data.batch[self.data_key].device)
+                step_stat_env = self.compute_finish_step_metrics(gt_finish, torch.tensor(pred_finish_env))
+            # breakpoint()
+            if self.use_world_model and (global_steps != -1):
+                # breakpoint()
+                ran_id = random.randint(1, 10000)
+                if global_steps % 10 == 0:
+                    save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}.mp4"
+                    self.save_video_grid(
+                        step_images, save_path, fps=10,
+                        scores=scores,
+                        scores_gt=scores_gt,
+                        # score_text_fn=lambda s: f"{int(s)}",
+                        # score_env_text_fn=lambda s: f"{int(s)}",
+                        label_scores="S",
+                        label_scores_gt="E",)
+                    if self.env_rollout:
+                        if global_steps % 10 == 0:
+                            save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}_env.mp4"
+                            self.save_video_grid(
+                                step_images_env, save_path, fps=10,
+                                scores=scores_env,
+                                scores_gt=scores_gt,
+                                # score_text_fn=lambda s: f"{int(s)}",
+                                # score_env_text_fn=lambda s: f"{int(s)}",
+                                label_scores="S",
+                                label_scores_gt="E",)
+    
+        else:
+            
+            scores = scores_gt
+            gt_finish = data.batch["finish_step_raw"]
+
+            step_images = data.batch["step_images"]
+            step_images_mask = data.batch.get("step_images_mask", None)
+            step_images_np = self._as_numpy(step_images)
+            step_images_mask_np = None if step_images_mask is None else self._as_numpy(step_images_mask)
+            
+            # step_images_env = data.batch["step_images_env"][:, 1:]
+            # step_images_mask_env = data.batch.get("step_images_mask_env", None)[:, 1:]
+            # step_images_np_env = self._as_numpy(step_images_env)
+            # step_images_mask_np_env = None if step_images_mask_env is None else self._as_numpy(step_images_mask_env)
+            
+            scores_arr = self._as_numpy(scores) if scores is not None else None
+            gt_finish_arr = self._as_numpy(gt_finish)
+
+            B, N, H, W, C = step_images_np.shape
+            # 输出目录
+            out_root = getattr(
+                self.config, "rm_data_out_dir",
+                f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_rm_data"
+            )
+            os.makedirs(out_root, exist_ok=True)
+
+            # 随机因子保持与训练阶段一致
+            ran_id = random.randint(1, 10000)
+            cur_step = global_steps if (global_steps is not None and global_steps != -1) else 0
+
+            # for i in range(B):
+            #     # 有 mask 则用 mask 截断有效帧
+            #     length_i = self._infer_length_from_mask(None if step_images_mask_np is None else step_images_mask_np[i], N)
+
+            #     # finish_step：-1 则用有效长度 - 1
+            #     finish_i = int(gt_finish_arr[i])
+            #     if finish_i == -1:
+            #         finish_i = length_i - 1
+
+            #     # success：来自 scores_gt（0/1）
+            #     if scores_arr is None:
+            #         # 若缺失则保守置 0
+            #         success_i = 0
+            #     else:
+            #         v = scores_arr[i]
+            #         try:
+            #             success_i = int(v)
+            #         except Exception:
+            #             success_i = int(np.array(v).item())
+                        
+            #     success_str = "True" if success_i == 1 else "False"
+
+            #     # task / trial 兼容多种字段名
+            #     task_i = self._get_field(
+            #         data.batch, i,
+            #         keys=["task_id"],
+            #         default="unknown_task"
+            #     )
+            #     trial_i = self._get_field(
+            #         data.batch, i,
+            #         keys=["trial_id"],
+            #         default="unknown_trial"
+            #     )
+
+            #     fname = f"step={cur_step}--task={task_i}--trial={trial_i}--success={success_str}--finish_step={finish_i}--ran={ran_id}.mp4"
+            #     save_path = os.path.join(out_root, fname)
+            #     self._save_video_rgb_uint8(step_images_np[i, :length_i], save_path, fps=10)
+                
+            #     # fname_env = f"step={cur_step}--task={task_i}--trial={trial_i}--success={success_str}--finish_step={finish_i}--ran={ran_id}--env.mp4"
+            #     # save_path_env = os.path.join(out_root, fname_env)
+            #     # self._save_video_rgb_uint8(step_images_np_env[i, :length_i], save_path_env, fps=10)
+            #     # breakpoint()
+
+            def _sanitize(s: str) -> str:
+                # 简单清洗，避免文件名里有斜杠/空白等
+                s = str(s)
+                s = re.sub(r"\s+", "_", s)
+                s = s.replace(os.sep, "_")
+                return s
+
+            # ==== 先把每个样本的元信息算好，避免在线程里再查 ====
+            jobs = []
+            for i in range(B):
+                # 有 mask 则用 mask 截断有效帧
+                length_i = self._infer_length_from_mask(None if step_images_mask_np is None else step_images_mask_np[i], N)
+
+                # env 的有效长度（若有 env mask，用它；否则复用 length_i）
+                # if 'step_images_mask_env_np' in locals() and step_images_mask_env_np is not None:
+                #     length_env_i = self._infer_length_from_mask(step_images_mask_env_np[i], step_images_np_env.shape[1])
+                # else:
+                #     length_env_i = length_i
+                length_env_i = length_i
+
+                # finish_step：-1 则用有效长度 - 1
+                finish_i = int(gt_finish_arr[i])
+                if finish_i == -1:
+                    finish_i = max(0, length_i - 1)
+
+                # success：来自 scores_gt（0/1）
+                if scores_arr is None:
+                    success_i = 0
+                else:
+                    v = scores_arr[i]
+                    try:
+                        success_i = int(v)
+                    except Exception:
+                        success_i = int(np.array(v).item())
+                success_str = "True" if success_i == 1 else "False"
+
+                # task / trial
+                task_i = self._get_field(data.batch, i, keys=["task_id"],  default="unknown_task")
+                trial_i = self._get_field(data.batch, i, keys=["trial_id"], default="unknown_trial")
+                task_i  = _sanitize(task_i)
+                trial_i = _sanitize(trial_i)
+
+                # 文件名 & 路径
+                fname     = f"step={cur_step}--task={task_i}--trial={trial_i}--success={success_str}--finish_step={finish_i}--ran={ran_id}.mp4"
+                save_path = os.path.join(out_root, fname)
+
+                # fname_env     = f"step={cur_step}--task={task_i}--trial={trial_i}--success={success_str}--finish_step={finish_i}--ran={ran_id}--env.mp4"
+                # save_path_env = os.path.join(out_root, fname_env)
+
+                # 收集一次性参数，线程里只做真正的写入
+                jobs.append({
+                    "i": i,
+                    "length_i": length_i,
+                    # "length_env_i": length_env_i,
+                    "save_path": save_path,
+                    # "save_path_env": save_path_env,
+                })
+
+            # ==== 多线程写文件 ====
+            os.makedirs(out_root, exist_ok=True)
+            max_workers = min(8, (os.cpu_count() or 8))  # 视机器可调大/小
+
+            def _write_pair(job):
+                i = job["i"]
+                # 正常视频
+                self._save_video_rgb_uint8(step_images_np[i, :job["length_i"]], job["save_path"], fps=10)
+                # env 视频（如果有 env 数组）
+                # if 'step_images_np_env' in locals() and step_images_np_env is not None:
+                #     self._save_video_rgb_uint8(step_images_np_env[i, :job["length_env_i"]], job["save_path_env"], fps=10)
+                return job["save_path"], job.get("save_path_env")
+
+            futures = []
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="vidsave") as ex:
+                for job in jobs:
+                    futures.append(ex.submit(_write_pair, job))
+                for fut in as_completed(futures):
+                    try:
+                        p, p_env = fut.result()
+                        # 如需日志：print(f"[saved] {p}" + (f" | {p_env}" if p_env else ""))
+                    except Exception as e:
+                        # 避免静默失败
+                        print(f"[video-save-error] {e}")
+                        
+
+            complete = (torch.tensor(scores_arr) == 1).to(device=data.batch[self.data_key].device)
+            finish_step = torch.tensor([int(x) for x in gt_finish_arr],
+                                    device=data.batch[self.data_key].device)
+            
         # scores = score_env
         # finish_step = data.batch["finish_step_raw"]
-        complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
-        if self.return_env_score:
-            cls_stat = self.compute_all_metrics(score_env, pred_success)
-            gt_finish = data.batch["finish_step_raw"]
-            step_stat = self.compute_finish_step_metrics(gt_finish, torch.tensor(pred_finish))
-        if self.use_world_model and (global_steps != -1):
-            # breakpoint()
-            ran_id = random.randint(1, 10000)
-            if global_steps % 10 == 0:
-                save_path = f"work_dirs/{self.config.actor_rollout_ref.rollout.experiment_name}_train_rollouts/{global_steps}_rand{ran_id}.mp4"
-                self.save_video_grid(
-                    step_images, save_path, fps=10,
-                    scores=scores,
-                    scores_env=scores_env,
-                    # score_text_fn=lambda s: f"{int(s)}",
-                    # score_env_text_fn=lambda s: f"{int(s)}",
-                    label_scores="S",
-                    label_scores_env="E",)
-    
         format = [1.0 for _ in range(len(scores))]
 
         data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['complete'] = complete
         data.batch['finish_step'] = finish_step
+        if not self.gen_data_for_wm_rm:
+            data.batch['complete_env'] = complete_env
+            data.batch['finish_step_env'] = finish_step_env
         
         reward_metrics = {}
         format_metrics = {}
         reward_format_metrics = {}
-            
+        # breakpoint()
         reward_metrics['all'] = data.batch['acc'].mean().item()
-        if self.return_env_score:
-            reward_metrics['rm'] = cls_stat
-            reward_metrics['rm_step'] = step_stat
+        if not self.gen_data_for_wm_rm:
+            if self.return_env_score:
+                reward_metrics['rm'] = cls_stat
+                reward_metrics['rm_step'] = step_stat
+            if self.env_rollout:
+                reward_metrics['rm_env'] = cls_stat_env
+                reward_metrics['rm_step_env'] = step_stat_env
             
         format_metrics['all'] = data.batch['format_correctness'].mean().item()
         reward_format_metrics['all'] = data.batch['acc'].mean().item()

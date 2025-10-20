@@ -159,7 +159,9 @@ class RobActorRolloutRefWorker(Worker):
             self.config.ref.log_prob_micro_batch_size //= self.device_mesh.shape[0]
         
         self.use_world_model = self.config.world_model.dit_path != ""
+        self.env_rollout = self.config.world_model.env_rollout != ""
         self.use_reward_model = self.config.rollout.reward_type == "vlac"
+        
 
     def _build_model_optimizer(self,
                                model_path,
@@ -957,7 +959,7 @@ class RobActorRolloutRefWorker(Worker):
             # breakpoint()
             if self.config.model.load_ckpt != "":
                 self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)
-                
+            # breakpoint()
             # import threading
             # self._save_req  = threading.Event()
             # self._save_done = threading.Event()
@@ -1002,6 +1004,7 @@ class RobActorRolloutRefWorker(Worker):
                 self.rollout.use_world_model = True
             else:
                 self.rollout.use_world_model = False
+            self.rollout.env_rollout = self.env_rollout
 
             # breakpoint()
             # if self.use_reward_model:

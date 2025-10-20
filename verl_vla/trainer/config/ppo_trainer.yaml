@@ -97,6 +97,7 @@ actor_rollout_ref:
     use_black: False
     use_history: False
     history_video_length: 0
+    env_rollout: False
     
     fsdp_config:
       model_dtype: bfloat16
@@ -228,6 +229,8 @@ reward_model:
   temperature: 0.0
   top_p: 1.0
   return_env_score: True
+  env_rollout: False
+  gen_data_for_wm_rm: False
   model:
     action_token_len: ${actor_rollout_ref.model.action_token_len}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
