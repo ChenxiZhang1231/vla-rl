@@ -81,6 +81,14 @@ if __name__ == "__main__":
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,
         )
+    elif args.policy_model == "vla-adapter":
+        assert args.ckpt_path is not None
+        from simpler_env.policies.vla_adapter.vla_adapter_model import VLAAdapterInference
+        model = VLAAdapterInference(
+            saved_model_path=args.ckpt_path,
+            policy_setup=args.policy_setup,
+            action_scale=args.action_scale,
+        )
     elif args.policy_model == "openpifast":
         assert args.ckpt_path is not None
         from simpler_env.policies.openpi.pi0_or_fast import OpenPiFastInference
