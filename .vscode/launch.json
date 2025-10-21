@@ -153,6 +153,22 @@
           }
         },
         {
+          "name": "Debug Process rm data bridge",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/qwenvl_chat",
+          "program": "utils/process_rollout_video_2_jsonl_bridge.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+            "--video_folder=/inspire/ssd/project/robotsimulation/public/data/rm_bridge/generation/predict2_video2world_2b_action_conditioned_finetuning_generation_bridge_2025-10-20_17-11-12/videos/00000",
+            "--output_dir=/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge/debug"
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Debug video2world_action",
           "type": "python",
           "request": "launch",
