@@ -288,6 +288,19 @@
           }
         },
         {
+          "name": "Gen LIBERO task caption",
+          "type": "debugpy",
+          "request": "launch",
+          "program": "world_model/data_process/libero_captions_index.py",
+          "console": "integratedTerminal",
+          "args":[
+            "build",
+            "--out=libero_captions_index.json",
+          ],
+          "env": {
+          }
+        },
+        {
           "name": "Debug Process Bridge 2 Json",
           "type": "debugpy",
           "request": "launch",
