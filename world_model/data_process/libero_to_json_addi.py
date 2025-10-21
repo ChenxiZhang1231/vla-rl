@@ -588,8 +588,8 @@ def extract_libero_data_and_create_video(
     gripper_states = episode_data["obs"][f"gripper_states"][()]
     agentview = episode_data["obs"][f"agentview_rgb"][()]
     agentview = agentview[:, :, ::-1, :]
-    eye_in_hand = episode_data["obs"][f"eye_in_hand_rgb"][()]
-    eye_in_hand = eye_in_hand[:, :, ::-1, :]
+    # eye_in_hand = episode_data["obs"][f"eye_in_hand_rgb"][()]
+    # eye_in_hand = eye_in_hand[:, :, ::-1, :]
     # breakpoint()
     try:
         env_states = episode_data["env_states"][()]
@@ -610,7 +610,7 @@ def extract_libero_data_and_create_video(
             camera_agentview_extrinsic = get_camera_extrinsic_matrix(env.sim, 'agentview')
             camera_agentview_intrinsic = fovy_to_intrinsics(camera_agentview_fovy, 256, 256)
 
-            camera_id = env.sim.model.camera_name2id('robot0_eye_in_hand')
+            # camera_id = env.sim.model.camera_name2id('robot0_eye_in_hand')
             camera_robothand_fovy = env.sim.model.cam_fovy[camera_id]
             camera_robothand_extrinsic = get_camera_extrinsic_matrix(env.sim, 'robot0_eye_in_hand')
             camera_robothand_intrinsic = fovy_to_intrinsics(camera_robothand_fovy, 256, 256)
@@ -618,10 +618,10 @@ def extract_libero_data_and_create_video(
         cam_dict = {
             "agentview_intrinsic": camera_agentview_intrinsic,
             "agentview_extrinsic": camera_agentview_extrinsic,
-            "eye_in_hand_intrinsic": camera_robothand_intrinsic,
-            "eye_in_hand_extrinsic": camera_robothand_extrinsic,
+            # "eye_in_hand_intrinsic": camera_robothand_intrinsic,
+            # "eye_in_hand_extrinsic": camera_robothand_extrinsic,
             "agentview_rgb": agentview[f],
-            "eye_in_hand_rgb": eye_in_hand[f],
+            # "eye_in_hand_rgb": eye_in_hand[f],
         }
         
         # Camera data

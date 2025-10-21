@@ -49,7 +49,7 @@ for (( i=0; i<${num_experiments}; i+=2 )); do
         echo "############################################################"
 
         # 运行Python脚本
-        python utils/process_rollout_video_2_jsonl.py "--video_folder=${video_folder}" "--output_dir=${output_dir}"
+        python utils/process_rollout_video_2_jsonl_paral.py "--video_folder=${video_folder}" "--output_dir=${output_dir}"
 
         echo "############################################################"
         echo "##                                                        ##"
