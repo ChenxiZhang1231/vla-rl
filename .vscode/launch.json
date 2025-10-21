@@ -135,6 +135,22 @@
           }
         },
         {
+          "name": "Debug Process rm data",
+          "type": "python",
+          "request": "launch",
+          "cwd": "${workspaceFolder}/qwenvl_chat",
+          "program": "utils/process_rollout_video_2_jsonl_paral.py",
+          "console": "integratedTerminal",
+          "justMyCode": true,
+          "args": [
+            "--video_folder=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_spatial_rm_data-fixbug",
+            "--output_dir=/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_spatial/spatial1"
+          ],
+          "env": {
+              // "CUDA_VISIBLE_DEVICES": "0" 
+          }
+        },
+        {
           "name": "Debug video2world_action",
           "type": "python",
           "request": "launch",
@@ -285,6 +301,19 @@
             "MUJOCO_GL": "osmesa",
             // "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
             
+          }
+        },
+        {
+          "name": "Gen LIBERO task caption",
+          "type": "debugpy",
+          "request": "launch",
+          "program": "world_model/data_process/libero_captions_index.py",
+          "console": "integratedTerminal",
+          "args":[
+            "build",
+            "--out=libero_captions_index.json",
+          ],
+          "env": {
           }
         },
         {
