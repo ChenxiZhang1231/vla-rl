@@ -12,40 +12,26 @@ tasks=(
     # put_in_drawer_visual_matching.sh
 )
 
-# ckpts=(
-#     /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----400000_chkpt # or a local path
-# )
-# tag=bridge_ck5_400k
-
-CKPT_PATH="${1:-}"
-TAG="${2:-}"
-DEVICE="${3:-0}"
-
-
-if [[ -z "$CKPT_PATH" || -z "$TAG" ]]; then
-  echo "Usage: $0 <ckpt_path> <tag> <device_id> [action_ensemble_temp]"
-  exit 1
-fi
-
 ckpts=(
-    "$CKPT_PATH"
+    /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----400000_chkpt # or a local path
 )
-
-logging_dir="results/$(basename "$TAG")"
-mkdir -p "$logging_dir"
-
+tag=bridge_ck5_400k
 
 action_ensemble_temp=0.0
 for ckpt_path in ${ckpts[@]}; do
-    echo "==> Running ckpt: $ckpt_path"
-    echo "==> Tag         : $TAG"
-    echo "==> Device      : $DEVICE"
+    # 🤗 NOTE: set hf cache to avoid confilcts
+    # base_dir=$(dirname $ckpt_path)
+    # export HF_MODULES_CACHE=$base_dir/hf_cache/modules
+    # mkdir -p $HF_MODULES_CACHE
+    # logging_dir=$base_dir/simpler_env/$(basename $ckpt_path)${action_ensemble_temp}
+  
+    logging_dir=results/$(basename $tag)
 
     mkdir -p $logging_dir
     for i in ${!tasks[@]}; do
         task=${tasks[$i]}
         echo "🚀 running $task ..."
-        device=$DEVICE"
+        device=0
         bash scripts/$task $ckpt_path $model_name $action_ensemble_temp $logging_dir $device
     done
 
