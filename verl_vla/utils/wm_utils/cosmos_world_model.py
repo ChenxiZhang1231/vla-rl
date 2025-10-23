@@ -42,7 +42,7 @@ class CosMosWorldModel(nn.Module):
         self.config = model_config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.chunk_size = self.config.get("chunk_size", "20")
-        
+        self.unnorm_key = self.config.unnorm_key
         print(f"--- [CosMosWorldModel] Initializing on PID {os.getpid()} ---")
 
         args = argparse.Namespace(
@@ -146,7 +146,10 @@ class CosMosWorldModel(nn.Module):
         # actions[..., -1] = np.sign(actions[..., -1]) * -1.0
         
         actions[..., -1] = (actions[..., -1] >= 0.5)*1  # (B, chunk, 7)
-        c_act_scaler = np.array([5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 1.0])[None, None].reshape(1, 1, 7)
+        if self.unnorm_key == 'bridge_orig':
+            c_act_scaler = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])[None, None].reshape(1, 1, 7)
+        else:
+            c_act_scaler = np.array([5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 5e-2, 1.0])[None, None].reshape(1, 1, 7)
         actions = actions * c_act_scaler
         # Dual concat (keep your current behavior: concat zeros on the last dimension)
         dummy = np.zeros_like(actions)
@@ -215,12 +218,12 @@ class CosMosWorldModel(nn.Module):
                     
             # Next chunk starts from the last predicted frame of this chunk
             cur_first_frames = [frames_uint8[b, -1] for b in range(B)]
-        # breakpoint()
+        
         # --------- 4) Concatenate along time ---------
         out = np.concatenate(out_chunks, axis=1)   # [B, T, H, W, 3]
         # self.save_video_grid(out, f'debug{step}.mp4')
         # self.save_trajectory_grid_image(out, 'debug.png')
-
+        # breakpoint()
         return out  # B, chunk_size, H, W, C
     
     def reset(self, current_obs_batch_np):

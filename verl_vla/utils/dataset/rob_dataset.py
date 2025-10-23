@@ -17,6 +17,8 @@ import os
 from typing import List, Union
 import h5py
 import pandas as pd
+import json
+from PIL import Image 
 
 import torch
 import numpy as np
@@ -163,6 +165,60 @@ class LIBERO_Dataset(Dataset):
         else:
             raise ValueError
      
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, item):
+        """
+        Note that we also return the raw_input_ids so that it can be combined with other chat template
+        """
+        return self.dataframe[item]
+
+
+class Bridge_Dataset(Dataset):
+    def __init__(self,
+                 task_suite_name,
+                 use_world_model = False,
+                 train_val = "train",
+                 data_dir = "",
+                 ):
+        
+        self.task_suite_name = task_suite_name  
+        self.use_world_model = use_world_model
+        self.train_val = train_val
+        self.data_dir = data_dir
+        self._read_files_and_tokenize()
+
+    def _read_files_and_tokenize(self):
+        dataframes = []
+        dataset_path  = os.path.join(self.data_dir, "dataset.jsonl")
+        data_list = []
+        with open(dataset_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                data_list.append(json.loads(line))
+        
+        for data_item in data_list:
+            task_language = data_item['task_language']
+            init_state_path = os.path.join(self.data_dir,  data_item['init_state_path'][0])
+            image_pil = Image.open(init_state_path).convert("RGB")
+            image = np.array(image_pil)
+            task_id = -1
+            trial_id = -1
+            init_state_len = 1
+            data = {
+                "task_suite_name": self.task_suite_name,
+                "task_id": torch.tensor(task_id, dtype=torch.int64).unsqueeze(0),
+                "trial_id": torch.tensor(trial_id, dtype=torch.int64).unsqueeze(0),
+                "init_state": torch.from_numpy(image.copy()),
+                "init_state_len": torch.tensor(init_state_len).unsqueeze(0),
+                "task_lang": task_language[0],
+            }
+            dataframes.append(data)
+        
+        self.dataframe = dataframes
+        print(f'dataset len: {len(self.dataframe)}')
+
 
     def __len__(self):
         return len(self.dataframe)

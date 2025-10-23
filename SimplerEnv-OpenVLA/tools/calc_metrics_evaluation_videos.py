@@ -1,3 +1,4 @@
+# python tools/calc_metrics_evaluation_videos.py  --log-dir-root /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/SimplerEnv-OpenVLA/results/debug
 import argparse
 import glob
 from pathlib import Path

@@ -1019,6 +1019,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         proprio_projector=None,
         use_sde=False,
         recompute_log_prob=False,
+        a_shape=(20,7)
     ):
         B, L, D = input_embeddings.shape
         action_queries = self.action_queries.weight  # (1, h)
@@ -1085,23 +1086,23 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
         
         if use_sde:
-            x_t, return_dict = self.sample_action_sde(all_hidden_states, action_head, noisy_action_projector)
+            x_t, return_dict = self.sample_action_sde(all_hidden_states, action_head, noisy_action_projector, a_shape=a_shape)
         else:
-            x_t, return_dict = self.sample_action(all_hidden_states, action_head, noisy_action_projector)
+            x_t, return_dict = self.sample_action(all_hidden_states, action_head, noisy_action_projector, a_shape=a_shape)
         
         normalized_actions = x_t
-        normalized_actions = normalized_actions.reshape(-1, NUM_ACTIONS_CHUNK, ACTION_DIM)
+        normalized_actions = normalized_actions.reshape(-1, a_shape[0], ACTION_DIM)
         normalized_actions = normalized_actions.float().cpu().detach().numpy()
         
         return normalized_actions, return_dict
     
-    def sample_action(self, all_hidden_states, action_head, noisy_action_projector):
+    def sample_action(self, all_hidden_states, action_head, noisy_action_projector, a_shape=(20,7)):
         B = all_hidden_states.shape[0]
         device = all_hidden_states.device
         dt = -1.0 / 10
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
 
-        actions_shape = (B, 20, 7)
+        actions_shape = (B, *a_shape)
         # noise = action_head.module.sample_noise(actions_shape, device)
         noise = self.action_head.sample_noise(actions_shape, device)
             
@@ -1135,7 +1136,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         }
         return x_t, return_dict
     
-    def sample_action_sde(self, all_hidden_states, action_head, noisy_action_projector):
+    def sample_action_sde(self, all_hidden_states, action_head, noisy_action_projector, a_shape=(20,7)):
         B = all_hidden_states.shape[0]
         device = all_hidden_states.device
         dt = -1.0 / 10
@@ -1144,7 +1145,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         sde_sigma_max = 0.07
         sde_sigma_power = 1.5
         
-        actions_shape = (B, 20, 7)
+        actions_shape = (B, *a_shape)
         # noise = action_head.module.sample_noise(actions_shape, device)
         # head = getattr(action_head, "module", action_head)
         
@@ -1160,7 +1161,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             # rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
             # proj = getattr(noisy_action_projector, "module", noisy_action_projector)
             rearranged_actions_hidden_states = self.noisy_action_projector(x_t_)
-            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
+            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, a_shape[0], -1)
             # v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
         
             # head = getattr(action_head, "module", action_head)
@@ -1480,6 +1481,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         use_film: bool = False,
         use_sde: bool = False,
         recompute_log_prob: bool = False,
+        a_shape = (20,7),
         **kwargs: str,
     ) -> np.ndarray:
         """Predict actions from input sequence, with options for different prediction methods.
@@ -1558,6 +1560,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
                 proprio_projector=proprio_projector,
                 use_sde=use_sde,
                 recompute_log_prob=recompute_log_prob,
+                a_shape=a_shape,
                 )
         else:
             normalized_actions, actions_hidden_states = self._regression_or_discrete_prediction(

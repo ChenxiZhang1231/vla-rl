@@ -32,13 +32,14 @@ class FlowMatchingActionHead(nn.Module):
         hidden_dim=4096,
         action_dim=7,
         num_flow_steps=10,
+        num_actions=20,
     ):
         super().__init__()
         self.action_dim = action_dim
         self.num_flow_steps = num_flow_steps
         
         self.flow_predictor = FlowPredictionDiT_V1(
-            transformer_hidden_dim=hidden_dim*ACTION_DIM, hidden_dim=512, action_dim=action_dim
+            transformer_hidden_dim=hidden_dim*ACTION_DIM, hidden_dim=512, action_dim=action_dim, num_actions=num_actions,
         )
 
         # Time encoder for positional encoding of timesteps
@@ -73,6 +74,8 @@ class FlowMatchingActionHead(nn.Module):
         device = ground_truth_actions.device
         
         # Sample random noise with shape equal to actions
+        if NUM_ACTIONS_CHUNK == 20:
+            breakpoint()
         noise = self.sample_noise((batch_size, NUM_ACTIONS_CHUNK, ACTION_DIM), device)
         
         # Sample random flow timesteps (one for each action in batch)
@@ -187,9 +190,10 @@ class FlowPredictionDiT_V1(nn.Module):
         transformer_hidden_dim,  # Transformer hidden embedding size
         hidden_dim,  # MLP hidden size
         action_dim=7,  # action dimensionality
+        num_actions=20,
     ):
         super().__init__()
-        self.dit = DiT_SingleTokenAction_OneCtx(in_channels=transformer_hidden_dim, out_channels=action_dim, depth=8, hidden_size=hidden_dim, num_heads=8, ctx_every=2, num_actions=NUM_ACTIONS_CHUNK)
+        self.dit = DiT_SingleTokenAction_OneCtx(in_channels=transformer_hidden_dim, out_channels=action_dim, depth=8, hidden_size=hidden_dim, num_heads=8, ctx_every=2, num_actions=num_actions)
 
     def forward(
         self,

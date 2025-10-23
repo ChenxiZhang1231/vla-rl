@@ -1,0 +1,9 @@
+{
+    "bridge-20k": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge/train_rm_21061.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 21061
+    }
+}

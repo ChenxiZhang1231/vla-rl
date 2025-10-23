@@ -170,7 +170,8 @@ class RobActorRolloutRefWorker(Worker):
                                optim_config,
                                override_model_config,
                                enable_gradient_checkpointing=False,
-                               trust_remote_code=False):
+                               trust_remote_code=False,
+                               unnorm_key=""):
         from verl_vla.utils.model import print_model_size, update_model_config
         from verl_vla.utils.torch_dtypes import PrecisionType
         from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
@@ -326,7 +327,10 @@ class RobActorRolloutRefWorker(Worker):
                 
                 ACTION_DIM = 7
                 NUM_FLOW_MATCHING_STEPS = 10
-                NUM_ACTIONS_CHUNK = 20
+                if unnorm_key == 'bridge_orig':
+                    NUM_ACTIONS_CHUNK = 5
+                else:
+                    NUM_ACTIONS_CHUNK = 20
                 fsdp_mesh = self.device_mesh
                 device_id = torch.cuda.current_device()
 
@@ -340,9 +344,10 @@ class RobActorRolloutRefWorker(Worker):
                 actor_module.noisy_action_projector = noisy_action_projector
                 self.noisy_action_projector = actor_module.noisy_action_projector
                 # self.noisy_action_projector = DDP(noisy_action_projector, device_ids=[device_id], gradient_as_bucket_view=True, device_mesh=fsdp_mesh)
-
+                # if self._is_ref:
+                #     breakpoint()
                 action_head = FlowMatchingActionHead(
-                        input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS
+                        input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS, num_actions=NUM_ACTIONS_CHUNK,
                     ).to(device=device_id, dtype=torch.bfloat16)
                 action_head_path = find_checkpoint_file(local_path, "action_head")
                 action_head_state_dict = load_component_state_dict(action_head_path)
@@ -896,6 +901,7 @@ class RobActorRolloutRefWorker(Worker):
 
         from omegaconf import OmegaConf
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
+        unnorm_key = self.config.rollout.unnorm_key
         if self._is_actor or self._is_rollout:
             # we need the model for actor and rollout
             if self._is_actor:
@@ -912,7 +918,9 @@ class RobActorRolloutRefWorker(Worker):
                 optim_config=optim_config,
                 override_model_config=override_model_config,
                 enable_gradient_checkpointing=self.config.model.get('enable_gradient_checkpointing', False),
-                trust_remote_code=True) #self.config.model.get('trust_remote_code', True)
+                trust_remote_code=True,
+                unnorm_key=unnorm_key,
+                ) #self.config.model.get('trust_remote_code', True)
             # if self._is_rollout:
             #     breakpoint()
             # get the original unwrapped module
@@ -978,7 +986,8 @@ class RobActorRolloutRefWorker(Worker):
                                                                fsdp_config=self.config.ref.fsdp_config,
                                                                optim_config=None,
                                                                override_model_config=override_model_config,
-                                                               trust_remote_code=True)[0] #self.config.model.get('trust_remote_code', False)
+                                                               trust_remote_code=True,
+                                                               unnorm_key=unnorm_key)[0] #self.config.model.get('trust_remote_code', False)
                                                                    
             if self._is_offload_param:
                 offload_fsdp_param_and_grad(module=self.ref_module_fsdp, offload_grad=self._is_offload_grad)

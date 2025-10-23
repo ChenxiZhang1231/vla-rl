@@ -491,32 +491,43 @@ class RayTrainer(object):
     def _create_dataloader(self):   # next fix
         from torch.utils.data import DataLoader
         # TODO: we have to make sure the batch size is divisible by the dp size
-        from verl_vla.utils.dataset.rob_dataset import LIBERO_Dataset, collate_fn
-        self.train_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
+        from verl_vla.utils.dataset.rob_dataset import LIBERO_Dataset, Bridge_Dataset, collate_fn
+        if self.config.data.task_suite_name == 'bridge_orig':
+            self.train_dataset = Bridge_Dataset(self.config.data.task_suite_name,
+                                                data_dir=self.config.data.libero_raw_data_dir,
+                                                use_world_model=self.use_world_model,
+                                                train_val ="train")
+            self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
+                                            batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
+                                            shuffle=True,
+                                            drop_last=True,
+                                            collate_fn=collate_fn))
+        else:
+            self.train_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
+                                                num_trials_per_task=self.config.data.num_trials_per_task,
+                                                libero_raw_data_dir=self.config.data.libero_raw_data_dir,
+                                                use_world_model=self.use_world_model,
+                                                train_val ="train")
+            self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
+                                            batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
+                                            shuffle=True,
+                                            drop_last=True,
+                                            collate_fn=collate_fn))
+
+            self.val_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
                                             num_trials_per_task=self.config.data.num_trials_per_task,
-                                            libero_raw_data_dir=self.config.data.libero_raw_data_dir,
-                                            use_world_model=self.use_world_model,
-                                            train_val ="train")
-        self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
-                                           batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
-                                           shuffle=True,
-                                           drop_last=True,
-                                           collate_fn=collate_fn))
+                                            train_val ="valid")
+            self.val_dataloader = DataLoader(dataset=self.val_dataset,
+                                            batch_size=self.config.data.val_batch_size,
+                                            shuffle=True,
+                                            drop_last=True,
+                                            collate_fn=collate_fn)
 
-        self.val_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
-                                        num_trials_per_task=self.config.data.num_trials_per_task,
-                                        train_val ="valid")
-        self.val_dataloader = DataLoader(dataset=self.val_dataset,
-                                         batch_size=self.config.data.val_batch_size,
-                                         shuffle=True,
-                                         drop_last=True,
-                                         collate_fn=collate_fn)
+            assert len(self.train_dataloader) >= 1
+            assert len(self.val_dataloader) >= 1
 
-        assert len(self.train_dataloader) >= 1
-        assert len(self.val_dataloader) >= 1
-
-        print(f'Size of train dataloader: {len(self.train_dataloader)}')
-        print(f'Size of val dataloader: {len(self.val_dataloader)}')
+            print(f'Size of train dataloader: {len(self.train_dataloader)}')
+            print(f'Size of val dataloader: {len(self.val_dataloader)}')
 
         total_training_steps = len(self.train_dataloader) * self.config.trainer.total_epochs
         self.total_training_steps = total_training_steps

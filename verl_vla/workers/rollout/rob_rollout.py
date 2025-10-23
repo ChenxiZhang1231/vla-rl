@@ -889,13 +889,14 @@ class RobHFRollout(BaseRollout):
         self.module = module
         self.action_head = action_head
         self.noisy_action_projector = noisy_action_projector
-        self.max_steps = {   "libero_spatial": 300,   # max step length 193
-                                    "libero_object": 512,    # max step length 254
-                                    "libero_goal": 512,      # max step length 270
-                                    # "libero_10": 1024,        # max step length 505
-                                    "libero_10": 560,        # max step length 505
-                                    "libero_90": 512         # max step length 373 org 400 now change to 512
-                                }
+        self.max_steps = {"libero_spatial": 300,   # max step length 193
+                            "libero_object": 512,    # max step length 254
+                            "libero_goal": 512,      # max step length 270
+                            # "libero_10": 1024,        # max step length 505
+                            "libero_10": 560,        # max step length 505
+                            "libero_90": 512,         # max step length 373 org 400 now change to 512
+                            "bridge_orig": 100,
+                        }
         if self.config.vla in ["smolvla"]:
             self.processor = None
         else:
@@ -907,18 +908,18 @@ class RobHFRollout(BaseRollout):
         self._num_gpus_per_node = config.n_gpus_per_node
 
         # self.num_workers = self.config.get('num_env_workers', 8)
-        self.num_workers = 16
-        
-        self.adapter = LIBEROAdapter(
-            task_suite_name=self.config.task_suite_name,
-            num_envs=self.num_workers,
-            max_steps=self.max_steps[self.config.task_suite_name],
-            num_steps_wait=self.config.num_steps_wait,
-            model_family=self.config.model_family,
-            gpu_ids=[self._rank % self._num_gpus_per_node], # Run all workers on the same assigned GPU
-            # delta_action=self.config.delta_action
-            flip=True if self.config.vla == "smolvla" else False,
-        )
+        if config.unnorm_key not in ['bridge_orig']:
+            self.num_workers = 16
+            self.adapter = LIBEROAdapter(
+                task_suite_name=self.config.task_suite_name,
+                num_envs=self.num_workers,
+                max_steps=self.max_steps[self.config.task_suite_name],
+                num_steps_wait=self.config.num_steps_wait,
+                model_family=self.config.model_family,
+                gpu_ids=[self._rank % self._num_gpus_per_node], # Run all workers on the same assigned GPU
+                # delta_action=self.config.delta_action
+                flip=True if self.config.vla == "smolvla" else False,
+            )
         #oft add
         # breakpoint()
         if noisy_action_projector is not None:
@@ -983,10 +984,13 @@ class RobHFRollout(BaseRollout):
             output = pad_dataprotos_lang(output, pad_id=self.module.language_tokenizer.pad_token_id, pad_to=None)
         elif self.config.vla == "vla-adapter":
             if self.use_world_model and is_train:
-                if self.env_rollout:
-                    output = [self._generate_minibatch_vla_adapter_wm_env_rollout(p) for p in batch_prompts]
+                if self.config.unnorm_key in ['bridge_orig']:
+                    output = [self._generate_minibatch_vla_adapter_wm_bridge(p) for p in batch_prompts]
                 else:
-                    output = [self._generate_minibatch_vla_adapter_wm(p) for p in batch_prompts]
+                    if self.env_rollout:
+                        output = [self._generate_minibatch_vla_adapter_wm_env_rollout(p) for p in batch_prompts]
+                    else:
+                        output = [self._generate_minibatch_vla_adapter_wm(p) for p in batch_prompts]
             elif self.config.reward_type == 'vlm' and is_train:
                 output = [self._generate_minibatch_vla_adapter_vlm_reward(p) for p in batch_prompts]
             elif self.config.only_for_gen_rm_data and (not is_train):
@@ -3797,6 +3801,216 @@ class RobHFRollout(BaseRollout):
             batch_size=batch_size)
         return DataProto(batch=output_batch)
     
+    def _generate_minibatch_vla_adapter_wm_bridge(self, prompts):
+        # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
+        self.module.eval()
+        meta_info = prompts.meta_info
+        n_samples = meta_info.get('n_samples', 1)
+        
+        task_id = prompts.batch['task_id'].repeat_interleave(n_samples, dim=0)
+        trial_id = prompts.batch['trial_id'].repeat_interleave(n_samples, dim=0)
+        init_state = prompts.batch['init_state'].repeat_interleave(n_samples, dim=0)
+        init_state_len = prompts.batch['init_state_len'].repeat_interleave(n_samples, dim=0)
+        task_suite_name = np.repeat(prompts.non_tensor_batch['task_suite_name'], n_samples)
+        task_lang = np.repeat(prompts.non_tensor_batch['task_lang'], n_samples)
+        task_descriptions = [name for name in task_lang]
+        max_steps = self.max_steps[self.config.task_suite_name]
+        batch_size = task_id.size(0)
+        is_train = meta_info.get('is_train', False)
+        # breakpoint()
+        # current_obs_batch_np = np.stack(current_obs_batch_np_list)
+        current_obs_batch_np = init_state.cpu().numpy()
+        self.world_model.reset(current_obs_batch_np)
+
+        task_records = []
+        for idx in range(batch_size):
+            task_records.append({
+                "active": True,
+                "complete": False,
+                "finish_step": 0,
+                # "task_file_name": f"{task_suite_name[idx]}_task_{task_id[idx][0].item()}_trial_{trial_id[idx][0].item()}",
+                "step_images": [current_obs_batch_np]
+            })
+            
+        valid_video = defaultdict(list)
+        is_valid = meta_info.get('n_samples') is None
+        global_steps = meta_info.get('global_steps', 0) if is_valid else 0
+        if is_valid:
+            # current_obs_batch_np 的形状是 [B, H, W, 3]
+            # 我们需要把它拆开，存到每个任务对应的视频列表中
+            for idx in range(batch_size):
+                # task_file = task_records[idx]['task_file_name']
+                # 从批次中取出第 idx 帧图像，并进行上下翻转（如果需要的话，这模仿了原函数的行为）
+                img = current_obs_batch_np[idx][::-1, :, :] 
+                # valid_video[task_file].append(img)
+        
+        step = 0
+        vla_history = []
+        trajectory_video_batch = [current_obs_batch_np]
+        vla_timings = []
+        wm_timings = []
+        while step < max_steps:
+            active_indices = [i for i, r in enumerate(task_records) if r['active']]
+            
+            if not active_indices:
+                break
+            # breakpoint()
+            inputs = [self._obs_to_input(obs, flip=True) for obs in current_obs_batch_np]
+            
+            vla_input = self.process_input_vla_adapter(inputs, task_descriptions)
+            vla_input.update(meta_info)
+            
+            with Timer(name="VLA_Inference", text="{name} mean: {:.4f}s") as timer:
+                vla_output = self._generate_one_step_vla_adapter(vla_input, use_sde=is_train, a_shape=(5,7))
+            vla_timings.append(timer.last)
+            
+            actions_batch = vla_output["action"]
+            
+            step_data = vla_input.copy()
+            step_data["action"] = actions_batch
+            step_data["action_tensor"] = vla_output["action_tensor"]
+            step_data["step"] = step
+            step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
+            step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
+            step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            # step_data["lang_tokens"] = vla_output["lang_tokens"]
+            # step_data["lang_masks"] = vla_output["lang_masks"]
+            # step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in inputs])).to(vla_output["action_tensor"].device)
+
+            vla_history.append(step_data)
+            if self.world_model is None:
+                raise ValueError("World Model Worker Group has not been set!")
+            
+            with Timer(name="World_Model_Step", text="{name} mean: {:.4f}s") as timer:
+                next_obs_batch_np = self.world_model.step(current_obs_batch_np, actions_batch, step)  # B, chunk_size, H, W, C
+            wm_timings.append(timer.last)
+            # breakpoint()
+            # current_obs_batch_np = next_obs_batch_np
+            current_obs_batch_np = next_obs_batch_np[:, -1, :, :, :]
+
+            step += self.config.action_chunks_len
+            # trajectory_video_batch.append(next_obs_batch_np[:, :, :, ::-1, :])
+            trajectory_video_batch.append(next_obs_batch_np)
+
+            if is_valid:
+                num_frames_in_chunk = next_obs_batch_np.shape[1]
+                
+                for idx in range(batch_size):
+                    # task_file = task_records[idx]['task_file_name']
+                    for f_idx in range(num_frames_in_chunk):
+                        img = next_obs_batch_np[idx, f_idx, :, :, :]  # [::-1, :, :]
+                        # valid_video[task_file].append(img)
+            
+            for r in task_records:
+                if r['active']:
+                    r['finish_step'] = step
+                    if r['finish_step'] >= max_steps:
+                        r['active'] = False
+                        r['complete'] = True 
+                # r['step_images'].extend()
+                                
+        torch.cuda.empty_cache()
+        # if is_valid:
+        #     for task_file, images in valid_video.items():
+        #         complete_flags = [r['complete'] for r in task_records if r['task_file_name'] == task_file]
+        #         complete = complete_flags[0] if complete_flags else False
+                
+        #         save_rollout_video(
+        #             images,
+        #             self.config.experiment_name,
+        #             task_file,
+        #             global_steps,
+        #             complete
+        #         )
+        initial_frame_expanded = np.expand_dims(trajectory_video_batch[0], axis=1) # -> (B, 1, H, W, C)
+        video_chunks = [initial_frame_expanded] + trajectory_video_batch[1:]
+        full_trajectory_video = np.concatenate(video_chunks, axis=1)
+        # breakpoint()
+        # self.world_model.save_trajectory_grid_image(
+        #     full_trajectory_video, 
+        #     f"work_dirs/{self.config.experiment_name}/trajectory_grid_{global_steps}.png"
+        # )
+        # ran_id = random.randint(1, 10000)
+        # self.world_model.save_video_grid(
+        #     full_trajectory_video, 
+        #     f"work_dirs/{self.config.experiment_name}_train_rollouts/trajectory_grid_{global_steps}_rand{ran_id}.mp4"
+        # )
+        print(task_lang)
+        # breakpoint()
+        print("\n" + "="*50)
+        print(" Performance Measurement Report")
+        print("="*50)
+        
+        if vla_timings:
+            print("\n--- VLA Inference (`_generate_one_step_smolvla`) ---")
+            print(f"  Total steps measured: {len(vla_timings)}")
+            print(f"  Total time spent:     {np.sum(vla_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(vla_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(vla_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(vla_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(vla_timings):.4f} seconds")
+
+        if wm_timings:
+            print("\n--- World Model Step (`world_model.step`) ---")
+            print(f"  Total steps measured: {len(wm_timings)}")
+            print(f"  Total time spent:     {np.sum(wm_timings):.4f} seconds")
+            print(f"  Average time per step:  {np.mean(wm_timings):.4f} seconds")
+            print(f"  Standard deviation:     {np.std(wm_timings):.4f} seconds")
+            print(f"  Fastest step:         {np.min(wm_timings):.4f} seconds")
+            print(f"  Slowest step:         {np.max(wm_timings):.4f} seconds (首次调用可能因CUDA Graph录制而较慢)")
+
+        if vla_timings and wm_timings:
+            total_mean_per_step = np.mean(vla_timings) + np.mean(wm_timings)
+            print("\n--- Combined ---")
+            print(f"  Average total processing time per step: {total_mean_per_step:.4f} seconds")
+
+        print("="*50 + "\n")
+
+            
+        self.module.train()
+        batch = {"input_ids":[], 
+                "attention_mask": [],
+                # "pixel_values": [], 
+                # "full_image": [],
+                "x_t": [],
+                "t": [],
+                "x_next": [],
+                "action_tensor": [],
+                # "lang_tokens": [],
+                # "lang_masks": []
+                }  
+                    
+        for k in ["input_ids", "attention_mask",
+                #   "pixel_values", 
+                #   "full_image",
+                  "action_tensor", "x_t", "t", "x_next"]:
+            for h in vla_history:
+                batch[k].append(h[k])
+                
+        for k,v in batch.items():
+            batch[k] = torch.stack(v, dim=1) 
+        
+        # breakpoint()
+        batch["complete"] = []
+        batch["finish_step"] = []
+        # breakpoint()
+        for k in task_records:
+            batch["complete"].append(k["complete"])
+            batch["finish_step"].append(k["finish_step"])
+            
+        
+        batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['action_tensor'].device)
+        batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['action_tensor'].device)
+        full_trajectory_video = np.flip(full_trajectory_video, axis=3).copy()
+        batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['action_tensor'].device)
+        batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['action_tensor'].device)
+        
+        output_batch = TensorDict(
+            batch,
+            batch_size=batch_size)
+        return DataProto(batch=output_batch)
+    
+    
     def _generate_minibatch_vla_adapter_wm_env_rollout(self, prompts):
         # print('Waiting for debugger 5678'); import os,debugpy; debugpy.listen(('localhost', 5678 + int(os.getenv('RANK', '0')))); debugpy.wait_for_client()
         self.module.eval()
@@ -4591,7 +4805,7 @@ class RobHFRollout(BaseRollout):
         return batch
     
     @torch.no_grad()
-    def _generate_one_step_vla_adapter(self, prompts: dict, use_sde: bool = False):
+    def _generate_one_step_vla_adapter(self, prompts: dict, use_sde: bool = False, a_shape=(20,7)):
         if isinstance(self.module, FSDP):
             # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
             param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
@@ -4616,6 +4830,7 @@ class RobHFRollout(BaseRollout):
                     action_head=self.action_head,
                     use_film=False,
                     use_sde=use_sde,
+                    a_shape=a_shape,
                     # use_sde=True,
                 )
                 # breakpoint()
