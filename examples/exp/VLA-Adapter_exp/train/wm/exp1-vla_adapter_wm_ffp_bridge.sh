@@ -15,14 +15,13 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster'
+EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
-SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----10000_chkpt"
-# SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
+SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
-DATASET_NAME="libero_spatial"
-DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
+DATASET_NAME="bridge_orig"
+DATASET_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl"
 VLA_NAME="vla-adapter"
 NUM_GPUS=8
 # If you want to use 2*8 GPU to RL. Set NUM_NODES=2
@@ -34,19 +33,19 @@ ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000118000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000292000.pt"
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_libero_2025-10-17_08-48-00/checkpoints/model/iter_000018000.pt"
+DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/predict2_video2world_2b_action_conditioned_finetuning_bridge_2025-10-19_17-40-10/checkpoints/model/iter_000034000.pt"
 VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
     data.libero_raw_data_dir=$DATASET_PATH \
     data.num_trials_per_task=50 \
-    data.n_samples=8 \
+    data.n_samples=4 \
     data.filter_accuracy=True \
-    data.accuracy_lower_bound=0.1 \
-    data.accuracy_upper_bound=0.9 \
+    data.accuracy_lower_bound=0.0 \
+    data.accuracy_upper_bound=1.0 \
     data.oversample_factor=1 \
-    data.train_batch_size=32 \
+    data.train_batch_size=8 \
     data.val_batch_size=496 \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
@@ -120,13 +119,14 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.world_model.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.world_model.use_history=True \
     actor_rollout_ref.world_model.history_video_length=60 \
+    actor_rollout_ref.world_model.unnorm_key=$DATASET_NAME \
     trainer.logger=['console','tensorboard'] \
     trainer.project_name=$PROJECT_NAME \
     trainer.experiment_name=$EXPERIMENT_NAME \
     trainer.default_local_dir=$CKPT_PATH/$PROJECT_NAME/$EXPERIMENT_NAME \
     trainer.n_gpus_per_node=$NUM_GPUS \
     trainer.nnodes=$NUM_NODES \
-    trainer.save_freq=10 \
+    trainer.save_freq=500 \
     trainer.test_freq=10 \
     trainer.total_epochs=1000 \
     trainer.val_only=False \
@@ -136,6 +136,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
