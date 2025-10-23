@@ -1,0 +1,30 @@
+{
+    "bridge-rm1": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm1",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm1/train_rm_1770.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 1770
+    },
+    "bridge-rm2": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm2",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm1/train_rm_1770.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 1770
+    },
+    "bridge-rm3": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm3",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm1/train_rm_1770.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 1770
+    },
+    "bridge-rm4": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm4",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_for_wm_train_jsonl_bridge_4tasks/rm1/train_rm_1770.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 1770
+    }
+}
