@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-spatial'
+EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-spatial-1023'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
@@ -34,7 +34,7 @@ ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000118000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000292000.pt"
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_libero_2025-10-17_08-48-00/checkpoints/model/iter_000018000.pt"
+DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/pretrain/predict2_video2world_2b_action_conditioned_finetuning_libero_2025-10-22_01-04-32/checkpoints/model/iter_000034000.pt"
 VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
