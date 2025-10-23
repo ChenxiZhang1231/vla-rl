@@ -200,6 +200,8 @@ class Bridge_Dataset(Dataset):
         
         for data_item in data_list:
             task_language = data_item['task_language']
+            if 'carrot' not in task_language[0]:
+                continue
             init_state_path = os.path.join(self.data_dir,  data_item['init_state_path'][0])
             image_pil = Image.open(init_state_path).convert("RGB")
             image = np.array(image_pil)

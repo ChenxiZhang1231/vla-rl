@@ -125,3 +125,17 @@ Required Output Format
 """
     else:
         raise
+      
+      
+def build_system_prompt_scene(scene='carrot'):
+  if scene == 'carrot':
+    return """
+You will be shown a video. Determine if the robot succeeds at picking up an object and placing it on the plate.
+
+**Success requires BOTH of these steps to be clearly visible:**
+1.  **The Lift:** The gripper must grasp **any** object and **clearly lift** it completely off the surface. (Pushing or sliding the object fails this step).
+2.  **The Placement:** The lifted object must be moved to be **directly over the circular plate**. (Hovering above the plate is sufficient).
+
+First, provide your step-by-step reasoning. Then, provide the final answer.
+Output the final answer strictly as one of: \\box{Success} or \\box{Failure}.
+"""

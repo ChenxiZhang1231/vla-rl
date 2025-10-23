@@ -895,7 +895,7 @@ class RobHFRollout(BaseRollout):
                             # "libero_10": 1024,        # max step length 505
                             "libero_10": 560,        # max step length 505
                             "libero_90": 512,         # max step length 373 org 400 now change to 512
-                            "bridge_orig": 100,
+                            "bridge_orig": 30,
                         }
         if self.config.vla in ["smolvla"]:
             self.processor = None
@@ -3875,7 +3875,7 @@ class RobHFRollout(BaseRollout):
             step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
             # step_data["lang_tokens"] = vla_output["lang_tokens"]
             # step_data["lang_masks"] = vla_output["lang_masks"]
-            # step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in inputs])).to(vla_output["action_tensor"].device)
+            step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in inputs])).to(vla_output["action_tensor"].device)
 
             vla_history.append(step_data)
             if self.world_model is None:
@@ -3971,7 +3971,7 @@ class RobHFRollout(BaseRollout):
         batch = {"input_ids":[], 
                 "attention_mask": [],
                 # "pixel_values": [], 
-                # "full_image": [],
+                "full_image": [],
                 "x_t": [],
                 "t": [],
                 "x_next": [],
@@ -3982,7 +3982,7 @@ class RobHFRollout(BaseRollout):
                     
         for k in ["input_ids", "attention_mask",
                 #   "pixel_values", 
-                #   "full_image",
+                  "full_image",
                   "action_tensor", "x_t", "t", "x_next"]:
             for h in vla_history:
                 batch[k].append(h[k])
@@ -4001,10 +4001,10 @@ class RobHFRollout(BaseRollout):
         
         batch["complete"] = torch.tensor(batch["complete"], dtype=torch.bool, device=batch['action_tensor'].device)
         batch["finish_step"] = torch.tensor(batch["finish_step"], dtype=torch.int64, device=batch['action_tensor'].device)
-        full_trajectory_video = np.flip(full_trajectory_video, axis=3).copy()
+        # full_trajectory_video = np.flip(full_trajectory_video, axis=3).copy()
         batch["step_images"] = torch.from_numpy(full_trajectory_video[:, :max_steps]).to(dtype=torch.uint8, device=batch['action_tensor'].device)
         batch["step_images_mask"] = torch.ones([batch_size, max_steps], dtype=torch.int64, device=batch['action_tensor'].device)
-        
+        # breakpoint()
         output_batch = TensorDict(
             batch,
             batch_size=batch_size)
