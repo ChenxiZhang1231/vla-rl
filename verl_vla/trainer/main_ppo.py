@@ -1829,7 +1829,7 @@ class RobVLMRewardManager():
         data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['complete'] = complete
         data.batch['finish_step'] = finish_step
-        if not self.gen_data_for_wm_rm:
+        if (not self.gen_data_for_wm_rm) and (self.env_rollout):
             data.batch['complete_env'] = complete_env
             data.batch['finish_step_env'] = finish_step_env
         
@@ -1838,7 +1838,7 @@ class RobVLMRewardManager():
         reward_format_metrics = {}
         # breakpoint()
         reward_metrics['all'] = data.batch['acc'].mean().item()
-        if not self.gen_data_for_wm_rm:
+        if (not self.gen_data_for_wm_rm) and (self.env_rollout):
             if self.return_env_score:
                 reward_metrics['rm'] = cls_stat
                 reward_metrics['rm_step'] = step_stat
