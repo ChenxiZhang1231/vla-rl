@@ -1091,7 +1091,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             x_t, return_dict = self.sample_action(all_hidden_states, action_head, noisy_action_projector, a_shape=a_shape)
         
         normalized_actions = x_t
-        normalized_actions = normalized_actions.reshape(-1, NUM_ACTIONS_CHUNK, ACTION_DIM)
+        normalized_actions = normalized_actions.reshape(-1, a_shape[0], ACTION_DIM)
         normalized_actions = normalized_actions.float().cpu().detach().numpy()
         
         return normalized_actions, return_dict
@@ -1161,7 +1161,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             # rearranged_actions_hidden_states = noisy_action_projector.module(x_t_)
             # proj = getattr(noisy_action_projector, "module", noisy_action_projector)
             rearranged_actions_hidden_states = self.noisy_action_projector(x_t_)
-            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
+            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, a_shape[0], -1)
             # v_t = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=expanded_time, proprio_states=None)
         
             # head = getattr(action_head, "module", action_head)

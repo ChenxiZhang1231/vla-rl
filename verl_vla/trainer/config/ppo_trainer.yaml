@@ -98,6 +98,7 @@ actor_rollout_ref:
     use_history: False
     history_video_length: 0
     env_rollout: False
+    unnorm_key: ""
     
     fsdp_config:
       model_dtype: bfloat16
