@@ -29,6 +29,7 @@ from verl_vla.utils.rm_utils.evo_vlac import GAC_model_client
 from swift.plugin import InferStats
 from swift.llm.infer.protocol import RequestConfig
 import copy
+import imageio
 
 from typing import List, Tuple, Optional, Dict
 import re
@@ -1591,18 +1592,29 @@ class RobVLMRewardManager():
         return length
 
     def _save_video_rgb_uint8(self, frames_uint8_rgb, path, fps: int = 10):
-        # frames_uint8_rgb: [T, H, W, 3], uint8, RGB
-        import cv2
-        T, H, W, C = frames_uint8_rgb.shape
+        """
+        Saves a video from a list of RGB uint8 frames using imageio.
+        
+        Args:
+            frames_uint8_rgb: A list or numpy array of frames. 
+                            Shape: [T, H, W, 3], dtype: uint8, color format: RGB.
+            path (str): The full path to save the MP4 file.
+            fps (int): The frames per second for the output video.
+        """
+        # Ensure the directory for the output file exists
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        vw = cv2.VideoWriter(path, fourcc, float(fps), (W, H))
-        if not vw.isOpened():
-            raise RuntimeError(f"Failed to open VideoWriter for {path}")
-        for t in range(T):
-            bgr = cv2.cvtColor(frames_uint8_rgb[t], cv2.COLOR_RGB2BGR)
-            vw.write(bgr)
-        vw.release()
+
+        # Use imageio.get_writer in a 'with' block.
+        # This automatically handles the opening and closing of the video file.
+        # It is more robust than calling writer.close() manually.
+        print(f"Saving video to {path} using imageio...")
+        with imageio.get_writer(path, fps=fps) as video_writer:
+            # Iterate through each frame
+            for frame in frames_uint8_rgb:
+                # Append the frame. imageio natively handles RGB numpy arrays.
+                video_writer.append_data(frame)
+        
+        print(f"Successfully saved video at path {path}")
         
     def verify(self, data, global_steps=-1):
         # breakpoint()
@@ -1620,6 +1632,7 @@ class RobVLMRewardManager():
             finish_step = torch.tensor([p if p != -1 else N - 1 for p in pred_finish], device=data.batch[self.data_key].device)
         
             complete = (torch.tensor(scores) == 1).to(device=data.batch[self.data_key].device)
+            breakpoint()
             if self.return_env_score:
                 cls_stat = self.compute_all_metrics(scores_gt, pred_success)
                 gt_finish = data.batch["finish_step_raw"]
@@ -1824,7 +1837,6 @@ class RobVLMRewardManager():
         # scores = score_env
         # finish_step = data.batch["finish_step_raw"]
         format = [1.0 for _ in range(len(scores))]
-
         data.batch['acc'] = torch.tensor(scores, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['format_correctness'] = torch.tensor(format, dtype=torch.float32, device=data.batch[self.data_key].device)
         data.batch['complete'] = complete
