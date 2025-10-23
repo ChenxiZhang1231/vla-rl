@@ -349,15 +349,10 @@ def main():
         'object':  {'baseline': object_baseline_event_path,   'flowscale': object_flowscale_event_path},
         'long':    {'baseline': long_baseline_event_path,     'flowscale': long_flowscale_event_path},
     }
-    res = compute_method_means(include, task_to_paths, max_step=200)
-    res['flowscale']['mean'][0] = 0.8004838728904724
+    res = compute_method_means(include, task_to_paths, max_step=400)
     
     plot_method_means(res, save_path='debug_avg_test.png', show=False, title='4-task avg (val/test)')
-    # plot_steps_values(
-    #     ret_dict,
-    #     save_path='debug.png',
-    #     show=False
-    # )
+
 
 if __name__ == "__main__":
     main()
