@@ -946,6 +946,7 @@ class RobVLMRewardManager():
         self.vote_m = self.config.reward_model.vote_m
         self.temperature = self.config.reward_model.temperature
         self.top_p = self.config.reward_model.top_p
+        self.bridge_scene = self.config.data.bridge_scene
 
     def verify_env(self, data):
         completes = data.batch['complete_raw'].tolist()
@@ -1179,14 +1180,18 @@ class RobVLMRewardManager():
         'frame_step{step_id}-<image>'，不使用 system prompt。
         注意：这里的 step_ids 必须与后续附加的图片顺序一一对应。
         """
-        if 'carrot' in task_lang:
-            scene = 'carrot'
+        if ('carrot' in task_lang) and ('plate' in task_lang):
+            scene = 'PutCarrotOnPlateInScene'
+        elif ('spoon' in task_lang) and ('cloth' in task_lang):
+            scene = 'PutSpoonOnTableClothInScene'
+        elif 'eggplant' in task_lang:
+            scene = 'PutEggplantInBasketScene'
         else:
-            raise
+            scene = 'StackGreenCubeOnYellowCubeBakedTexInScene'
+            
         prompt = build_system_prompt_scene(scene)
         frame_str = "".join([f"frame_step{sid}-<image>\n" for sid in step_ids])
         return f"{prompt}\nTask: {task_lang}\n{frame_str}"
-
 
     def build_question_ref(self, task_lang: str, step_ids: list[int], ref_step_ids: list[int]) -> str:
         """
@@ -1689,7 +1694,6 @@ class RobVLMRewardManager():
             scores_gt = None
             
         if not self.gen_data_for_wm_rm:
-            # breakpoint()
             step_images = data.batch["step_images"]
             step_images_mask = data.batch["step_images_mask"]
             pred_success, pred_finish, pred_text = self.get_reward(data, step_images, step_images_mask)

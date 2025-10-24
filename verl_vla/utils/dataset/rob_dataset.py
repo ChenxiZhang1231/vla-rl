@@ -179,12 +179,14 @@ class LIBERO_Dataset(Dataset):
 class Bridge_Dataset(Dataset):
     def __init__(self,
                  task_suite_name,
+                 bridge_scene,
                  use_world_model = False,
                  train_val = "train",
                  data_dir = "",
                  ):
         
         self.task_suite_name = task_suite_name  
+        self.bridge_scene = bridge_scene
         self.use_world_model = use_world_model
         self.train_val = train_val
         self.data_dir = data_dir
@@ -200,8 +202,9 @@ class Bridge_Dataset(Dataset):
         
         for data_item in data_list:
             task_language = data_item['task_language']
-            if 'carrot' not in task_language[0]:
-                continue
+            if self.bridge_scene != "joint":
+                if self.bridge_scene not in data_item['task_type']:
+                    continue
             init_state_path = os.path.join(self.data_dir,  data_item['init_state_path'][0])
             image_pil = Image.open(init_state_path).convert("RGB")
             image = np.array(image_pil)

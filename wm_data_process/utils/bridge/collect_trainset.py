@@ -38,6 +38,23 @@ def keyword_fuzzy_match(text, keywords, fuzz_threshold=70):
             return True, float(score), kw
     return False, 0.0, None
 
+def _first_pos(text: str, patterns):
+    """返回 text 中任一 pattern 的最早出现位置；若都不存在返回 -1。"""
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    best = -1
+    for p in patterns:
+        # 用 \b 保证按词匹配；对含空格的短语去掉 \b 限制
+        if " " in p:
+            m = re.search(re.escape(p), text)
+        else:
+            m = re.search(rf"\b{re.escape(p)}\b", text)
+        if m:
+            pos = m.start()
+            if best == -1 or pos < best:
+                best = pos
+    return best
+
 def keyword_fuzzy_match_exact(text, keywords, task):
     text_n = normalize(text)
     if task == 'StackGreenCubeOnYellowCubeBakedTexInScene':
@@ -45,6 +62,23 @@ def keyword_fuzzy_match_exact(text, keywords, task):
             if kw in text_n:
                 return True, 100.0, kw
         return False, 0.0, kw 
+    elif task == 'PutSpoonOnTableClothInScene':
+        for kw in keywords:
+            if kw not in text_n:
+                return False, 0.0, kw
+
+        spoon_pos = _first_pos(text_n, ["spoon"])
+        cloth_pos = _first_pos(text_n, ["cloth"])
+
+        if spoon_pos == -1:
+            return False, 0.0, "spoon"
+        if cloth_pos == -1:
+            return False, 0.0, "cloth"
+
+        if spoon_pos < cloth_pos:
+            return True, 100.0, "spoon->cloth"
+        else:
+            return False, 0.0, "order(spoon_before_cloth)"
     else:
         for kw in keywords:
             if kw not in text_n:
@@ -144,10 +178,11 @@ def main():
     entry_final = []
     for name in group_task.keys():
         entry_list = group_task[name]
-        entry_sample = random.sample(entry_list, 100)
+        # entry_sample = random.sample(entry_list, 100)
+        entry_sample = entry_list
         entry_final.extend(entry_sample)
     
-    entry_path = args.output_dir / 'dataset.jsonl'
+    entry_path = args.output_dir / 'dataset_only_spoon.jsonl'
     with open(entry_path, "w", encoding="utf-8") as f:
         for item in entry_final:
             json.dump(item, f, ensure_ascii=False)

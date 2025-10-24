@@ -15,12 +15,14 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge'
+EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="bridge_orig"
+# PutSpoonOnTableClothInScene, StackGreenCubeOnYellowCubeBakedTexInScene, PutCarrotOnPlateInScene, PutEggplantInBasketScene
+SCENE_NAME="PutSpoonOnTableClothInScene"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl"
 VLA_NAME="vla-adapter"
 NUM_GPUS=8
@@ -38,9 +40,10 @@ VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.task_suite_name=$DATASET_NAME \
+    data.bridge_scene=$SCENE_NAME \
     data.libero_raw_data_dir=$DATASET_PATH \
     data.num_trials_per_task=50 \
-    data.n_samples=4 \
+    data.n_samples=8 \
     data.filter_accuracy=True \
     data.accuracy_lower_bound=0.1 \
     data.accuracy_upper_bound=0.9 \
