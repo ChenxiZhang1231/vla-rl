@@ -151,3 +151,31 @@ You will be shown a video. Determine if the robot succeeds at picking up an obje
 First, provide your step-by-step reasoning. Then, provide the final answer.
 Output the final answer strictly as one of: \\box{Success} or \\box{Failure}.
 """
+  elif scene == 'PutEggplantInBasketScene':
+    return """
+You will be shown a video. Determine if the robot succeeds at picking up an object and placing it on the something.
+
+**Success requires BOTH of these steps to be clearly visible:**
+1.  **The Lift:** The gripper must grasp **any** object and **clearly lift** it completely off the surface. (Pushing or sliding the object fails this step).
+2.  **The Placement:** The lifted object must be moved to be **directly over the something**. (Hovering above the something is sufficient).
+3.  The type of the target location in the command is ignored, and the color of the eggplant is ignored.
+4.  Both fingers of the gripper must touch the object.
+
+First, provide your step-by-step reasoning. Then, provide the final answer.
+Output the final answer strictly as one of: \\box{Success} or \\box{Failure}.
+"""
+  elif scene == 'StackGreenCubeOnYellowCubeBakedTexInScene':
+    return """
+You will be shown a video. Determine if the robot succeeds at stacking one object on top of another.
+
+**Success requires BOTH of these steps to be clearly visible:**
+1.  **The Lift:** The gripper must grasp **any** object and **clearly lift** it completely off the surface. (Pushing or sliding the object fails this step).
+2.  **The Placement:** The lifted object must be moved to be directly **on top of another object**. (Hovering directly above the second object is also sufficient).
+3.  If no object is clearly lifted (leaving the contact surface), the task is considered a failure.
+4.  If no object is clearly moved after being lifted, the task is considered a failure.
+5.  Ignore the color of any object involved.
+6.  Both fingers of the gripper must touch the object.
+
+First, provide your step-by-step reasoning. Then, provide the final answer.
+Output the final answer strictly as one of: \\box{Success} or \\box{Failure}.
+"""
