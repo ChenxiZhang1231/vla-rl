@@ -3,12 +3,12 @@
 # lrm_wm2
 
 GPUS=${GPUS:-8}
-BATCH_SIZE=${BATCH_SIZE:-32}
-PER_DEVICE_BATCH_SIZE=${PER_DEVICE_BATCH_SIZE:-4}
+BATCH_SIZE=${BATCH_SIZE:-128}
+PER_DEVICE_BATCH_SIZE=${PER_DEVICE_BATCH_SIZE:-8}
 GRADIENT_ACC=$((BATCH_SIZE / PER_DEVICE_BATCH_SIZE / GPUS))
 
 MODEL_NAME="/inspire/ssd/project/robotsimulation/public/huggingface_models/Qwen2.5-VL-7B-Instruct"
-OUTPUT_DIR='work_dirs/qwen2.5-vl-7b-sft-full-bridge-total-wm'
+OUTPUT_DIR='work_dirs/qwen2.5-vl-7b-sft-full-libero-total-wm-bs128'
 
 if [ ! -d "$OUTPUT_DIR" ]; then
   mkdir -p "$OUTPUT_DIR"
