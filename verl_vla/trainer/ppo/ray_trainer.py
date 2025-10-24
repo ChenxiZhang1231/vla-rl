@@ -493,7 +493,7 @@ class RayTrainer(object):
         # TODO: we have to make sure the batch size is divisible by the dp size
         from verl_vla.utils.dataset.rob_dataset import LIBERO_Dataset, Bridge_Dataset, collate_fn
         if self.config.data.task_suite_name == 'bridge_orig':
-            assert self.config.data.bridge_scene != ""
+            # assert self.config.data.bridge_scene != ""
             self.train_dataset = Bridge_Dataset(self.config.data.task_suite_name,
                                                 self.config.data.bridge_scene,
                                                 data_dir=self.config.data.libero_raw_data_dir,

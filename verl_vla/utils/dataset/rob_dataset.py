@@ -179,7 +179,7 @@ class LIBERO_Dataset(Dataset):
 class Bridge_Dataset(Dataset):
     def __init__(self,
                  task_suite_name,
-                 bridge_scene,
+                 bridge_scene = 'joint',
                  use_world_model = False,
                  train_val = "train",
                  data_dir = "",
