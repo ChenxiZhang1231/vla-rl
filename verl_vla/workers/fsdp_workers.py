@@ -967,6 +967,22 @@ class RobActorRolloutRefWorker(Worker):
             # breakpoint()
             if self.config.model.load_ckpt != "":
                 self.checkpoint_manager.load_checkpoint(local_path=self.config.model.load_ckpt)
+                if self.config.model.merge_save_ckpt_only:
+                    from pathlib import Path
+                    rank = torch.distributed.get_rank()
+                    full_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                    with FSDP.state_dict_type(self.actor_module_fsdp, StateDictType.FULL_STATE_DICT, full_cfg):
+                        full_sd = self.actor_module_fsdp.state_dict()
+                    if rank == 0:
+                        out = Path(self.config.model.merged_out)
+                        out.parent.mkdir(parents=True, exist_ok=True)
+                        torch.save(full_sd, out)
+                        print(f"[rank0] merged model state_dict saved to: {out} (keys={len(full_sd)})")
+                    
+                    torch.distributed.barrier()
+                    raise 
+                    
+                
             # breakpoint()
             # import threading
             # self._save_req  = threading.Event()

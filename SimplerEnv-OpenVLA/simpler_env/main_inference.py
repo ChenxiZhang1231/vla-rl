@@ -88,6 +88,7 @@ if __name__ == "__main__":
             saved_model_path=args.ckpt_path,
             policy_setup=args.policy_setup,
             action_scale=args.action_scale,
+            load_ckpt_path=args.load_ckpt_path
         )
     elif args.policy_model == "openpifast":
         assert args.ckpt_path is not None

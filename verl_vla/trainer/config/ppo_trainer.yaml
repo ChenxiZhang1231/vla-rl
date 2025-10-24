@@ -31,6 +31,8 @@ actor_rollout_ref:
     path: ~/models/deepseek-llm-7b-chat
     meta_path: ""
     load_ckpt: ""
+    merge_save_ckpt_only: False
+    merged_out: ""
     external_lib: null
     override_config: { }
     enable_gradient_checkpointing: False

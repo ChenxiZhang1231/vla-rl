@@ -30,6 +30,7 @@ class VLAAdapterInference:
         image_size: list[int] = [224, 224],
         action_scale: float = 1.0,
         action_ensemble_temp: float = -0.8,
+        load_ckpt_path: str = None,
     ) -> None:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if policy_setup == "widowx_bridge":
@@ -90,7 +91,7 @@ class VLAAdapterInference:
         self.noisy_action_projector = vla.noisy_action_projector
 
         action_head = FlowMatchingActionHead(
-                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS
+                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS, num_actions=NUM_ACTIONS_CHUNK,
             ).to(dtype=torch.bfloat16)
         action_head_path = find_checkpoint_file(saved_model_path, "action_head")
         action_head_state_dict = load_component_state_dict(action_head_path)
@@ -99,6 +100,10 @@ class VLAAdapterInference:
         vla.action_head = action_head
         self.action_head = vla.action_head
         
+        if load_ckpt_path is not None:
+            model_state = torch.load(load_ckpt_path, map_location="cpu")
+            vla.load_state_dict(model_state, strict=True)
+            print(load_ckpt_path)
         self.vla = (
             vla
             .eval()
