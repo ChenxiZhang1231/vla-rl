@@ -1,0 +1,30 @@
+{
+    "sft-rm-10": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_10",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_10/data.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 13576
+    },
+    "sft-rm-spatial": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_spatial",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_spatial/data.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 36209
+    },
+    "sft-rm-goal": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_goal",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_goal/data.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 18101
+    },
+    "sft-rm-object": {
+      "root": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_object",
+      "annotation": "/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_object/data.jsonl",
+      "data_augment": false,
+      "repeat_time": 1,
+      "length": 15590
+    }
+}
