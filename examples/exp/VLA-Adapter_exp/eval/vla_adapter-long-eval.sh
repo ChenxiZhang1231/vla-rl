@@ -12,7 +12,7 @@ export MUJOCO_GL="egl"
 PROJECT_NAME='SimpleVLA-RL'
 # EXPERIMENT_NAME='vla_adapter-long-eval-1w'  # 40
 # EXPERIMENT_NAME='vla_adapter-long-eval-5w'  # 69
-EXPERIMENT_NAME='vla_adapter-long-eval-10w'  # 0.8024193644523621
+EXPERIMENT_NAME='eval_long_1-10w'  # 0.8024193644523621
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----100000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"

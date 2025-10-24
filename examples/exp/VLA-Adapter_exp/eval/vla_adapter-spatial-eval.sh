@@ -11,11 +11,12 @@ export MUJOCO_GL="egl"
 
 PROJECT_NAME='SimpleVLA-RL'
 # EXPERIMENT_NAME='vla_adapter-spatial-eval-1w-repeat-2'
-EXPERIMENT_NAME='debug'
+EXPERIMENT_NAME='eval_spatial_7_fs'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_spatial_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_spatial_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
+LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp3-vla_adapter-spatial-kl-ffp-fp16-1w-faster-full-fixedbug-repeat/SimpleVLA-RL/exp3-vla_adapter-spatial-kl-ffp-fp16-1w-faster-full-fixedbug-repeat/actor/global_step_359"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_spatial"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
@@ -39,7 +40,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     data.max_prompt_length=256 \
     data.max_response_length=128 \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
-    actor_rollout_ref.model.meta_path=$META_PATH \
+    actor_rollout_ref.model.load_ckpt=$LOAD_MODEL_PATH \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
     actor_rollout_ref.model.action_chunks_len=20 \
