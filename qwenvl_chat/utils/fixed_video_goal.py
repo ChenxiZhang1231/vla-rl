@@ -134,8 +134,8 @@ def repair_videos_parallel(input_folder: str, output_folder: str, num_workers: i
 
 if __name__ == '__main__':
     # --- 请在这里配置您的文件夹路径 ---
-    SOURCE_FOLDER = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_spatial_repeat_rm_data"
-    DESTINATION_FOLDER = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_spatial_repeat_rm_data-fixedbug"
+    SOURCE_FOLDER = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_goal_repeat_rm_data"
+    DESTINATION_FOLDER = "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_goal_repeat_rm_data-fixedbug"
 
     # --- 配置并行数量 ---
     # 设置为 None 来使用所有 CPU 核心。

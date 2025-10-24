@@ -260,9 +260,9 @@ def run_parallel_processing(args):
     
 def main():
     parser = argparse.ArgumentParser(description="Evaluate reward model on rollout videos.")
-    parser.add_argument("--video_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_spatial_repeat_rm_data-fixedbug",
+    parser.add_argument("--video_folder", type=str, default="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/gen_rm_for_wm_goal_repeat_rm_data-fixedbug",
                         help="")
-    parser.add_argument("--output_dir", type=str, default="/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_spatial", help="")
+    parser.add_argument("--output_dir", type=str, default="/inspire/ssd/project/robotsimulation/public/data/rm_train_jsonl_wm/rm_train_goal", help="")
     parser.add_argument("--num_frames", type=int, default=50, help="")
     parser.add_argument("--task_name", type=str, default="libero_spatial", help="benchmark 名")
     args = parser.parse_args()
