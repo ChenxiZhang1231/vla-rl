@@ -1166,8 +1166,8 @@ def finetune(cfg: FinetuneConfig) -> None:
                     vla=vla,
                     processor=processor,
                     proprio_projector=proprio_projector if cfg.use_proprio else None,
-                    noisy_action_projector=noisy_action_projector if cfg.use_diffusion else None,
-                    action_head=action_head if (cfg.use_l1_regression or cfg.use_diffusion) else None,
+                    noisy_action_projector=noisy_action_projector,
+                    action_head=action_head,
                     train_dataset=train_dataset,
                     distributed_state=distributed_state,
                 )
