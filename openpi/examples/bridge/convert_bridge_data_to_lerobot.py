@@ -1,23 +1,4 @@
-"""
-Minimal example script for converting a dataset to LeRobot format.
-
-We use the Libero dataset (stored in RLDS) for this example, but it can be easily
-modified for any other data you have saved in a custom format.
-
-Usage:
-uv run examples/libero/convert_libero_data_to_lerobot.py --data_dir /path/to/your/data
-
-If you want to push your dataset to the Hugging Face Hub, you can use the following command:
-uv run examples/libero/convert_libero_data_to_lerobot.py --data_dir /path/to/your/data --push_to_hub
-
-Note: to run the script, you need to install tensorflow_datasets:
-`uv pip install tensorflow tensorflow_datasets`
-
-You can download the raw Libero datasets from https://huggingface.co/datasets/openvla/modified_libero_rlds
-The resulting dataset will get saved to the $HF_LEROBOT_HOME directory.
-Running this conversion script will take approximately 30 minutes.
-"""
-
+# lrm
 import shutil
 import sys
 sys.path.append('/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/lerobot/src')
@@ -26,8 +7,9 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 from pathlib import Path
+import numpy as np
 
-REPO_NAME = "/inspire/ssd/project/robotsimulation/public/data/bridge/bridge_orig_lerobot"  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "/inspire/ssd/project/robotsimulation/public/data/bridge/bridge_orig_lerobot_new"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
     "bridge_orig",
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
@@ -72,18 +54,61 @@ def main(*, push_to_hub: bool = False):
     for raw_dataset_name in RAW_DATASET_NAMES:
         raw_dataset = tfds.load(raw_dataset_name, data_dir=data_dir, split="train")
         for episode in raw_dataset:
-            for step in episode["steps"].as_numpy_iterator():
-                
+            steps_iter = episode["steps"].as_numpy_iterator()
+            try:
+                curr = next(steps_iter)
+            except StopIteration:
+                continue
+            
+            for nxt in steps_iter:
+                curr_img   = curr["observation"]["image_0"]          # (256,256,3), uint8
+                curr_state = curr["observation"]["state"].astype(np.float32)  # (7,)
+                next_state = nxt["observation"]["state"].astype(np.float32)   # (7,)
+                delta = next_state - curr_state                                     # (7,)
+                delta[-1] = curr["action"][-1]
+
+                lang = curr["language_instruction"]
+                if isinstance(lang, (bytes, bytearray)):
+                    lang = lang.decode()
+
                 dataset.add_frame(
                     {
-                        "image": step["observation"]["image_0"],
-                        "state": step["observation"]["state"],
-                        "actions": step["action"],
-                        # "task": step["language_instruction"].decode(),
+                        "image":   curr_img,
+                        "state":   curr_state,
+                        "actions": delta,           # 用 delta 代替原 action
                     },
-                    task=step["language_instruction"].decode()
+                    task=lang,
                 )
+                curr = nxt
+                
+                
+            last_img   = curr["observation"]["image_0"]
+            last_state = curr["observation"]["state"].astype(np.float32)
+            last_lang  = curr["language_instruction"]
+            if isinstance(last_lang, (bytes, bytearray)):
+                last_lang = last_lang.decode()
+
+            dataset.add_frame(
+                {
+                    "image":   last_img,
+                    "state":   last_state,
+                    "actions": np.zeros_like(last_state, dtype=np.float32),
+                },
+                task=last_lang,
+            )
+
             dataset.save_episode()
+            
+            #     dataset.add_frame(
+            #         {
+            #             "image": step["observation"]["image_0"],
+            #             "state": step["observation"]["state"],
+            #             "actions": step["action"],
+            #             # "task": step["language_instruction"].decode(),
+            #         },
+            #         task=step["language_instruction"].decode()
+            #     )
+            # dataset.save_episode()
 
     # Optionally push to the Hugging Face Hub
     # if push_to_hub:
