@@ -20,14 +20,14 @@ tasks=(
 # tag=bridge_ck5_200k_rl_carrot_9steps
 ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt
 tags=(
-    bridge_ck5_200k_rl_joint_9steps_repeat1
-    bridge_ck5_200k_rl_joint_9steps_repeat2
-    bridge_ck5_200k_rl_joint_9steps_repeat3
-    bridge_ck5_200k_rl_joint_9steps_repeat4
-    bridge_ck5_200k_rl_joint_9steps_repeat5
+    bridge_ck5_200k_rl_joint_filter_39steps_repeat1
+    bridge_ck5_200k_rl_joint_filter_39steps_repeat2
+    bridge_ck5_200k_rl_joint_filter_39steps_repeat3
+    bridge_ck5_200k_rl_joint_filter_39steps_repeat4
+    bridge_ck5_200k_rl_joint_filter_39steps_repeat5
 )
 
-load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint/step9.pt"
+load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step39.pt"
 
 action_ensemble_temp=0.0
 for tag in ${tags[@]}; do
