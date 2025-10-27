@@ -363,6 +363,7 @@ class LeRobotBridgeDataConfig(DataConfigFactory):
     """
 
     extra_delta_transform: bool = False
+    action_sequence_keys: Sequence[str] = ("action", "observation.state")
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -378,10 +379,10 @@ class LeRobotBridgeDataConfig(DataConfigFactory):
             inputs=[
                 _transforms.RepackTransform(
                     {
-                        "observation/image": "image",
+                        "observation/image": "observation.images.image_0",
                         # "observation/wrist_image": "wrist_image",
-                        "observation/state": "state",
-                        "actions": "actions",
+                        "observation/state": "observation.state",
+                        "actions": "action",
                         "prompt": "prompt",
                     }
                 )
@@ -428,6 +429,7 @@ class LeRobotBridgeDataConfig(DataConfigFactory):
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
+            action_sequence_keys=self.action_sequence_keys,
         )
 
 
@@ -832,9 +834,9 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi05_bridge",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=5, discrete_state_input=False),
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=6, discrete_state_input=False),
         data=LeRobotBridgeDataConfig(
-            repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge/bridge_orig_lerobot",
+            repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge_copy/bridge_orig_lerobot",
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
         ),
@@ -850,7 +852,7 @@ _CONFIGS = [
         # weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/ssd/project/robotsimulation/public/huggingface_models/pi05_base"),
         pytorch_weight_path="/inspire/ssd/project/robotsimulation/public/huggingface_models/pi05_base_torch",
         num_train_steps=400_000,
-        num_workers=4,
+        num_workers=12,
         wandb_enabled=False,
     ),
     #

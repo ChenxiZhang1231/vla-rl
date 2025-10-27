@@ -66,9 +66,93 @@ def decode_video_frames(
         return decode_video_frames_torchcodec(video_path, timestamps, tolerance_s)
     elif backend in ["pyav", "video_reader"]:
         return decode_video_frames_torchvision(video_path, timestamps, tolerance_s, backend)
+    elif backend in ["decord"]:
+        return decode_video_frames_decord(video_path, timestamps, tolerance_s)
     else:
         raise ValueError(f"Unsupported video backend: {backend}")
 
+
+
+def decode_video_frames_decord(
+    video_path: Path | str,
+    timestamps: list[float],
+    tolerance_s: float,
+    log_loaded_timestamps: bool = False,
+    use_gpu: bool = True,
+    num_threads: int = 2,
+) -> torch.Tensor:
+    """
+    用 decord 按时间戳加载视频帧。
+    - 返回: torch.Tensor, 形状 [N, C, H, W], float32, [0,1]
+    - 容忍度: 若最近帧与请求时间戳之差 >= tolerance_s，则抛出 AssertionError
+    - GPU: 若 use_gpu 且可用，则用 NVDEC 并直接输出 torch 张量
+    """
+
+    video_path = str(video_path)
+    decord.bridge.set_bridge('torch')
+
+    # 选择上下文（尽量用 GPU）
+    # try:
+    #     ctx = decord.gpu(0) if use_gpu else decord.cpu(0)
+    #     # 触发一次以确保 GPU 可用；若失败会走 except
+    #     _ = ctx.device_id if use_gpu else None
+    # except Exception:
+    #     logging.warning("decord GPU 不可用，回退到 CPU 解码")
+    #     ctx = decord.cpu(0)
+    ctx = decord.cpu(0)
+
+
+    vr = decord.VideoReader(video_path, ctx=ctx, num_threads=num_threads)
+    fps = float(vr.get_avg_fps())
+    n_frames = len(vr)
+
+    # 初步用 fps 将时间戳映射到帧索引（近似），随后在小窗口内精修，兼容 VFR
+    ts = torch.tensor(timestamps, dtype=torch.float64)
+    rough_idx = torch.clamp((ts * fps).round().long(), 0, n_frames - 1)
+
+    def frame_ts(i: int) -> float:
+        # decord 返回 [start, end)，用开始时间作该帧时间戳
+        start_end = vr.get_frame_timestamp(int(i))
+        return float(start_end[0])
+
+    # 在每个粗索引的 +-2 帧窗口内寻找与目标时间最近的帧，提升时间精度
+    window = 2
+    final_indices = []
+    final_times = []
+    for t, ridx in zip(ts.tolist(), rough_idx.tolist()):
+        cands = list(range(max(0, ridx - window), min(n_frames - 1, ridx + window) + 1))
+        # 计算候选帧到目标时间的绝对差，选最小者
+        cand_times = [frame_ts(i) for i in cands]
+        diffs = [abs(ct - t) for ct in cand_times]
+        best_j = int(min(range(len(diffs)), key=lambda j: diffs[j]))
+        final_indices.append(cands[best_j])
+        final_times.append(cand_times[best_j])
+
+    final_indices_t = torch.tensor(final_indices, dtype=torch.int64)
+
+    # 容忍度校验
+    diff = torch.tensor(final_times, dtype=torch.float64) - ts
+    within = diff.abs() < float(tolerance_s)
+    assert within.all(), (
+        "Some query timestamps violate tolerance: "
+        f"{diff[~within].tolist()}  > tolerance_s={tolerance_s}\n"
+        f"queried: {ts.tolist()}\n"
+        f"loaded : {final_times}\n"
+        f"video  : {video_path}\n"
+        f"backend: decord (use_gpu={use_gpu})"
+    )
+
+    if log_loaded_timestamps:
+        logging.info(f"loaded timestamps (s): {final_times}")
+
+    # 批量取帧（decord+torch bridge：返回 NHWC）
+    frames = vr.get_batch(final_indices_t)  # [N, H, W, C], torch.Tensor (GPU/CPU)
+    # 转为 NCHW、float32、[0,1]
+    frames = frames.permute(0, 3, 1, 2).contiguous().to(dtype=torch.float32) / 255.0
+
+    # 与原函数行为一致性校验
+    assert len(timestamps) == frames.shape[0]
+    return frames
 
 def decode_video_frames_torchvision(
     video_path: Path | str,
