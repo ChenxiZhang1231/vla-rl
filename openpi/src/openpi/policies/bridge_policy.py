@@ -54,7 +54,7 @@ class BridgeInputs(transforms.DataTransformFn):
 
         # Create inputs dict. Do not change the keys in the dict below.
         inputs = {
-            "state": data["observation/state"],
+            "state": np.zeros_like(data["observation/state"]),
             "image": {
                 "base_0_rgb": base_image,
                 "left_wrist_0_rgb": np.zeros_like(base_image),
@@ -72,7 +72,10 @@ class BridgeInputs(transforms.DataTransformFn):
         # Pad actions to the model action dimension. Keep this for your own dataset.
         # Actions are only available during training.
         if "actions" in data:
-            inputs["actions"] = data["actions"]
+            state = data["observation/state"]
+            action = data["actions"][:-1, :]
+            action[:, :6] = (state[1:, :] - state[:-1, :])[:, :6]
+            inputs["actions"] = action
 
         # Pass the prompt (aka language instruction) to the model.
         # Keep this for your own dataset (but modify the key if the instruction is not
@@ -97,4 +100,4 @@ class BridgeOutputs(transforms.DataTransformFn):
         # dimension, we need to now parse out the correct number of actions in the return dict.
         # For Bridge, we only return the first 7 actions (since the rest is padding).
         # For your own dataset, replace `7` with the action dimension of your dataset.
-        return {"actions": np.asarray(data["actions"][:, :7])}
+        return {"action": np.asarray(data["action"][:, :7])}

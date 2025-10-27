@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-object-1025'
+EXPERIMENT_NAME='exp1-vla_adapter_wm_ffp-full-fixedbug-faster-object-1025-repeat'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_object_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_object_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
@@ -93,13 +93,13 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.rollout.pretrained_checkpoint=$SFT_MODEL_PATH \
     actor_rollout_ref.rollout.center_crop=True \
     actor_rollout_ref.rollout.max_prompt_length=512 \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size=32 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size=16 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=hf \
     actor_rollout_ref.rollout.reward_type=vlm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.5 \
     actor_rollout_ref.rollout.n_gpus_per_node=$NUM_GPUS \
-    actor_rollout_ref.ref.log_prob_micro_batch_size=16 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size=8 \
     actor_rollout_ref.ref.fsdp_config.param_offload=False \
     actor_rollout_ref.ref.vla=$VLA_NAME \
     actor_rollout_ref.ref.fsdp_config.model_dtype=bfloat16 \
@@ -136,6 +136,6 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     algorithm.adv_params.reward_model_gamma=1.0 \
     trainer.runtime_env=$ALIGN_PATH \
     trainer.wandb_mode=online \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
