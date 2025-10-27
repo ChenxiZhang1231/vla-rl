@@ -90,6 +90,15 @@ if __name__ == "__main__":
             action_scale=args.action_scale,
             load_ckpt_path=args.load_ckpt_path
         )
+    elif args.policy_model == "openvla-oft":
+        assert args.ckpt_path is not None
+        from simpler_env.policies.openvla_oft_flow.openvla_oft_flow_model import OpenVLAOFTInference
+        model = OpenVLAOFTInference(
+            saved_model_path=args.ckpt_path,
+            policy_setup=args.policy_setup,
+            action_scale=args.action_scale,
+            load_ckpt_path=args.load_ckpt_path
+        )
     elif args.policy_model == "openpifast":
         assert args.ckpt_path is not None
         from simpler_env.policies.openpi.pi0_or_fast import OpenPiFastInference

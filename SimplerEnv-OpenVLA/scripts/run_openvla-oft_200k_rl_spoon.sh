@@ -1,8 +1,7 @@
-model_name=vla-adapter
+model_name=openvla-oft
 tasks=(
     # bridge_carrot.sh
-    # bridge_spoon.sh
-    bridge_eggplant.sh
+    bridge_spoon.sh
     # drawer_variant_agg.sh
     # drawer_visual_matching.sh
     # move_near_variant_agg.sh
@@ -18,16 +17,21 @@ tasks=(
 #     /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt # or a local path
 # )
 # tag=bridge_ck5_200k_rl_carrot_9steps
-ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt
+ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----20000_chkpt
+# tags=(
+#     bridge_ck5_200k_rl_spoon_29steps_repeat1
+#     bridge_ck5_200k_rl_spoon_29steps_repeat2
+#     bridge_ck5_200k_rl_spoon_29steps_repeat3
+#     bridge_ck5_200k_rl_spoon_29steps_repeat4
+#     bridge_ck5_200k_rl_spoon_29steps_repeat5
+# )
 tags=(
-    bridge_ck5_200k_rl_eggplant_49steps_repeat1
-    bridge_ck5_200k_rl_eggplant_49steps_repeat2
-    bridge_ck5_200k_rl_eggplant_49steps_repeat3
-    bridge_ck5_200k_rl_eggplant_49steps_repeat4
-    bridge_ck5_200k_rl_eggplant_49steps_repeat5
+    debug
 )
+export SAPIEN_RENDER_SYSTEM=cpu
+export SAPIEN_RENDER_DEVICE=cpu
 
-load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant/step49.pt"
+load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon/step29.pt"
 
 action_ensemble_temp=0.0
 for tag in ${tags[@]}; do

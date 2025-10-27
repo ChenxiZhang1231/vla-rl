@@ -381,7 +381,7 @@ class LeRobotBridgeDataConfig(DataConfigFactory):
                         "observation/image": "image",
                         # "observation/wrist_image": "wrist_image",
                         "observation/state": "state",
-                        "actions": "actions",
+                        "action": "actions",
                         "prompt": "prompt",
                     }
                 )
