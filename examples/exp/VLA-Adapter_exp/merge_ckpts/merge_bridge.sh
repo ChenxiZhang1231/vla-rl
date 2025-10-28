@@ -18,12 +18,12 @@ SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vl
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot/step69.pt"
 
 
-# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_29"
-# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon/step29.pt"
+LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_49"
+MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon/step49.pt"
 
 
-# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_19"
-# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant/step19.pt"
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_49"
+# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant/step49.pt"
 
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_29"

@@ -348,213 +348,52 @@ def run_forward_pass(
     current_action_mask = get_current_action_mask(ground_truth_token_ids)
     next_actions_mask = get_next_actions_mask(ground_truth_token_ids)
     # breakpoint()
-    # Compute metrics for discrete action representation (next-token prediction)
-    # if not (use_l1_regression or use_diffusion):
-    if False:
-        loss = output.loss
-        predicted_token_ids = output.logits[:, num_patches:-1].argmax(dim=2)
-        curr_action_accuracy = compute_token_accuracy(
-            predicted_token_ids, ground_truth_token_ids, mask=current_action_mask
-        )
-        curr_action_l1_loss = compute_actions_l1_loss(
-            action_tokenizer, predicted_token_ids, ground_truth_token_ids, mask=current_action_mask
-        )
-        next_actions_accuracy = compute_token_accuracy(
-            predicted_token_ids, ground_truth_token_ids, mask=next_actions_mask
-        )
-        next_actions_l1_loss = compute_actions_l1_loss(
-            action_tokenizer, predicted_token_ids, ground_truth_token_ids, mask=next_actions_mask
-        )
-        metrics.update(
-            {
-                "loss_value": loss.item(),  # Detached value for logging
-                "curr_action_accuracy": curr_action_accuracy.item(),
-                "curr_action_l1_loss": curr_action_l1_loss.item(),
-                "next_actions_accuracy": next_actions_accuracy.item(),
-                "next_actions_l1_loss": next_actions_l1_loss.item(),
-            }
-        )
-    # Compute metrics for continuous action representations (L1 regression | diffusion)
-    else:
-        # Get last layer hidden states
-        last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
-        # Get hidden states for text portion of prompt+response (after the vision patches)
-        text_hidden_states = last_hidden_states[:, num_patches:-1]
-        # Get hidden states for action portion of response
-        batch_size = batch["input_ids"].shape[0]
-        actions_hidden_states = (
-            text_hidden_states[current_action_mask | next_actions_mask]
-            .reshape(batch_size, NUM_ACTIONS_CHUNK * ACTION_DIM, -1)
-            .to(torch.bfloat16)
-        )  # (B, act_chunk_len, D)
 
-        if use_l1_regression:
-            # Predict action
-            predicted_actions = action_head.module.predict_action(actions_hidden_states)
-            # Get full L1 loss
-            loss = torch.nn.L1Loss()(ground_truth_actions, predicted_actions)
+    # Get last layer hidden states
+    last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
+    # Get hidden states for text portion of prompt+response (after the vision patches)
+    text_hidden_states = last_hidden_states[:, num_patches:-1]
+    # Get hidden states for action portion of response
+    batch_size = batch["input_ids"].shape[0]
+    actions_hidden_states = (
+        text_hidden_states[current_action_mask | next_actions_mask]
+        .reshape(batch_size, 1, NUM_ACTIONS_CHUNK * ACTION_DIM, -1)
+        .to(torch.bfloat16)
+    )  # (B, act_chunk_len, D)
+    
 
-        if use_diffusion:
-            # Predict noise
-            noise_pred = action_head.module.predict_noise(actions_hidden_states)
-            # Get diffusion noise prediction MSE loss
-            noise_pred = noise_pred.reshape(noise.shape)
-            loss = nn.functional.mse_loss(noise_pred, noise, reduction="mean")
+    
+    if use_flow:
+        # num_tokens = 64
+        B = ground_truth_actions.shape[0]
+        # actions_hidden_states = text_hidden_states[current_action_mask | next_actions_mask].reshape(B, 1,num_tokens, -1).to(torch.bfloat16)
+        task_latent_states = last_hidden_states[:, :num_patches].reshape(B, 1, num_patches, -1)
+        
+        all_hidden_states = torch.cat((task_latent_states, actions_hidden_states), 2)
+        
+        noise = action_head.module.sample_noise(ground_truth_actions.shape, ground_truth_actions.device)
+        time = action_head.module.sample_time(ground_truth_actions.shape[0], ground_truth_actions.device)
+        time_expanded = time[:, None, None]
+        u_t = noise - ground_truth_actions
+        
+        x_t = time_expanded * noise + (1 - time_expanded) * ground_truth_actions
+        x_t = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
+        rearranged_actions_hidden_states = noisy_action_projector(x_t)
+        rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
+        flow_pred = action_head.module.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=all_hidden_states,time_step=time, proprio_states=None)
+        loss = F.mse_loss(u_t, flow_pred, reduction="mean")
+        metrics["loss_value"] = loss.detach().float().item()
+    metrics.update(
+        {
+            "loss_value": loss.item(),  # Detached value for logging
+        }
+    )
 
-            # Only sample actions and compute L1 losses if specified
-            if compute_diffusion_l1:
-                with torch.no_grad():
-                    predicted_actions = run_diffusion_sampling(
-                        vla=vla,
-                        action_head=action_head,
-                        noisy_action_projector=noisy_action_projector,
-                        proprio_projector=proprio_projector,
-                        batch=batch,
-                        batch_size=batch_size,
-                        num_patches=num_patches,
-                        actions_shape=ground_truth_actions.shape,
-                        device_id=device_id,
-                        current_action_mask=current_action_mask,
-                        next_actions_mask=next_actions_mask,
-                        use_proprio=use_proprio,
-                        use_film=use_film,
-                    )
-        if use_flow:
-            
-            B = ground_truth_actions.shape[0]
-            noise = action_head.sample_noise(ground_truth_actions.shape, ground_truth_actions.device)
-            time = action_head.sample_time(ground_truth_actions.shape[0], ground_truth_actions.device)
-            time_expanded = time[:, None, None]
-            u_t = noise - ground_truth_actions
-            
-            x_t = time_expanded * noise + (1 - time_expanded) * ground_truth_actions
-            x_t = x_t.reshape(B, -1).unsqueeze(-1).to(torch.bfloat16)
-            rearranged_actions_hidden_states = noisy_action_projector(x_t)
-            rearranged_actions_hidden_states = rearranged_actions_hidden_states.reshape(B, NUM_ACTIONS_CHUNK, -1)
-            # flow_pred = action_head.flow_predictor(
-            #     obs=rearranged_actions_hidden_states,
-            #     hidden_states=all_hidden_states,
-            #     time_step=time_expanded,
-            #     proprio_states=None
-            # )
-            # breakpoint()
-            flow_pred = action_head.flow_predictor(obs=rearranged_actions_hidden_states,hidden_states=actions_hidden_states,time_step=time, proprio_states=None)
-            loss = F.mse_loss(u_t, flow_pred, reduction="mean")
-            metrics["loss_value"] = loss.detach().float().item()
-        metrics.update(
-            {
-                "loss_value": loss.item(),  # Detached value for logging
-            }
-        )
 
-        # Get detailed L1 losses for logging
-        should_log_l1_loss = not use_diffusion or (use_diffusion and compute_diffusion_l1)
-        # if should_log_l1_loss:
-        if False:
-            ground_truth_curr_action = ground_truth_actions[:, 0]
-            predicted_curr_action = predicted_actions[:, 0]
-            ground_truth_next_actions = ground_truth_actions[:, 1:]
-            predicted_next_actions = predicted_actions[:, 1:]
-            curr_action_l1_loss = torch.nn.L1Loss()(ground_truth_curr_action, predicted_curr_action)
-            next_actions_l1_loss = torch.nn.L1Loss()(ground_truth_next_actions, predicted_next_actions)
-            metrics.update(
-                {
-                    "curr_action_l1_loss": curr_action_l1_loss.item(),
-                    "next_actions_l1_loss": next_actions_l1_loss.item(),
-                }
-            )
 
     # Return both the loss tensor (with gradients) and the metrics dictionary (with detached values)
     return loss, metrics
 
-
-def run_diffusion_sampling(
-    vla,
-    action_head,
-    noisy_action_projector,
-    proprio_projector,
-    batch,
-    batch_size,
-    num_patches,
-    actions_shape,
-    device_id,
-    current_action_mask,
-    next_actions_mask,
-    use_proprio,
-    use_film,
-) -> torch.Tensor:
-    """
-    Run diffusion sampling (reverse diffusion) to generate actions.
-
-    Args:
-        vla (OpenVLAForActionPrediction): Vision-language-action policy.
-        action_head (nn.Module): Action head module.
-        noisy_action_projector (nn.Module): Noisy action projector module (only used for diffusion).
-        proprio_projector (nn.Module): Proprioceptive state projector module.
-        batch (dict): Input batch.
-        batch_size (int): Batch size.
-        num_patches (int): Number of vision patches.
-        actions_shape (tuple): Shape of ground-truth actions.
-        device_id (str): Device ID.
-        current_action_mask (torch.Tensor): Mask for current action.
-        next_actions_mask (torch.Tensor): Mask for next actions.
-        use_proprio (bool): Whether to use proprioceptive state as input.
-        use_film (bool): Whether to use FiLM for better language following.
-
-    Returns:
-        torch.Tensor: Predicted actions.
-    """
-    # Sample random noisy action, used as the starting point for reverse diffusion
-    noise = torch.randn(
-        size=(batch_size, NUM_ACTIONS_CHUNK, ACTION_DIM),
-        device=device_id,
-        dtype=torch.bfloat16,
-    )  # (B, chunk_len, action_dim)
-
-    # Set diffusion timestep values
-    action_head.module.noise_scheduler.set_timesteps(action_head.module.num_diffusion_steps_train)
-
-    # Reverse diffusion: Iteratively denoise to generate action, conditioned on observation
-    curr_noisy_actions = noise
-    for t in action_head.module.noise_scheduler.timesteps:
-        # Get diffusion model's noise prediction (conditioned on VLA latent embedding, current noisy action embedding,
-        # and diffusion timestep embedding)
-        timesteps = torch.Tensor([t]).repeat(batch_size).to(device_id)
-        diffusion_timestep_embeddings = (
-            action_head.module.time_encoder(timesteps).to(curr_noisy_actions.dtype).to(curr_noisy_actions.device)
-        )  # (B, llm_dim)
-        diffusion_timestep_embeddings = diffusion_timestep_embeddings.unsqueeze(1)  # (B, 1, llm_dim)
-
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            output = vla(
-                input_ids=batch["input_ids"].to(device_id),
-                attention_mask=batch["attention_mask"].to(device_id),
-                pixel_values=batch["pixel_values"].to(torch.bfloat16).to(device_id),
-                labels=batch["labels"],
-                output_hidden_states=True,
-                proprio=batch["proprio"] if use_proprio else None,
-                proprio_projector=proprio_projector if use_proprio else None,
-                noisy_actions=curr_noisy_actions,
-                noisy_action_projector=noisy_action_projector,
-                diffusion_timestep_embeddings=diffusion_timestep_embeddings,
-                use_film=use_film,
-            )
-            # Get last layer hidden states
-            last_hidden_states = output.hidden_states[-1]  # (B, seq_len, D)
-            # Get hidden states for text portion of prompt+response (after the vision patches)
-            text_hidden_states = last_hidden_states[:, num_patches:-1]
-            # Get hidden states for action portion of response
-            actions_hidden_states = text_hidden_states[current_action_mask | next_actions_mask].reshape(
-                batch_size, NUM_ACTIONS_CHUNK * ACTION_DIM, -1
-            )  # (B, act_chunk_len, D)
-            actions_hidden_states = actions_hidden_states.to(torch.bfloat16)
-            # Predict noise
-            noise_pred = action_head.module.predict_noise(actions_hidden_states)
-
-        # Compute the action at the previous diffusion timestep: x_t -> x_{t-1}
-        curr_noisy_actions = action_head.module.noise_scheduler.step(noise_pred, t, curr_noisy_actions).prev_sample
-
-    return curr_noisy_actions.reshape(actions_shape)
 
 
 def compute_smoothened_metrics(metrics_deques) -> dict:
@@ -703,91 +542,6 @@ def save_training_checkpoint(
         dist.barrier()
 
 
-def run_validation(
-    vla,
-    action_head,
-    noisy_action_projector,
-    proprio_projector,
-    val_dataloader,
-    action_tokenizer,
-    device_id,
-    cfg,
-    num_patches,
-    log_step,
-    distributed_state,
-    val_time_limit,
-) -> None:
-    """
-    Compute validation set metrics for logging.
-
-    Args:
-        vla (OpenVLAForActionPrediction): Vision-language-action policy.
-        action_head (nn.Module): Action head module.
-        noisy_action_projector (nn.Module): Noisy action projector module (only used for diffusion).
-        proprio_projector (nn.Module): Proprioceptive state projector module.
-        val_dataloader (DataLoader): Validation data loader.
-        action_tokenizer (ActionTokenizer): Action tokenizer.
-        device_id (str): Device ID.
-        cfg (FinetuneConfig): Training configuration.
-        num_patches (int): Number of vision patches.
-        log_step (int): Current logging step.
-        distributed_state (PartialState): Distributed training state.
-        val_time_limit (int): Time limit for computing validation metrics.
-
-    Returns:
-        None.
-    """
-    val_start_time = time.time()
-    vla.eval()
-    val_batches_count = 0
-
-    # List to store validation metrics
-    all_val_metrics = []
-
-    with torch.no_grad():
-        for batch in val_dataloader:
-            # Always compute L1 loss for validation, even for diffusion
-            _, metrics = run_forward_pass(
-                vla=vla,
-                action_head=action_head,
-                noisy_action_projector=noisy_action_projector,
-                proprio_projector=proprio_projector,
-                batch=batch,
-                action_tokenizer=action_tokenizer,
-                device_id=device_id,
-                use_l1_regression=cfg.use_l1_regression,
-                use_diffusion=cfg.use_diffusion,
-                use_proprio=cfg.use_proprio,
-                use_film=cfg.use_film,
-                num_patches=num_patches,
-                compute_diffusion_l1=True,
-                num_diffusion_steps_train=cfg.num_diffusion_steps_train if cfg.use_diffusion else None,
-            )
-
-            # Add the loss value to the metrics
-            metrics["loss"] = metrics["loss_value"]
-            all_val_metrics.append(metrics)
-            val_batches_count += 1
-
-            # Cut testing on validation set short if it exceeds time limit
-            if time.time() - val_start_time > val_time_limit:
-                break
-
-    # Compute average validation metrics
-    avg_val_metrics = {}
-    for metric_name in all_val_metrics[0].keys():
-        values = [metrics[metric_name] for metrics in all_val_metrics if metric_name in metrics]
-        if values:
-            avg_val_metrics[metric_name] = sum(values) / len(values)
-
-    # Add batch count to metrics
-    avg_val_metrics["val_batches_count"] = val_batches_count
-
-    # Log validation metrics to W&B
-    if distributed_state.is_main_process:
-        log_metrics_to_wandb(avg_val_metrics, "VLA Val", log_step, wandb)
-
-
 @draccus.wrap()
 def finetune(cfg: FinetuneConfig) -> None:
     """
@@ -842,28 +596,6 @@ def finetune(cfg: FinetuneConfig) -> None:
         f"\tACTION_PROPRIO_NORMALIZATION_TYPE: {ACTION_PROPRIO_NORMALIZATION_TYPE}"
     )
 
-    # Two options:
-    # (1) Base model is on Hugging Face Hub
-    #   - Then download it and record the path to the download directory
-    # (2) Base model is stored locally
-    #   - Then register model config in HF Auto Classes
-    # In both cases, we want to check whether any changes have been made to
-    # the `modeling_prismatic.py` file in this codebase; if so, we will copy
-    # the file to the downloaded or locally stored checkpoint directory so
-    # that the user's changes to the VLA class logic go into effect
-
-    # if model_is_on_hf_hub(cfg.config_file_path):
-    #     # Download model directly from Hugging Face Hub
-    #     vla_download_path = snapshot_download(repo_id=cfg.config_file_path)
-    #     # Overwrite VLA path
-    #     cfg.config_file_path = vla_download_path
-    # else:
-    #     # Register OpenVLA model to HF Auto Classes (not needed if the model is on HF Hub)
-    #     AutoConfig.register("openvla", OpenVLAConfig)
-    #     AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
-    #     AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
-    #     AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
-    
     AutoConfig.register("openvla", OpenVLAConfig)
     AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
     AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
@@ -901,51 +633,14 @@ def finetune(cfg: FinetuneConfig) -> None:
         vla = get_peft_model(vla, lora_config)
         vla.print_trainable_parameters()
 
-    # FiLM setup
-    if cfg.use_film:
-        count_parameters(vla.vision_backbone, "vla.vision_backbone (original)")
-        # Wrap vision backbone with FiLM wrapper
-        # Important: For this, must specify `vla.model.vision_backbone` instead of just `vla.vision_backbone`, since the
-        # latter would cause the new wrapped backbone to be saved as a new attribute of `vla` instead of overwriting the
-        # original one (due to the LoRA wrapper)
-        vla.model.vision_backbone = FiLMedPrismaticVisionBackbone(
-            vision_backbone=vla.model.vision_backbone,
-            llm_dim=vla.llm_dim,
-        )
-        count_parameters(vla.vision_backbone, "vla.vision_backbone (post-wrap)")
-        if cfg.resume:
-            state_dict = load_checkpoint("vision_backbone", cfg.vla_path, cfg.resume_step)
-            vla.model.vision_backbone.load_state_dict(state_dict)
-        vla.model.vision_backbone = vla.model.vision_backbone.to(device_id)
 
     # Wrap VLA with DDP
     vla = wrap_ddp(vla, device_id, find_unused=True)
 
-    # If applicable, instantiate proprio projector
-    if cfg.use_proprio:
-        proprio_projector = init_module(
-            ProprioProjector,
-            "proprio_projector",
-            cfg,
-            device_id,
-            {"llm_dim": vla.module.llm_dim, "proprio_dim": PROPRIO_DIM},
-        )
 
-    # If applicable, instantiate continuous action head for L1 regression
-    if cfg.use_l1_regression:
+    if cfg.use_flow:
         action_head = init_module(
-            L1RegressionActionHead,
-            "action_head",
-            cfg,
-            device_id,
-            {"input_dim": vla.module.llm_dim, "hidden_dim": vla.module.llm_dim, "action_dim": ACTION_DIM},
-            to_bf16=True,
-        )
-
-    # If applicable, instantiate diffusion action head and noisy action projector
-    if cfg.use_diffusion:
-        action_head = init_module(
-            DiffusionActionHead,
+            FlowMatchingActionHead,
             "action_head",
             cfg,
             device_id,
@@ -953,29 +648,23 @@ def finetune(cfg: FinetuneConfig) -> None:
                 "input_dim": vla.module.llm_dim,
                 "hidden_dim": vla.module.llm_dim,
                 "action_dim": ACTION_DIM,
-                "num_diffusion_steps_train": cfg.num_diffusion_steps_train,
             },
             to_bf16=True,
         )
+        
         noisy_action_projector = init_module(
-            NoisyActionProjector, "noisy_action_projector", cfg, device_id, {"llm_dim": vla.module.llm_dim}
+            NoisyActionProjector, "noisy_action_projector", cfg, device_id, {"llm_dim": vla.module.llm_dim},
+            to_bf16=True,
         )
-
-    if cfg.use_flow:
-        action_head = FlowMatchingActionHead(
-                    input_dim=vla.module.llm_dim, hidden_dim=vla.module.llm_dim, action_dim=ACTION_DIM, num_flow_steps=10
-                ).to(device=device_id, dtype=torch.bfloat16)
-        noisy_action_projector = NoisyActionProjector(
-                    llm_dim=vla.module.llm_dim).to(device=device_id, dtype=torch.bfloat16)
+        # action_head = FlowMatchingActionHead(
+        #             input_dim=vla.module.llm_dim, hidden_dim=vla.module.llm_dim, action_dim=ACTION_DIM, num_flow_steps=10
+        #         ).to(device=device_id, dtype=torch.bfloat16)
+        # noisy_action_projector = NoisyActionProjector(
+        #             llm_dim=vla.module.llm_dim).to(device=device_id, dtype=torch.bfloat16)
         
     # Get number of vision patches
     NUM_PATCHES = vla.module.vision_backbone.get_num_patches() * vla.module.vision_backbone.get_num_images_in_input()
-    # If we have proprio inputs, a single proprio embedding is appended to the end of the vision patch embeddings
-    if cfg.use_proprio:
-        NUM_PATCHES += 1
-    # For diffusion, a single diffusion timestep embedding is appended to the end of the vision patch embeddings
-    if cfg.use_diffusion:
-        NUM_PATCHES += 1
+
 
     # Instantiate optimizer
     trainable_params = [param for param in vla.parameters() if param.requires_grad]
@@ -983,8 +672,7 @@ def finetune(cfg: FinetuneConfig) -> None:
         trainable_params += [param for param in action_head.parameters() if param.requires_grad]
     if cfg.use_diffusion or cfg.use_flow:
         trainable_params += [param for param in noisy_action_projector.parameters() if param.requires_grad]
-    if cfg.use_proprio:
-        trainable_params += [param for param in proprio_projector.parameters() if param.requires_grad]
+
     # print(trainable_params)
     # breakpoint()
     print(f"# total trainable params: {sum(p.numel() for p in trainable_params)}")
@@ -1152,6 +840,13 @@ def finetune(cfg: FinetuneConfig) -> None:
 
             # Optimizer and LR scheduler step
             if (batch_idx + 1) % cfg.grad_accumulation_steps == 0:
+                total_norm = torch.nn.utils.clip_grad_norm_(
+                    (p for p in trainable_params if p.grad is not None),
+                    max_norm=1.0
+                )
+                if distributed_state.is_main_process and log_step % cfg.wandb_log_freq == 0:
+                    writer.add_scalar("VLA Train/GradNorm", float(total_norm), global_step=log_step)
+
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()

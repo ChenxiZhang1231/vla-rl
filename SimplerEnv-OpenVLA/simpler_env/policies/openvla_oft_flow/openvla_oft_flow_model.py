@@ -11,6 +11,7 @@ import cv2 as cv
 
 from simpler_env.utils.action.action_ensemble import ActionEnsembler
 import sys 
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev")
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft")
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
@@ -20,7 +21,7 @@ from prismatic.models.projectors import NoisyActionProjector
 from verl_vla.utils.vla_utils.vla_adapter.openvla_utils import update_auto_map, check_model_logic_mismatch, _load_dataset_stats, find_checkpoint_file, load_component_state_dict
 
 
-class VLAAdapterInference:
+class OpenVLAOFTInference:
     def __init__(
         self,
         saved_model_path: str = "",
@@ -72,7 +73,6 @@ class VLAAdapterInference:
                                             config=config,  
                                             trust_remote_code=True)
         vla.vision_backbone.set_num_images_in_input(1)
-        vla.set_version('v1')
         _load_dataset_stats(vla, saved_model_path)
         self.raw_state_dice = vla.state_dict()
         
@@ -91,7 +91,7 @@ class VLAAdapterInference:
         self.noisy_action_projector = vla.noisy_action_projector
 
         action_head = FlowMatchingActionHead(
-                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS, num_actions=NUM_ACTIONS_CHUNK,
+                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS  #, num_actions=NUM_ACTIONS_CHUNK,
             ).to(dtype=torch.bfloat16)
         action_head_path = find_checkpoint_file(saved_model_path, "action_head")
         action_head_state_dict = load_component_state_dict(action_head_path)
@@ -100,10 +100,10 @@ class VLAAdapterInference:
         vla.action_head = action_head
         self.action_head = vla.action_head
         
-        if load_ckpt_path is not None:
-            model_state = torch.load(load_ckpt_path, map_location="cpu")
-            vla.load_state_dict(model_state, strict=True)
-            print(load_ckpt_path)
+        # if load_ckpt_path is not None:
+        #     model_state = torch.load(load_ckpt_path, map_location="cpu")
+        #     vla.load_state_dict(model_state, strict=True)
+        #     print(load_ckpt_path)
         self.vla = (
             vla
             .eval()

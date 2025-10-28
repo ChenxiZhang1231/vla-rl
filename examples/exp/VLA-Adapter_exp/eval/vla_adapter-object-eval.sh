@@ -10,12 +10,13 @@ export MUJOCO_GL="egl"
 # We do not use whiten.
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='eval_object_fs_4'  # 0.7701612903225806
+EXPERIMENT_NAME='eval_object_fs_wm-1'  # 0.7701612903225806
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_object_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_object_no_noops----10000_chkpt"
 # SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+libero_10_no_noops+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--libero_10_no_noops----150000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
-LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp3-vla_adapter-object-kl-ffp-fp16-1w-faster-full-fixedbug-repeat2/SimpleVLA-RL/exp3-vla_adapter-object-kl-ffp-fp16-1w-faster-full-fixedbug-repeat2/actor/global_step_319"
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp3-vla_adapter-object-kl-ffp-fp16-1w-faster-full-fixedbug-repeat2/SimpleVLA-RL/exp3-vla_adapter-object-kl-ffp-fp16-1w-faster-full-fixedbug-repeat2/actor/global_step_319"
+LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-object-1025-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-object-1025-repeat/actor/global_step_9"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="libero_object"
 DATASET_PATH="/inspire/ssd/project/robotsimulation/public/data/LIBERO-datasets"
