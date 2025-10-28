@@ -24,5 +24,5 @@ torchrun --standalone --nnodes 1 --nproc-per-node 8 vla-scripts/finetune.py \
     --grad_accumulation_steps 1 \
     --learning_rate 1e-4 \
     --lora_rank 64 \
-    --run_id_note OpenVLA-OFT--brdige--$current_time \
+    --run_id_note OpenVLA-OFT--brdige-repeat--$current_time \
     # > logs/VLA-Adapter--libero_spatial_no_noops--$current_time.log 2>&1 &

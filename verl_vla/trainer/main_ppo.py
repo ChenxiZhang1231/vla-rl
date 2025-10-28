@@ -934,7 +934,7 @@ class RobVLMRewardManager():
         self.env_rollout = self.config.reward_model.env_rollout
         self.gen_data_for_wm_rm = self.config.reward_model.gen_data_for_wm_rm
         self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
-        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter']:
+        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter', 'openvla-oft-flow']:
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'
