@@ -18,13 +18,13 @@ tasks=(
 #     /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt # or a local path
 # )
 # tag=bridge_ck5_200k_rl_carrot_9steps
-ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige-repeat----200000_chkpt/
+ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige-repeat----100000_chkpt/
 tags=(
-    openvla-oft-flow-bridge_ck5_200k_rl_joint_repeat1
-    openvla-oft-flow-bridge_ck5_200k_rl_joint_repeat2
-    openvla-oft-flow-bridge_ck5_200k_rl_joint_repeat3
-    openvla-oft-flow-bridge_ck5_200k_rl_joint_repeat4
-    openvla-oft-flow-bridge_ck5_200k_rl_joint_repeat5
+    openvla-oft-flow-bridge_ck5_100k_rl_joint_repeat1
+    openvla-oft-flow-bridge_ck5_100k_rl_joint_repeat2
+    openvla-oft-flow-bridge_ck5_100k_rl_joint_repeat3
+    openvla-oft-flow-bridge_ck5_100k_rl_joint_repeat4
+    openvla-oft-flow-bridge_ck5_100k_rl_joint_repeat5
 )
 # tags=(
 #     debug
