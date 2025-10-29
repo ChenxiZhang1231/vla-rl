@@ -25,6 +25,7 @@ import numpy as np
 from omegaconf import DictConfig, open_dict
 from transformers import AutoModelForCausalLM
 from safetensors.torch import load_file as safe_load_file
+import sys
 
 from verl_vla.single_controller.base import Worker
 from verl_vla.single_controller.base.decorator import register, Dispatch
@@ -44,6 +45,7 @@ from verl_vla.utils.fsdp_utils import (
     get_fsdp_wrap_policy_rm,
     get_fsdp_wrap_policy_vla_adapter,
     get_fsdp_wrap_policy_vla_adapter_params_full,
+    get_fsdp_wrap_policy_openvla_oft_flow
 )
 from verl_vla.utils.fsdp_utils import offload_fsdp_optimizer, offload_fsdp_param_and_grad, load_fsdp_optimizer, load_fsdp_param_and_grad
 from verl_vla.utils.import_utils import import_external_libs
@@ -232,6 +234,21 @@ class RobActorRolloutRefWorker(Worker):
             #     update_auto_map(local_path)
             #     check_model_logic_mismatch(local_path)
             torch.distributed.barrier()
+        elif self.config.model.vla == "openvla-oft-flow":
+            import sys
+            sys.path.append('/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl_vla/utils/vla_utils/openvla_oft_flow')
+            from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
+            from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
+            from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
+            
+            AutoConfig.register("openvla", OpenVLAConfig)
+            AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+            AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+            AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+            # if self.rank == 0:
+            #     update_auto_map(local_path)
+            #     check_model_logic_mismatch(local_path)
+            torch.distributed.barrier()
         #add end
 
         # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
@@ -356,7 +373,60 @@ class RobActorRolloutRefWorker(Worker):
                 actor_module.action_head = action_head
                 self.action_head = actor_module.action_head
                 # self.action_head = DDP(action_head, device_ids=[device_id], gradient_as_bucket_view=True, device_mesh=fsdp_mesh)
+                # breakpoint()
+            elif self.config.model.vla == 'openvla-oft-flow':
+                # breakpoint()
+                from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.models.action_heads import FlowMatchingActionHead
+                from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.models.projectors import NoisyActionProjector
+                from verl_vla.utils.vla_utils.openvla_oft_flow.openvla_utils import update_auto_map, check_model_logic_mismatch, _load_dataset_stats, find_checkpoint_file, load_component_state_dict
+
+                from torch.nn.parallel import DistributedDataParallel as DDP
                 
+                actor_module = OpenVLAForActionPrediction.from_pretrained(pretrained_model_name_or_path=local_path,
+                                                    torch_dtype=torch_dtype,
+                                                    attn_implementation='flash_attention_2',
+                                                    low_cpu_mem_usage=False,
+                                                    config=actor_model_config,  
+                                                    trust_remote_code=True)
+                actor_module.vision_backbone.set_num_images_in_input(1)
+                # actor_module.set_version('v1')
+                _load_dataset_stats(actor_module, local_path)
+                self.raw_state_dice = actor_module.state_dict()
+                
+                ACTION_DIM = 7
+                NUM_FLOW_MATCHING_STEPS = 10
+                if unnorm_key == 'bridge_orig':
+                    NUM_ACTIONS_CHUNK = 5
+                else:
+                    NUM_ACTIONS_CHUNK = 20
+                fsdp_mesh = self.device_mesh
+                device_id = torch.cuda.current_device()
+                
+                actor_module.lm_head = actor_module.language_model.lm_head.to(device_id)
+
+                llm_dim = actor_module.llm_dim
+                noisy_action_projector = NoisyActionProjector(
+                    llm_dim=llm_dim).to(device=device_id, dtype=torch.bfloat16)
+                noisy_action_projector_path = find_checkpoint_file(local_path, "noisy_action_projector")
+                noisy_action_projector_state_dict = load_component_state_dict(noisy_action_projector_path)
+                noisy_action_projector.load_state_dict(noisy_action_projector_state_dict)
+                
+                actor_module.noisy_action_projector = noisy_action_projector
+                self.noisy_action_projector = actor_module.noisy_action_projector
+                # self.noisy_action_projector = DDP(noisy_action_projector, device_ids=[device_id], gradient_as_bucket_view=True, device_mesh=fsdp_mesh)
+                # if self._is_ref:
+                #     breakpoint()
+                action_head = FlowMatchingActionHead(
+                        input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS, num_actions=NUM_ACTIONS_CHUNK,
+                    ).to(device=device_id, dtype=torch.bfloat16)
+                action_head_path = find_checkpoint_file(local_path, "action_head")
+                action_head_state_dict = load_component_state_dict(action_head_path)
+                action_head.load_state_dict(action_head_state_dict)
+                
+                actor_module.action_head = action_head
+                self.action_head = actor_module.action_head
+                # self.action_head = DDP(action_head, device_ids=[device_id], gradient_as_bucket_view=True, device_mesh=fsdp_mesh)
+                # breakpoint()
             elif self.config.model.vla == "openvla":
                 actor_module = AutoModelForVision2Seq.from_pretrained(
                                                     pretrained_model_name_or_path=local_path,
@@ -443,7 +513,7 @@ class RobActorRolloutRefWorker(Worker):
                 actor_module.print_trainable_parameters()
             # lora end
             actor_module.to(torch_dtype)
-            if self.config.model.vla == 'vla-adapter':
+            if self.config.model.vla in ['vla-adapter', 'openvla-oft-flow']:
                 self.noisy_action_projector.to(torch_dtype)
                 self.action_head.to(torch_dtype) 
                 
@@ -501,6 +571,8 @@ class RobActorRolloutRefWorker(Worker):
             auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module, is_lora=self.config.model.get('lora_rank', 0) > 0)
             # auto_wrap_policy, ignored = get_fsdp_wrap_policy_vla_adapter(actor_module)
             # breakpoint()
+        elif self.config.model.vla == "openvla-oft-flow":
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_openvla_oft_flow(actor_module, is_lora=self.config.model.get('lora_rank', 0) > 0)
         else:
             raise ValueError()
 
@@ -557,7 +629,31 @@ class RobActorRolloutRefWorker(Worker):
                     bad.append(n)
             print("trainable but NOT managed by FSDP:", bad)
             # breakpoint()
-            
+        elif self.config.model.vla == 'openvla-oft-flow':
+            # sharding_strategy = get_sharding_strategy(fsdp_mesh)
+            # for name, param in actor_module.named_parameters():
+            #     param.requires_grad = True
+            sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
+            actor_module_fsdp = FSDP(
+                actor_module,
+                use_orig_params=True,
+                auto_wrap_policy=auto_wrap_policy,
+                device_id=torch.cuda.current_device(),
+                sharding_strategy=sharding_strategy,
+                mixed_precision=mixed_precision,
+                sync_module_states=True,
+                limit_all_gathers=True,
+                device_mesh=self.device_mesh,
+                forward_prefetch=False,
+                ignored_modules=ignored,)
+
+            bad = []
+            for n, p in actor_module_fsdp.named_parameters():
+                if p.requires_grad and not hasattr(p, "_fsdp_flattened"):
+                    p.requires_grad = False
+                    bad.append(n)
+            print("trainable but NOT managed by FSDP:", bad)
+            # breakpoint()
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
@@ -696,7 +792,122 @@ class RobActorRolloutRefWorker(Worker):
 
                     actor_lr_scheduler = get_constant_schedule_with_warmup(optimizer=actor_optimizer,
                                                                         num_warmup_steps=num_warmup_steps)
-            
+            elif self.config.model.vla == 'openvla-oft-flow':
+                if optim_config.params == 'action_head':
+                # if True:
+                    from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
+                    def _oget(cfg, key, default):
+                        if hasattr(cfg, "get"):
+                            try:
+                                return cfg.get(key, default)
+                            except Exception:
+                                pass
+                        return getattr(cfg, key, default) if hasattr(cfg, key) else default
+
+                    base_lr = _oget(optim_config, "lr", 1e-4)
+                    lora_lr = _oget(optim_config, "lora_lr", base_lr)  # 可单独给 LoRA 设 lr
+                    wd      = _oget(optim_config, "weight_decay", 1e-2)
+                    betas   = _oget(optim_config, "betas", (0.9, 0.999))
+
+                    if self._is_lora or (optim_config.params == 'full'):
+                        lora_params = []
+                        for n, p in actor_module_fsdp.named_parameters():
+                            # if ('lora' in n) and (p.requires_grad):
+                            if p.requires_grad:
+                                lora_params.append((n, p))
+                        # breakpoint()
+                    else:
+                        lora_params = []
+                    
+                    # breakpoint()
+                        
+                    # —— Parameter grouping —— #
+                    def split_decay(named_params):
+                        decay, no_decay = [], []
+                        for n, p in named_params:
+                            lname = n.lower()
+                            if lname.endswith("bias") or ("norm" in lname) or ("ln" in lname) or ("layernorm" in lname):
+                                no_decay.append(p)
+                            else:
+                                decay.append(p)
+                        return decay, no_decay
+
+                    # 只在可训练参数上分组
+                    head_named = [(n, p) for n, p in (getattr(self.action_head, "named_parameters", lambda: [])()) if p.requires_grad] if self.action_head else []
+                    proj_named = [(n, p) for n, p in (getattr(self.noisy_action_projector, "named_parameters", lambda: [])()) if p.requires_grad] if self.noisy_action_projector else []
+
+                    head_decay, head_nodecay = split_decay(head_named)
+                    proj_decay, proj_nodecay = split_decay(proj_named)
+                    lora_decay, lora_nodecay = split_decay(lora_params)   # 理论上 LoRA 多数也归到 no_decay，这里仍按规则分
+
+                    # ---------- 统计信息 ----------
+                    if self.rank == 0:
+                        def _count(ps): return sum(p.numel() for p in ps)
+                        print(f"# head params (trainable):     {_count(head_decay)+_count(head_nodecay):,}")
+                        print(f"# projector params (trainable): {_count(proj_decay)+_count(proj_nodecay):,}")
+                        print(f"# lora params (trainable):      {_count(lora_decay)+_count(lora_nodecay):,}")
+                        total = _count(head_decay) + _count(head_nodecay) + _count(proj_decay) + _count(proj_nodecay) + _count(lora_decay) + _count(lora_nodecay)
+                        print(f"# total trainable params:       {total:,}")
+
+                    # ---------- param groups ----------
+                    param_groups = []
+
+                    # LoRA：常见做法是不做 weight decay（两组都设 0.0）
+                    if lora_decay:
+                        param_groups.append({"params": lora_decay,   "lr": lora_lr, "weight_decay": 0.0})
+                    if lora_nodecay:
+                        param_groups.append({"params": lora_nodecay, "lr": lora_lr, "weight_decay": 0.0})
+
+                    # head/projector：bias/Norm 不 decay，其余用 wd
+                    if head_decay:
+                        param_groups.append({"params": head_decay,   "lr": base_lr, "weight_decay": wd})
+                    if head_nodecay:
+                        param_groups.append({"params": head_nodecay, "lr": base_lr, "weight_decay": 0.0})
+                    if proj_decay:
+                        param_groups.append({"params": proj_decay,   "lr": base_lr, "weight_decay": wd})
+                    if proj_nodecay:
+                        param_groups.append({"params": proj_nodecay, "lr": base_lr, "weight_decay": 0.0})
+
+                    # 若没有任何可训练参数，给个提示
+                    if len(param_groups) == 0 and self.rank == 0:
+                        print("[warn] No trainable parameters found for optimizer groups.")
+
+                    actor_optimizer = optim.AdamW(param_groups, betas=betas)
+
+                    # ---------- scheduler ----------
+                    total_steps = _oget(optim_config, "total_training_steps", 0)
+                    num_warmup_steps = _oget(optim_config, "lr_warmup_steps", -1)
+                    if num_warmup_steps < 0:
+                        num_warmup_steps_ratio = _oget(optim_config, "lr_warmup_steps_ratio", 0.0)
+                        num_warmup_steps = int(num_warmup_steps_ratio * max(total_steps, 1))
+
+                    if self.rank == 0:
+                        print(f"Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}")
+
+                    def warmup_then_const(step: int) -> float:
+                        if num_warmup_steps <= 0:
+                            return 1.0
+                        return min(1.0, float(step) / float(num_warmup_steps))
+
+                    # 给所有 param group 用相同的 lr_lambda（也可以传 list 与组数对应）
+                    actor_lr_scheduler = LambdaLR(actor_optimizer, lr_lambda=warmup_then_const)
+                elif optim_config.params == 'full':
+                    # breakpoint()
+                    from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
+                    actor_params = [p for p in actor_module_fsdp.parameters() if p.requires_grad]
+                    actor_optimizer = optim.AdamW(actor_params,
+                                                lr=optim_config.lr,
+                                                betas=optim_config.get('betas', (0.9, 0.999)),
+                                                weight_decay=optim_config.get('weight_decay', 1e-2))
+
+                    total_steps = optim_config.get('total_training_steps', 0)
+                    num_warmup_steps_ratio = optim_config.get('lr_warmup_steps_ratio', 0.)
+                    num_warmup_steps = int(num_warmup_steps_ratio * total_steps)
+
+                    print(f'Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}')
+
+                    actor_lr_scheduler = get_constant_schedule_with_warmup(optimizer=actor_optimizer,
+                                                                        num_warmup_steps=num_warmup_steps)
         else:
             actor_optimizer = None
             actor_lr_scheduler = None
@@ -952,7 +1163,7 @@ class RobActorRolloutRefWorker(Worker):
                     processing_class=None,
                     checkpoint_config=None,
                 )
-            elif self.config.model.vla == 'vla-adapter':
+            elif self.config.model.vla in ['vla-adapter', 'openvla-oft-flow']:
                 # self.flops_counter = FlopsCounter(self.actor_model_config)
                 # self.checkpoint_manager = FSDPCheckpointManager_w_lora_extra_model(
                 self.checkpoint_manager = FSDPCheckpointManagerSmolVLA(
@@ -980,7 +1191,15 @@ class RobActorRolloutRefWorker(Worker):
                         print(f"[rank0] merged model state_dict saved to: {out} (keys={len(full_sd)})")
                     
                     torch.distributed.barrier()
-                    raise 
+                    print("finish merge!")
+                    raise
+                    try:
+                        if torch.distributed.is_initialized():
+                            torch.distributed.destroy_process_group()
+                    except Exception:
+                        pass
+
+                    # sys.exit(0)
                     
                 
             # breakpoint()
@@ -1065,8 +1284,10 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('Before update policy', logger=logger)
         if self.actor.config.vla == 'smolvla':
             metrics = self.actor.update_policy_smolvla(data=data)
-        if self.actor.config.vla == 'vla-adapter':
+        elif self.actor.config.vla == 'vla-adapter':
             metrics = self.actor.update_policy_vla_adapter(data=data)
+        elif self.actor.config.vla == 'openvla-oft-flow':
+            metrics = self.actor.update_policy_openvla_oft_flow(data=data)
         else:
             metrics = self.actor.update_policy(data=data)
 
@@ -1293,6 +1514,48 @@ class RobActorRolloutRefWorker(Worker):
     
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def compute_ref_log_prob_vla_adapter(self, data: DataProto):
+        assert self._is_ref
+
+        data = data.to('cuda')
+
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.ref_module_fsdp,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        micro_batch_size = self.config.ref.log_prob_micro_batch_size
+        data.meta_info['micro_batch_size'] = micro_batch_size
+        data.meta_info['temperature'] = self.config.rollout.temperature
+        data.meta_info['max_token_len'] = self.config.ref.log_prob_max_token_len_per_gpu
+        data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
+        data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        # print(data['pixel_values'].shape)
+        # breakpoint()
+        output = self.ref_policy.compute_log_prob(data=data)
+        # breakpoint()
+        
+        if len(output) == 4:
+            ref_log_prob, ref_mean, ref_std, out_metric = output
+            logp_outer = out_metric['logp_outer']
+            logp_elem = out_metric['logp_elem']
+            output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
+                                                'ref_mean': ref_mean,
+                                                'ref_std': ref_std,
+                                                'ref_logp_outer': logp_outer,
+                                                'ref_logp_elem': logp_elem,
+                                                })
+        else:
+            output = DataProto.from_dict(tensors={'ref_log_prob': output})
+        output = output.to('cpu')
+
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.ref_module_fsdp, offload_grad=self._is_offload_grad)
+        torch.cuda.synchronize()
+        torch.distributed.barrier()
+        torch.cuda.empty_cache()
+        return output
+    
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_ref_log_prob_openvla_oft_flow(self, data: DataProto):
         assert self._is_ref
 
         data = data.to('cuda')

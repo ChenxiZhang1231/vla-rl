@@ -651,6 +651,98 @@ def get_fsdp_wrap_policy_vla_adapter(module, config = None, is_lora: bool = Fals
     
     return auto_wrap_policy, ignored_modules
 
+
+def get_fsdp_wrap_policy_openvla_oft_flow(module, config = None, is_lora: bool = False):
+    """Get FSDP wrap policy for the module.
+    
+    Args:
+        module: The module to get wrap policy for
+        config: Configuration for wrap policy
+        is_lora: Whether to enable lambda policy for LoRA modules
+    """
+    if config is None:
+        config = {}
+
+    if config.get('disable', False):
+        return None
+
+    default_transformer_cls_names_to_wrap = getattr(module, "_no_split_modules", None)
+    fsdp_transformer_layer_cls_to_wrap = config.get("transformer_layer_cls_to_wrap",
+                                                    default_transformer_cls_names_to_wrap)
+    min_num_params = config.get('min_num_params', 0)
+    auto_wrap_policy = None
+
+    policies = []
+
+    from torch.distributed.fsdp.wrap import _or_policy, lambda_auto_wrap_policy, transformer_auto_wrap_policy
+
+    if min_num_params > 0:
+        size_policy = functools.partial(size_based_auto_wrap_policy, min_num_params=min_num_params)
+        policies.append(size_policy)
+    elif fsdp_transformer_layer_cls_to_wrap is not None:
+        transformer_cls_to_wrap = set()
+        for layer_class in fsdp_transformer_layer_cls_to_wrap:
+            transformer_cls = get_module_class_from_name(module, layer_class)
+            if transformer_cls is None:
+                raise Exception("Could not find the transformer layer class to wrap in the model.")
+            else:
+                transformer_cls_to_wrap.add(transformer_cls)
+
+        transformer_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls=transformer_cls_to_wrap,
+        )
+        policies.append(transformer_policy)
+
+
+    from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.extern.hf.modeling_prismatic import PrismaticVisionBackbone
+    from transformers import Qwen2ForCausalLM
+    from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer, Qwen2RMSNorm
+    from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.models.action_heads import FlowMatchingActionHead
+    from verl_vla.utils.vla_utils.openvla_oft_flow.prismatic.models.projectors import NoisyActionProjector
+    from prismatic.models.diffusion_transformer import  DiT_SingleTokenAction_OneCtx
+    from transformers.models.llama.modeling_llama import LlamaDecoderLayer, LlamaAttention, LlamaRMSNorm, LlamaMLP
+    module_classes_to_wrap = {
+        PrismaticVisionBackbone,
+        # Qwen2ForCausalLM,
+        # nn.Embedding,
+        Qwen2DecoderLayer,
+        Qwen2RMSNorm,
+        PrismaticProjector,
+        NoisyActionProjector,
+        # FlowMatchingActionHead,
+        DiT_SingleTokenAction_OneCtx,
+        LlamaDecoderLayer,
+        LlamaAttention,
+        LlamaRMSNorm
+    }
+    
+    module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    policies.append(module_policy)
+    
+    
+    if len(policies) > 0:
+        auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+
+    
+    
+    # ignored_modules = [module.action_queries]
+    ignored_modules = []
+    lm = getattr(module, "language_model", module)
+    ignored_modules.append(lm.lm_head)
+    
+    emb_module = None
+    if hasattr(lm, "get_input_embeddings"):
+        try:
+            emb_module = lm.get_input_embeddings()
+        except Exception:
+            emb_module = None
+    if isinstance(emb_module, torch.nn.Module):
+        ignored_modules.append(emb_module)
+        
+    return auto_wrap_policy, ignored_modules
+
+
 def get_fsdp_wrap_policy_vla_adapter_params_full(module, config = None, is_lora: bool = False):
     """Get FSDP wrap policy for the module.
     

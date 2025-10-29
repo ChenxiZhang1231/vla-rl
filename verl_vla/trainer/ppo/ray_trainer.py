@@ -402,7 +402,7 @@ def compute_data_metrics(batch, config, model_name):
     returns = batch.batch['returns']
     #add
 
-    if model_name in ['smolvla', 'vla-adapter']:
+    if model_name in ['smolvla', 'vla-adapter', 'openvla-oft-flow']:
         B, S, K, CH, D = batch.batch['x_t'].shape
         finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
         response_length = S * config.actor_rollout_ref.rollout.action_chunks_len * config.actor_rollout_ref.model.action_token_len 
@@ -768,7 +768,7 @@ class RayTrainer(object):
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)
                         # breakpoint()
-
+                    # breakpoint()
                     metrics['timing/gen'] += timer.last
                     
                     # do accuracy filtering and score logging
@@ -886,8 +886,10 @@ class RayTrainer(object):
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
                         if self.config.actor_rollout_ref.model.vla == 'smolvla':
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_smolvla(batch)
-                        if self.config.actor_rollout_ref.model.vla == 'vla-adapter':
+                        elif self.config.actor_rollout_ref.model.vla == 'vla-adapter':
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_vla_adapter(batch)
+                        elif self.config.actor_rollout_ref.model.vla == 'openvla-oft-flow':
+                            ref_log_prob = self.ref_policy_wg.compute_ref_log_prob_openvla_oft_flow(batch)
                         else:
                             ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
                         batch = batch.union(ref_log_prob)
@@ -941,6 +943,12 @@ class RayTrainer(object):
                                                 adv_estimator=self.config.algorithm.adv_estimator,
                                                 config = self.config)
                     elif self.config.actor_rollout_ref.model.vla == 'vla-adapter':
+                        batch = compute_advantage_vla_adapter(batch,
+                                                self.config.algorithm.gamma,
+                                                self.config.algorithm.lam,
+                                                adv_estimator=self.config.algorithm.adv_estimator,
+                                                config = self.config)
+                    elif self.config.actor_rollout_ref.model.vla == 'openvla-oft-flow':
                         batch = compute_advantage_vla_adapter(batch,
                                                 self.config.algorithm.gamma,
                                                 self.config.algorithm.lam,

@@ -108,7 +108,7 @@ candidates_exact = {
 def main():
     parser = argparse.ArgumentParser(description="Process dataset videos with synchronized metadata + 2D projections.")
     parser.add_argument("--dataset_dirs", type=Path, default='/inspire/ssd/project/robotsimulation/public/data/bridge', help="the dataset root")
-    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl', help="processed output path")
+    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl_fewshot', help="processed output path")
     parser.add_argument("--data_mix", type=str, default='bridge_orig')
     args = parser.parse_args()
 
@@ -182,7 +182,7 @@ def main():
         entry_sample = entry_list
         entry_final.extend(entry_sample)
     
-    entry_path = args.output_dir / 'dataset_only_spoon.jsonl'
+    entry_path = args.output_dir / 'dataset_fewshot.jsonl'
     with open(entry_path, "w", encoding="utf-8") as f:
         for item in entry_final:
             json.dump(item, f, ensure_ascii=False)
