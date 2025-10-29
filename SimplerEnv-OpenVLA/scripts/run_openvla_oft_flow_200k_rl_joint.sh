@@ -1,6 +1,8 @@
-model_name=vla-adapter
+model_name=openvla-oft
 tasks=(
-    bridge_carrot.sh
+    # bridge_carrot.sh
+    # bridge_stack.sh
+    bridge_joint.sh
     # drawer_variant_agg.sh
     # drawer_visual_matching.sh
     # move_near_variant_agg.sh
@@ -16,27 +18,19 @@ tasks=(
 #     /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt # or a local path
 # )
 # tag=bridge_ck5_200k_rl_carrot_9steps
-ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt
+ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----40000_chkpt
+tags=(
+    openvla-oft-flow-bridge_ck5_40k_rl_joint_repeat1
+    openvla-oft-flow-bridge_ck5_40k_rl_joint_repeat2
+    openvla-oft-flow-bridge_ck5_40k_rl_joint_repeat3
+    openvla-oft-flow-bridge_ck5_40k_rl_joint_repeat4
+    openvla-oft-flow-bridge_ck5_40k_rl_joint_repeat5
+)
 # tags=(
-#     bridge_ck5_200k_rl_carrot_69steps_repeat1
-#     bridge_ck5_200k_rl_carrot_69steps_repeat2
-#     bridge_ck5_200k_rl_carrot_69steps_repeat3
-#     bridge_ck5_200k_rl_carrot_69steps_repeat4
-#     bridge_ck5_200k_rl_carrot_69steps_repeat5
+#     debug
 # )
 
-# load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot/step69.pt"
-
-
-tags=(
-    bridge_ck5_200k_rl_carrot-fa_49steps_repeat1
-    bridge_ck5_200k_rl_carrot-fa_49steps_repeat2
-    bridge_ck5_200k_rl_carrot-fa_49steps_repeat3
-    bridge_ck5_200k_rl_carrot-fa_49steps_repeat4
-    bridge_ck5_200k_rl_carrot-fa_49steps_repeat5
-)
-
-load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fa/step49.pt"
+load_ckpt_path="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step49.pt"
 
 action_ensemble_temp=0.0
 for tag in ${tags[@]}; do

@@ -17,17 +17,17 @@ tasks=(
 #     /inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt # or a local path
 # )
 # tag=bridge_ck5_200k_rl_carrot_9steps
-ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----20000_chkpt
-# tags=(
-#     bridge_ck5_200k_rl_spoon_29steps_repeat1
-#     bridge_ck5_200k_rl_spoon_29steps_repeat2
-#     bridge_ck5_200k_rl_spoon_29steps_repeat3
-#     bridge_ck5_200k_rl_spoon_29steps_repeat4
-#     bridge_ck5_200k_rl_spoon_29steps_repeat5
-# )
+ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----80000_chkpt
 tags=(
-    debug
+    openvla-oft-flow-bridge_ck5_80k_rl_spoon_repeat1
+    openvla-oft-flow-bridge_ck5_80k_rl_spoon_repeat2
+    openvla-oft-flow-bridge_ck5_80k_rl_spoon_repeat3
+    openvla-oft-flow-bridge_ck5_80k_rl_spoon_repeat4
+    openvla-oft-flow-bridge_ck5_80k_rl_spoon_repeat5
 )
+# tags=(
+#     debug
+# )
 export SAPIEN_RENDER_SYSTEM=cpu
 export SAPIEN_RENDER_DEVICE=cpu
 
