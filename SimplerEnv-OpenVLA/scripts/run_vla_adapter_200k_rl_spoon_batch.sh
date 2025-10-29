@@ -21,11 +21,11 @@ ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-d
 
 # 外层遍历的“加载用/合并后” ckpt
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step19.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step29.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step39.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step9.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step19.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step29.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step39.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step49.pt"
 )
 
 # 统一的 tag 后缀（steps）
