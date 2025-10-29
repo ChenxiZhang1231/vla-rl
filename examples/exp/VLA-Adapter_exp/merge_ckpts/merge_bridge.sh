@@ -20,13 +20,15 @@ SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vl
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge/actor/global_step_49"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fa/step49.pt"
 
-LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-cosmos-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-cosmos-repeat/actor/global_step_29"
-MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-cosmos/step29.pt"
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-cosmos-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-cosmos-repeat/actor/global_step_49"
+# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-cosmos/step49.pt"
 
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-spoon/actor/global_step_49"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fa/step49.pt"
 
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon-cosmos-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-spoon-cosmos-repeat/actor/global_step_49"
+# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/spoon-fs-cosmos/step49.pt"
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_49"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant/step49.pt"
@@ -34,6 +36,8 @@ MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/v
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-eggplant/actor/global_step_49"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant-fa/step49.pt"
 
+# LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant-cosmos-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-eggplant-cosmos-repeat/actor/global_step_49"
+# MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/eggplant-fs-cosmos/step49.pt"
 
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_29"
@@ -41,6 +45,10 @@ MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/v
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack-filter/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack-filter/actor/global_step_59"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter/step59.pt"
+
+LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack-filter-cosmos-repeat/SimpleVLA-RL/exp1-vla_adapter_wm_ffp-full-fixedbug-faster-bridge-stack-filter-cosmos-repeat/actor/global_step_29"
+MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-cosmos/step29.pt"
+
 
 # LOAD_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-stack-filter/SimpleVLA-RL/exp2-vla_adapter_wm_kl-full-fixedbug-faster-bridge-stack-filter/actor/global_step_49"
 # MERGED_OUT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fa/step49.pt"
