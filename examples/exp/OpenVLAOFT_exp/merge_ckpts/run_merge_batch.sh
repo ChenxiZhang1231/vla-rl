@@ -1,0 +1,51 @@
+
+declare -a experiments=(
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_9" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/stack/step9.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_19" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/stack/step19.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_29" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/stack/step29.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_39" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/stack/step39.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-stack/actor/global_step_49" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/stack/step49.pt"
+
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/actor/global_step_9" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step9.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/actor/global_step_19" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step19.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/actor/global_step_29" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step29.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/actor/global_step_39" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step39.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-carrot/actor/global_step_49" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step49.pt"
+
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_9" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/spoon/step9.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_19" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/spoon/step19.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_29" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/spoon/step29.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_39" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/spoon/step39.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-spoon/actor/global_step_49" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/spoon/step49.pt"
+
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_9" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/eggplant/step9.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_19" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/eggplant/step19.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_29" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/eggplant/step29.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_39" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/eggplant/step39.pt"
+    # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant/actor/global_step_49" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/eggplant/step49.pt"
+
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/actor/global_step_9" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step9.pt"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/actor/global_step_19" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step19.pt"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/actor/global_step_29" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step29.pt"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/actor/global_step_39" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step39.pt"
+    "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/work_dirs/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/SimpleVLA-RL/exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-joint/actor/global_step_49" "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step49.pt"
+)
+
+num_experiments=${#experiments[@]}
+
+for (( i=0; i<${num_experiments}; i+=2 )); do
+    model_path=${experiments[i]}
+    merge_path=${experiments[i+1]}
+
+    bash examples/exp/OpenVLAOFT_exp/merge_ckpts/merge_bridge_batch.sh "${model_path}" "${merge_path}"
+    ray stop --force
+    echo "############################################################"
+    echo "##                                                        ##"
+    echo "##  实验 ${merge_path} 已完成"
+    echo "##                                                        ##"
+    echo "############################################################"
+    echo ""
+    echo ""
+done
+
+echo "所有实验已完成！"

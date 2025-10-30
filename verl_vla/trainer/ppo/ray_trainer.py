@@ -498,7 +498,8 @@ class RayTrainer(object):
                                                 self.config.data.bridge_scene,
                                                 data_dir=self.config.data.libero_raw_data_dir,
                                                 use_world_model=self.use_world_model,
-                                                train_val ="train")
+                                                train_val ="train",
+                                                jsonl_path=self.config.data.jsonl_path)
             self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
                                             batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
                                             shuffle=True,

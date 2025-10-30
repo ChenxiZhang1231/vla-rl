@@ -183,6 +183,7 @@ class Bridge_Dataset(Dataset):
                  use_world_model = False,
                  train_val = "train",
                  data_dir = "",
+                 jsonl_path="",
                  ):
         
         self.task_suite_name = task_suite_name  
@@ -190,11 +191,15 @@ class Bridge_Dataset(Dataset):
         self.use_world_model = use_world_model
         self.train_val = train_val
         self.data_dir = data_dir
+        self.jsonl_path = jsonl_path
         self._read_files_and_tokenize()
 
     def _read_files_and_tokenize(self):
         dataframes = []
-        dataset_path  = os.path.join(self.data_dir, "dataset.jsonl")
+        if self.jsonl_path == "":
+            dataset_path  = os.path.join(self.data_dir, "dataset.jsonl")
+        else:
+            dataset_path = self.jsonl_path
         data_list = []
         with open(dataset_path, 'r', encoding='utf-8') as f:
             for line in f:
