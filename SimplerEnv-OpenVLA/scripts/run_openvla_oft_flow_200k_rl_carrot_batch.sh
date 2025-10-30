@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-model_name=vla-adapter
+model_name=openvla-oft
 
 tasks=(
-  bridge_joint.sh
+  bridge_carrot.sh
   # drawer_variant_agg.sh
   # drawer_visual_matching.sh
   # move_near_variant_agg.sh
@@ -16,23 +16,22 @@ tasks=(
 )
 
 # 底模 ckpt（不变）
-ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/VLA-Adapter/outputs/configs+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--VLA-Adapter--brdige----200000_chkpt
 
 # 外层遍历的“加载用/合并后” ckpt
+ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige-repeat----200000_chkpt/
 load_ckpt_paths=(
-  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-cosmos/step9.pt"
-  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-cosmos/step19.pt"
-  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-cosmos/step29.pt"
-  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-cosmos/step39.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-cosmos/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step9.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step19.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step29.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step39.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/carrot/step49.pt"
 )
 
 # 统一的 tag 后缀（steps）
-# suffixes=(9 19 29 39 49)
-suffixes=(49)
+suffixes=(9 19 29 39 49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_cosmos"
+tag_prefix="bridge_ck5_200k_rl_openvla_fs"
 
 action_ensemble_temp=0.0
 device=0
@@ -52,7 +51,7 @@ for load_ckpt_path in "${load_ckpt_paths[@]}"; do
       echo "TASK : $task_base"
       echo "TAG  : $tag"
       echo "============================"
-
+    
       # 结果目录层级：ckpt/tag按task分组，进一步避免覆盖
       logging_dir="results/${ckpt_tag}/${task_base}/${tag}"
       mkdir -p "$logging_dir"

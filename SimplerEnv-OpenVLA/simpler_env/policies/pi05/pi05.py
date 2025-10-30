@@ -3,42 +3,38 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from transforms3d.euler import euler2axangle
-from transformers import AutoModel, AutoProcessor
 from collections import deque
 from PIL import Image
 import torch
 import cv2 as cv
-
 from simpler_env.utils.action.action_ensemble import ActionEnsembler
-import sys 
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev")
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft")
-from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
-from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
-from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
-from prismatic.models.action_heads import FlowMatchingActionHead
-from prismatic.models.projectors import NoisyActionProjector
-from verl_vla.utils.vla_utils.vla_adapter.openvla_utils import update_auto_map, check_model_logic_mismatch, _load_dataset_stats, find_checkpoint_file, load_component_state_dict
+from .geometry import quat2mat, mat2euler
+import numpy as np
+import torch
+import sys
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/lerobot/src")
+from lerobot.policies.pi05 import PI05Policy
 
-
-class OpenVLAOFTInference:
+class Pi05Inference:
     def __init__(
         self,
-        saved_model_path: str = "",
+        saved_model_path: str = "pretrained/pi05",
         unnorm_key: Optional[str] = None,
         policy_setup: str = "widowx_bridge",
-        exec_horizon: int = 5,
+        exec_horizon: int = 4,
         image_size: list[int] = [224, 224],
         action_scale: float = 1.0,
         action_ensemble_temp: float = -0.8,
-        load_ckpt_path: str = None,
     ) -> None:
+        gpu_idx = os.environ.get("GPU_IDX", 0)
+        self.device = f"cuda:{gpu_idx}"
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
         if policy_setup == "widowx_bridge":
-            unnorm_key = "bridge_orig" if unnorm_key is None else unnorm_key
-            # unnorm_key = "/inspire/ssd/project/robotsimulation/public/data/bridge/bridge_orig" if unnorm_key is None else unnorm_key
+            unnorm_key = "bridge_orig/1.0.0" if unnorm_key is None else unnorm_key
             action_ensemble = True
             self.sticky_gripper_num_repeat = 1
+            # EE pose in Bridge data was relative to a top-down pose, instead of robot base
+            self.default_rot = np.array([[0, 0, 1.0], [0, 1.0, 0], [-1.0, 0, 0]])  # https://github.com/rail-berkeley/bridge_data_robot/blob/b841131ecd512bafb303075bd8f8b677e0bf9f1f/widowx_envs/widowx_controller/src/widowx_controller/widowx_controller.py#L203
         elif policy_setup == "google_robot":
             unnorm_key = (
                 "fractal20220817_data/0.1.0" if unnorm_key is None else unnorm_key
@@ -53,72 +49,19 @@ class OpenVLAOFTInference:
         self.unnorm_key = unnorm_key
 
         print(f"*** policy_setup: {policy_setup}, unnorm_key: {unnorm_key} ***")
-        self.processor = AutoProcessor.from_pretrained(
-            saved_model_path, trust_remote_code=True
-        )
-        # self.vla = (
-        #     AutoModel.from_pretrained(
-        #         saved_model_path,
-        #         torch_dtype=torch.bfloat16,
-        #         trust_remote_code=True,
-        #     )
-        #     .eval()
-        #     .cuda()
-        # )
-        config = OpenVLAConfig.from_pretrained(saved_model_path, trust_remote_code=True)
-        vla = OpenVLAForActionPrediction.from_pretrained(pretrained_model_name_or_path=saved_model_path,
-                                            torch_dtype=torch.bfloat16,
-                                            attn_implementation='flash_attention_2',
-                                            low_cpu_mem_usage=False,
-                                            config=config,  
-                                            trust_remote_code=True)
-        vla.vision_backbone.set_num_images_in_input(1)
-        _load_dataset_stats(vla, saved_model_path)
-        self.raw_state_dice = vla.state_dict()
-        
-        ACTION_DIM = 7
-        NUM_FLOW_MATCHING_STEPS = 10
-        NUM_ACTIONS_CHUNK = 5
 
-        llm_dim = vla.llm_dim
-        noisy_action_projector = NoisyActionProjector(
-            llm_dim=llm_dim).to(dtype=torch.bfloat16)
-        noisy_action_projector_path = find_checkpoint_file(saved_model_path, "noisy_action_projector")
-        noisy_action_projector_state_dict = load_component_state_dict(noisy_action_projector_path)
-        noisy_action_projector.load_state_dict(noisy_action_projector_state_dict)
-        
-        vla.noisy_action_projector = noisy_action_projector
-        self.noisy_action_projector = vla.noisy_action_projector
+        # TODO: add pi0 loading ...
 
-        action_head = FlowMatchingActionHead(
-                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS  #, num_actions=NUM_ACTIONS_CHUNK,
-            ).to(dtype=torch.bfloat16)
-        action_head_path = find_checkpoint_file(saved_model_path, "action_head")
-        action_head_state_dict = load_component_state_dict(action_head_path)
-        action_head.load_state_dict(action_head_state_dict)
-        
-        vla.action_head = action_head
-        self.action_head = vla.action_head
-        
-        if load_ckpt_path is not None:
-            model_state = torch.load(load_ckpt_path, map_location="cpu")
-            vla.load_state_dict(model_state, strict=False)
-            print(load_ckpt_path)
-        self.vla = (
-            vla
-            .eval()
-            .cuda()
-        )
-        
-        
+        self.vla = PI05Policy.from_pretrained(saved_model_path, map_location=self.device)
+        self.vla.reset()
+
         self.image_size = image_size
         self.action_scale = action_scale
         self.obs_horizon = 1
         self.obs_interval = 1
-        self.pred_action_horizon = 20
+        self.pred_action_horizon = 5
         self.image_history = deque(maxlen=self.obs_horizon)
         self.exec_horizon = exec_horizon
-        self.action_queue = deque(maxlen=self.exec_horizon)
 
         self.sticky_action_is_on = False
         self.gripper_action_repeat = 0
@@ -147,7 +90,48 @@ class OpenVLAOFTInference:
         self.gripper_action_repeat = 0
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
-        self.action_queue.clear()
+        self.action_plan = deque()
+
+    def preprocess_widowx_proprio(self, eef_pos) -> np.array:
+        """convert ee rotation to the frame of top-down
+        https://github.com/allenzren/open-pi-zero/blob/c3df7fb062175c16f69d7ca4ce042958ea238fb7/src/agent/env_adapter/simpler.py#L167
+        """
+        # StateEncoding.POS_EULER: xyz + rpy + pad + gripper(openness)
+        proprio = eef_pos
+        rm_bridge = quat2mat(proprio[3:7])
+        rpy_bridge_converted = mat2euler(rm_bridge @ self.default_rot.T)
+        gripper_openness = proprio[7] # from simpler, 0 for close, 1 for open
+        raw_proprio = np.concatenate(
+            [
+                proprio[:3],
+                rpy_bridge_converted,
+                np.zeros(1),
+                [gripper_openness],
+            ]
+        )
+        return raw_proprio
+
+    def preprocess_google_robot_proprio(self, eef_pos) -> np.array:
+        """convert wxyz quat from simpler to xyzw used in fractal
+        https://github.com/allenzren/open-pi-zero/blob/c3df7fb062175c16f69d7ca4ce042958ea238fb7/src/agent/env_adapter/simpler.py#L204
+        """
+        # StateEncoding.POS_QUAT: xyz + q_xyzw + gripper(closeness)
+        quat_xyzw = np.roll(eef_pos[3:7], -1)
+        gripper_width = eef_pos[
+            7
+        ]  # from simpler, 0 for close, 1 for open
+        # need invert as the training data comes from closeness
+        gripper_closedness = (
+            1 - gripper_width
+        )  # TODO(allenzren): change fractal data processing in training so also use gripper openness in proprio (as in bridge) instead of closedness
+        raw_proprio = np.concatenate(
+            (
+                eef_pos[:3],
+                quat_xyzw,
+                [gripper_closedness],
+            )
+        )
+        return raw_proprio
 
     def step(
         self, image: np.ndarray, task_description: Optional[str] = None, *args, **kwargs
@@ -164,40 +148,39 @@ class OpenVLAOFTInference:
                 - 'gripper': np.ndarray of shape (1,), gripper action
                 - 'terminate_episode': np.ndarray of shape (1,), 1 if episode should be terminated, 0 otherwise
         """
-        if len(self.action_queue) == 0:
-            if task_description is not None:
-                if task_description != self.task_description:
-                    self.reset(task_description)
+        if task_description is not None:
+            if task_description != self.task_description:
+                self.reset(task_description)
 
-            assert image.dtype == np.uint8
-            image = self._resize_image(image)
-            image = Image.fromarray(image).convert("RGB")
-            
-            prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
-            inputs  = self.processor(prompt, image)
+        assert image.dtype == np.uint8
+        image = self._resize_image(image)
+        self._add_image_to_history(image)
+        images: List[Image.Image] = self._obtain_image_history()
 
-            with torch.no_grad():
-                raw_actions, return_dict = self.vla.predict_action(
-                    input_ids=inputs['input_ids'].to(self.vla.device),
-                    pixel_values=inputs['pixel_values'].to(torch.bfloat16).to(self.vla.device),
-                    attention_mask=inputs['attention_mask'].to(self.vla.device),
-                    unnorm_key=self.unnorm_key,
-                    do_sample=False,
-                    proprio=None,
-                    proprio_projector=None,
-                    noisy_action_projector=self.noisy_action_projector,
-                    action_head=self.action_head,
-                    use_film=False,
-                    use_sde=False,
-                    a_shape=(5,7)
-                    # use_sde=True,
-                )
-                raw_actions = raw_actions[0]  # ck, 7
-            for ac in raw_actions:
-                 self.action_queue.append(ac)
-        
-        raw_actions = self.action_queue.popleft()
-            
+        eef_pos = kwargs.get("eef_pos", None)
+        if self.policy_setup == "widowx_bridge":
+            state = self.preprocess_widowx_proprio(eef_pos)
+            image_key = "observation.images.image_0"
+        elif self.policy_setup == "google_robot":
+            state = self.preprocess_google_robot_proprio(eef_pos)
+            image_key = "observation.images.image"
+
+        # if self.action_ensemble:
+        #     raw_actions = self.action_ensembler.ensemble_action(raw_actions)[None]
+
+        if not self.action_plan:
+            observation = {
+                "observation.state": torch.from_numpy(state).unsqueeze(0).to(self.device).float(),
+                image_key: torch.from_numpy(images[0] / 255).permute(2, 0, 1).unsqueeze(0).to(self.device).float(),
+                "task": [task_description], 
+            }
+
+            # model output gripper action, +1 = open, 0 = close
+            action_chunk = self.vla.select_action(observation)[0][:self.pred_action_horizon].cpu().numpy()
+            self.action_plan.extend(action_chunk[: self.exec_horizon])
+
+        raw_actions = self.action_plan.popleft()
+
         raw_action = {
             "world_vector": np.array(raw_actions[:3]),
             "rotation_delta": np.array(raw_actions[3:6]),
@@ -225,6 +208,7 @@ class OpenVLAOFTInference:
                 self.previous_gripper_action = current_gripper_action
             else:
                 relative_gripper_action = self.previous_gripper_action - current_gripper_action
+            
             # fix a bug in the SIMPLER code here
             # self.previous_gripper_action = current_gripper_action
 
@@ -263,7 +247,7 @@ class OpenVLAOFTInference:
     def _obtain_image_history(self) -> List[Image.Image]:
         image_history = list(self.image_history)
         images = image_history[:: self.obs_interval]
-        images = [Image.fromarray(image).convert("RGB") for image in images]
+        # images = [Image.fromarray(image).convert("RGB") for image in images]
         return images
 
     def visualize_epoch(
