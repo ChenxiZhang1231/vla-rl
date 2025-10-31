@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-openvla_oft_wm_ffp-full-fixedbug-faster-bridge-eggplant'
+EXPERIMENT_NAME='exp1-openvla_oft_fb_wm_ffp-full-fixedbug-faster-bridge-eggplant'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----20000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
