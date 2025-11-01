@@ -4176,6 +4176,13 @@ class RobHFRollout(BaseRollout):
             step_data["x_t"] = torch.stack(vla_output["return_dict"]["x_t"], dim=1)
             step_data["t"] = torch.stack(vla_output["return_dict"]["t"], dim=1)
             step_data["x_next"] = torch.stack(vla_output["return_dict"]["x_next"], dim=1)
+            # step_data["mean"] = torch.stack(vla_output["return_dict"]["mean"], dim=1)
+            # step_data["v_t"] = torch.stack(vla_output["return_dict"]["v_t_all"], dim=1)
+            # step_data["hs"] = torch.stack(vla_output["return_dict"]["hs_all"], dim=1)
+            # step_data['task_latent_states'] = vla_output["return_dict"]["task_latent_states"]
+            # step_data['actions_hidden_states'] = vla_output["return_dict"]["actions_hidden_states"]
+            # step_data['last_hidden_states'] = vla_output["return_dict"]["last_hidden_states"]
+            
             # step_data["lang_tokens"] = vla_output["lang_tokens"]
             # step_data["lang_masks"] = vla_output["lang_masks"]
             step_data["full_image"] = torch.from_numpy(np.stack([c['full_image'] for c in inputs])).to(vla_output["action_tensor"].device)
@@ -4274,10 +4281,17 @@ class RobHFRollout(BaseRollout):
         batch = {"input_ids":[], 
                 "attention_mask": [],
                 # "pixel_values": [], 
+                # 'task_latent_states': [],
+                # 'actions_hidden_states': [],
+                # 'last_hidden_states': [],
+
                 "full_image": [],
                 "x_t": [],
                 "t": [],
                 "x_next": [],
+                # "mean": [],
+                # "v_t": [],
+                # "hs": [],
                 "action_tensor": [],
                 # "lang_tokens": [],
                 # "lang_masks": []
@@ -4286,6 +4300,7 @@ class RobHFRollout(BaseRollout):
         for k in ["input_ids", "attention_mask",
                 #   "pixel_values", 
                   "full_image",
+                #   'task_latent_states', 'actions_hidden_states', 'last_hidden_states', "mean", "v_t", "hs",
                   "action_tensor", "x_t", "t", "x_next"]:
             for h in vla_history:
                 batch[k].append(h[k])

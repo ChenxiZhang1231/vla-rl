@@ -88,23 +88,23 @@ class Observation(Generic[ArrayT]):
     """
 
     # Images, in [-1, 1] float32.
-    images: dict[str, at.Float[ArrayT, "*b h w c"]]
+    images: dict[str, torch.Tensor]
     # Image masks, with same keys as images.
-    image_masks: dict[str, at.Bool[ArrayT, "*b"]]
+    image_masks: dict[str, torch.Tensor]
     # Low-dimensional robot state.
-    state: at.Float[ArrayT, "*b s"]
+    state: torch.Tensor
 
     # Tokenized prompt.
-    tokenized_prompt: at.Int[ArrayT, "*b l"] | None = None
+    tokenized_prompt: torch.Tensor | None = None
     # Tokenized prompt mask.
-    tokenized_prompt_mask: at.Bool[ArrayT, "*b l"] | None = None
+    tokenized_prompt_mask: torch.Tensor | None = None
 
     # pi0-fast model specific fields.
 
     # Token auto-regressive mask (for FAST autoregressive model).
-    token_ar_mask: at.Int[ArrayT, "*b l"] | None = None
+    token_ar_mask: torch.Tensor | None = None
     # Token loss mask (for FAST autoregressive model).
-    token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
+    token_loss_mask: torch.Tensor | None = None
 
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
@@ -138,7 +138,7 @@ class Observation(Generic[ArrayT]):
 
 # Defines the format of the actions. This field is included as "actions" inside the dictionary
 # produced by the data transforms.
-Actions = at.Float[ArrayT, "*b ah ad"]
+Actions = torch.Tensor
 
 
 def preprocess_observation(

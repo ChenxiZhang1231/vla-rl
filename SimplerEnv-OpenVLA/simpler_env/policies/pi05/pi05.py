@@ -12,16 +12,22 @@ from .geometry import quat2mat, mat2euler
 import numpy as np
 import torch
 import sys
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/lerobot/src")
-from lerobot.policies.pi05 import PI05Policy
-
+# sys.path.insert(0, "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/lerobot_pi/src")
+# from lerobot.policies.pi05 import PI05Policy, PI05Config
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openpi/src")
+from openpi.training import config as _config
+from openpi.policies import policy_config
+from openpi.shared import download
+        
+        
+        
 class Pi05Inference:
     def __init__(
         self,
         saved_model_path: str = "pretrained/pi05",
         unnorm_key: Optional[str] = None,
         policy_setup: str = "widowx_bridge",
-        exec_horizon: int = 4,
+        exec_horizon: int = 5,
         image_size: list[int] = [224, 224],
         action_scale: float = 1.0,
         action_ensemble_temp: float = -0.8,
@@ -52,8 +58,11 @@ class Pi05Inference:
 
         # TODO: add pi0 loading ...
 
-        self.vla = PI05Policy.from_pretrained(saved_model_path, map_location=self.device)
-        self.vla.reset()
+
+        config = _config.get_config("pi05_bridge")
+        # Create a trained policy.
+        self.vla = policy_config.create_trained_policy(config, saved_model_path)
+        
 
         self.image_size = image_size
         self.action_scale = action_scale
@@ -68,23 +77,21 @@ class Pi05Inference:
         self.sticky_gripper_action = 0.0
         self.previous_gripper_action = None
 
-        self.action_ensemble = action_ensemble
+        # self.action_ensemble = action_ensemble
         self.action_ensemble_temp = action_ensemble_temp
 
-        if self.action_ensemble:
-            self.action_ensembler = ActionEnsembler(
-                self.pred_action_horizon, self.action_ensemble_temp
-            )
-        else:
-            self.action_ensembler = None
+        # if self.action_ensemble:
+        #     self.action_ensembler = ActionEnsembler(
+        #         self.pred_action_horizon, self.action_ensemble_temp
+        #     )
+        # else:
+        #     self.action_ensembler = None
 
         self.task = None
         self.task_description = None
 
     def reset(self, task_description: str) -> None:
         self.image_history.clear()
-        if self.action_ensemble:
-            self.action_ensembler.reset()
         self.task_description = task_description
         self.sticky_action_is_on = False
         self.gripper_action_repeat = 0
@@ -169,15 +176,26 @@ class Pi05Inference:
         #     raw_actions = self.action_ensembler.ensemble_action(raw_actions)[None]
 
         if not self.action_plan:
-            observation = {
-                "observation.state": torch.from_numpy(state).unsqueeze(0).to(self.device).float(),
-                image_key: torch.from_numpy(images[0] / 255).permute(2, 0, 1).unsqueeze(0).to(self.device).float(),
-                "task": [task_description], 
-            }
+            # observation = {
+            #     # "observation.state": torch.from_numpy(state).unsqueeze(0).to(self.device).float(),
+            #     image_key: torch.from_numpy(images[0] / 255).permute(2, 0, 1).unsqueeze(0).to(self.device).float(),
+            #     "task": [task_description], 
+            # }
 
-            # model output gripper action, +1 = open, 0 = close
-            action_chunk = self.vla.select_action(observation)[0][:self.pred_action_horizon].cpu().numpy()
+            # # model output gripper action, +1 = open, 0 = close
+            # action_chunk = self.vla.select_action(observation)[0][:self.pred_action_horizon].cpu().numpy()
+            # self.action_plan.extend(action_chunk[: self.exec_horizon])
+
+
+            observation = {
+                # "observation/image": torch.from_numpy(images[0] / 255).permute(2, 0, 1).unsqueeze(0).to(self.device).float(),
+                "observation/image": images[0],
+                "observation/state": state,
+                "prompt": task_description, 
+            }
+            action_chunk = self.vla.infer(observation)["action"]
             self.action_plan.extend(action_chunk[: self.exec_horizon])
+
 
         raw_actions = self.action_plan.popleft()
 
