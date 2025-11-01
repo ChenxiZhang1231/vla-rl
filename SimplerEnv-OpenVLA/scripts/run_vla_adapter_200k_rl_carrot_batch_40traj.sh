@@ -20,11 +20,16 @@ ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-d
 
 # 外层遍历的“加载用/合并后” ckpt
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step19.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step9.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step19.pt"
   "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step29.pt"
   "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step39.pt"
   "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step59.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step69.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step79.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step89.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/carrot-fs-40traj/step99.pt"
 )
 
 # 统一的 tag 后缀（steps）

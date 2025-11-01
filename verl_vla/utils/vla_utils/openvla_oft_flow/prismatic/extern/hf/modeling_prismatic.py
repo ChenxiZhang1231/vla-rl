@@ -1002,6 +1002,9 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         else:
             x_t, return_dict = self.sample_action(all_hidden_states, action_head, noisy_action_projector, a_shape=a_shape)
         
+        # return_dict['task_latent_states'] = task_latent_states
+        # return_dict['actions_hidden_states'] = actions_hidden_states
+        # return_dict['last_hidden_states'] = last_hidden_states
         normalized_actions = x_t
         normalized_actions = normalized_actions.reshape(-1, a_shape[0], ACTION_DIM)
         normalized_actions = normalized_actions.float().cpu().detach().numpy()
@@ -1066,6 +1069,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
         x_t_all, t_all, x_next_all, log_probs = [], [], [], []
+        # mean_all, v_t_all, rearranged_actions_hidden_states_all  = [], [], []
         # breakpoint()
         while time >= -dt / 2:
             expanded_time = time.expand(B)
@@ -1095,6 +1099,9 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             x_t_all.append(x_t)
             t_all.append(expanded_time.detach().cpu())
             x_next_all.append(x_next)
+            # mean_all.append(mean)
+            # v_t_all.append(v_t)
+            # rearranged_actions_hidden_states_all.append(rearranged_actions_hidden_states)
             
             x_t = x_next
             time += dt
@@ -1103,6 +1110,10 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
             "x_t": x_t_all,
             "t": t_all,
             "x_next": x_next_all,
+            # "mean": mean_all,
+            # "v_t_all": v_t_all,
+            # "hs_all": rearranged_actions_hidden_states_all,
+            
         }
         return x_t, return_dict
     
@@ -1130,6 +1141,12 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         x_t,                # [B,S,K,CH,D] 或 [B,K,CH,D]
         t,                  # [B,S,K]       或 [B,K]
         x_next,             # [B,S,K,CH,D] 或 [B,K,CH,D]
+        # mean_orig,
+        # v_t_orig,
+        # hs_orig,
+        # task_latent_states_orig,
+        # actions_hidden_states_orig,
+        # last_hs_orig,
         finish_step,        # [B]  以 CH 为基数的全局步计数
         action_head,
         noisy_action_projector,
@@ -1168,23 +1185,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         emb_layer.to(input_ids.device)
         # breakpoint()
         input_embeddings = emb_layer(input_ids_ext)
+        input_embeddings = input_embeddings * ~all_actions_mask.unsqueeze(-1)
         
-        # input_embeddings = self._embed_tokens_fsdp_safe(input_ids_ext)
-        # action_queries = self.action_queries.weight                          # [T,H] 或 [1,H]
-        # if action_queries.dim() == 2 and action_queries.size(0) == 1:
-        #     action_queries = action_queries.expand(self.config.num_action_tokens, -1)
-        # aq = action_queries.unsqueeze(0).expand(BS, -1, -1)                  # [BS,T,H]
-        # action_queries = self.action_queries.weight  # (1, h)
-        # breakpoint()
-        # with FSDP.summon_full_params(self.action_queries, writeback=False, rank0_only=False):
-        #     w_full = self.action_queries.weight  # 现在是完整的 2D
-        #     # 如果你设计的是 (1,h)：
-        #     w_full = w_full.view(1, -1)         # (1, h)
-        #     assert w_full.size(1) == D, f"hidden mismatch: {w_full.size(1)} vs {D}"
-        #     action_queries = w_full.expand(B, self.chunk_size, D)  # (B, chunk, h)
-        # action_queries = action_queries.view(1, action_queries.shape[0], action_queries.shape[1]).repeat(input_embeddings.shape[0], 1, 1)
-        # input_embeddings = self._replace_input_embeddings(input_embeddings, all_actions_mask, action_queries)
-
         # ---- 视觉投影 & 多模态拼装（支持 left/right pad）----
         lang_emb_bs = input_embeddings[~all_actions_mask].reshape(BS, -1, input_embeddings.size(-1))
         proj_patches_bs = self._process_vision_features(pixel_values_bs, lang_emb_bs, use_film)
@@ -1226,10 +1228,41 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         action_start = bos_idx + NUM_PATCHES + num_prompt_tokens_bs      # [BS]
         action_hs = gather_span(last_hs, action_start, NUM_TOKENS).reshape(BS, 1, NUM_TOKENS, Hh).to(torch.bfloat16)
         all_hidden_states_bs = torch.cat([task_latent, action_hs], dim=2)    # [BS,1,P+T,Hh]
-
+        # # torch.Size([6, 1, 291, 4096])
+        # a = task_latent
+        # b = task_latent_states_orig
+        # a_cmp = a
+        # b_cmp = b
+        # diff = (a_cmp - b_cmp).abs()
+        # diff_maxa = diff.max().item()
+        # diff_meana = diff.mean().item()
+        
+        # a = last_hs
+        # b = last_hs_orig
+        # a_cmp = a
+        # b_cmp = b
+        # last_hs_shape = last_hs.shape
+        # last_hs_orig_shape = last_hs_orig.shape
+        # diff = (a_cmp - b_cmp).abs()
+        # diff_maxc = diff.max().item()
+        # diff_meanc = diff.mean().item()
+        
+        # a = action_hs
+        # b = actions_hidden_states_orig
+        # a_cmp = a
+        # b_cmp = b
+        # diff = (a_cmp - b_cmp).abs()
+        # diff_maxb = diff.max().item()
+        # diff_meanb = diff.mean().item()
+        
+        
+        # b_shape = task_latent_states_orig.shape
+        # a_shape = task_latent.shape
+        
+        
         # ---- 复制到 [BS*K,...] 并计算 v_t ----
         BSK = BS * K
-        
+        # hs_orig_bsk = hs_orig.reshape(BSK, CH, -1)
         # x_t: [B,S,K,CH,D] -> [BSK,CH,D]
         x_t_bsk   = x_t.reshape(BSK, CH, D).to(device=device, dtype=torch.bfloat16)
         t_bsk     = t.reshape(BSK).to(device=device, dtype=torch.float32)
@@ -1238,7 +1271,7 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         # proj = getattr(noisy_action_projector, "module", noisy_action_projector)
         x_t_vec = x_t_bsk.reshape(BSK, -1).unsqueeze(-1)                     # [BSK,CH*D,1]
         obs = self.noisy_action_projector(x_t_vec).reshape(BSK, CH, -1)                              # [BSK,CH,?]
-
+        # breakpoint()
         # head = getattr(action_head, "module", action_head)
         v_t = self.action_head.flow_predictor(
             obs=obs,
@@ -1306,7 +1339,6 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         logp_step   = lp_elem.sum(dim=(-1, -2))          # [B,S,K]
         logp_outer  = logp_step.sum(dim=2)               # [B,S]
         logp_joint  = logp_outer.sum(dim=1)              # [B]
-
         # （可选）熵
         c0 = 0.5 * (1.0 + math.log(2.0 * math.pi))
         h_per_dim = c0 + torch.log(std).squeeze(-1).squeeze(-1)    # [B,S,K]

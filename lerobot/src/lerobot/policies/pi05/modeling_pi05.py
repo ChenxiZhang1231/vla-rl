@@ -25,19 +25,25 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import Tensor, nn
 
-from lerobot.utils.import_utils import _transformers_available
+# from lerobot.utils.import_utils import _transformers_available
 
-# Conditional import for type checking and lazy loading
-if TYPE_CHECKING or _transformers_available:
-    from transformers.models.auto import CONFIG_MAPPING
-    from transformers.models.gemma import modeling_gemma
-    from transformers.models.gemma.modeling_gemma import GemmaForCausalLM
-    from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
-else:
-    CONFIG_MAPPING = None
-    modeling_gemma = None
-    GemmaForCausalLM = None
-    PaliGemmaForConditionalGeneration = None
+# # Conditional import for type checking and lazy loading
+# if TYPE_CHECKING or _transformers_available:
+#     from transformers.models.auto import CONFIG_MAPPING
+#     from transformers.models.gemma import modeling_gemma
+#     from transformers.models.gemma.modeling_gemma import GemmaForCausalLM
+#     from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
+# else:
+#     CONFIG_MAPPING = None
+#     modeling_gemma = None
+#     GemmaForCausalLM = None
+#     PaliGemmaForConditionalGeneration = None
+
+from transformers.models.auto import CONFIG_MAPPING
+from transformers.models.gemma import modeling_gemma
+from transformers.models.gemma.modeling_gemma import GemmaForCausalLM
+from transformers.models.paligemma.modeling_paligemma import PaliGemmaForConditionalGeneration
+
 
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.policies.pi05.configuration_pi05 import PI05Config

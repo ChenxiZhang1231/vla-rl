@@ -100,4 +100,4 @@ class BridgeOutputs(transforms.DataTransformFn):
         # dimension, we need to now parse out the correct number of actions in the return dict.
         # For Bridge, we only return the first 7 actions (since the rest is padding).
         # For your own dataset, replace `7` with the action dimension of your dataset.
-        return {"action": np.asarray(data["action"][:, :7])}
+        return {"action": np.asarray(data["actions"][:, :7])}

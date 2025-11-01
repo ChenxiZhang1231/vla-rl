@@ -86,14 +86,20 @@ def run_maniskill2_eval_single_episode(
         }
     obs, _ = env.reset(options=env_reset_options)
     # for long-horizon environments, we check if the current subtask is the final subtask
-    is_final_subtask = env.is_final_subtask()
+    try:
+        is_final_subtask = env.unwrapped.is_final_subtask()
+    except:
+        is_final_subtask = env.is_final_subtask()
 
     # Obtain language instruction
     if instruction is not None:
         task_description = instruction
     else:
         # get default language instruction
-        task_description = env.get_language_instruction()
+        try:
+            task_description = env.unwrapped.get_language_instruction()
+        except:
+            task_description = env.get_language_instruction()
     print(task_description)
 
     # Initialize logging
@@ -130,11 +136,18 @@ def run_maniskill2_eval_single_episode(
         )
 
         success = "success" if done else "failure"
-        new_task_description = env.get_language_instruction()
+        try:
+            new_task_description = env.get_language_instruction()
+        except:
+            new_task_description = env.unwrapped.get_language_instruction()
         if new_task_description != task_description:
             task_description = new_task_description
             print(task_description)
-        is_final_subtask = env.is_final_subtask()
+        # is_final_subtask = env.is_final_subtask()
+        try:
+            is_final_subtask = env.is_final_subtask()
+        except:
+            is_final_subtask = env.unwrapped.is_final_subtask()
 
         print(timestep, info)
 
