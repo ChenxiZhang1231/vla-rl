@@ -453,6 +453,12 @@ class RobDataParallelPPOActor(BasePPOActor):
                 micro_batch["x_t"],
                 micro_batch["t"],
                 micro_batch["x_next"],
+                # micro_batch["mean"],
+                # micro_batch["v_t"],
+                # micro_batch["hs"],
+                # micro_batch["task_latent_states"],
+                # micro_batch["actions_hidden_states"],
+                # micro_batch["last_hidden_states"],
                 micro_batch["finish_step"],
                 action_head=self.action_head,
                 noisy_action_projector=self.noisy_action_projector,
@@ -630,6 +636,12 @@ class RobDataParallelPPOActor(BasePPOActor):
                 micro_batch["x_t"],
                 micro_batch["t"],
                 micro_batch["x_next"],
+                # micro_batch["mean"],
+                # micro_batch["v_t"],
+                # micro_batch["hs"],
+                # micro_batch["task_latent_states"],
+                # micro_batch["actions_hidden_states"],
+                # micro_batch["last_hidden_states"],
                 micro_batch["finish_step"],
                 action_head=self.action_head,
                 noisy_action_projector=self.noisy_action_projector,
@@ -764,6 +776,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             select_keys = ['input_ids', 'attention_mask',
                         #    'pixel_values',
                            'full_image',
+                        #    'last_hidden_states', 'task_latent_states', 'actions_hidden_states', "mean", "v_t", "hs",
                            'action_tensor', 
                            "x_t", "t", "x_next", "finish_step"]
         else:
@@ -1835,6 +1848,8 @@ class RobDataParallelPPOActor(BasePPOActor):
                             'full_image',
                             'action_tensor', 
                             "x_t", "t", "x_next",
+                            # 'task_latent_states', 'actions_hidden_states',
+                            # "mean", "v_t", "hs", 'last_hidden_states',
                             "input_ids", "attention_mask", "finish_step",
                             'old_log_probs', 'advantages',]
                     
