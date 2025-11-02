@@ -20,18 +20,18 @@ tasks=(
 # 外层遍历的“加载用/合并后” ckpt
 ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige-repeat----200000_chkpt/
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step19.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step29.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step39.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla/bridge/joint/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb2/bridge/joint/step9.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb2/bridge/joint/step19.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb2/bridge/joint/step29.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb2/bridge/joint/step39.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb2/bridge/joint/step49.pt"
 )
 
 # 统一的 tag 后缀（steps）
 suffixes=(9 19 29 39 49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_openvla_fs"
+tag_prefix="bridge_ck5_200k_rl_openvla_fb2_fs"
 
 action_ensemble_temp=0.0
 device=0

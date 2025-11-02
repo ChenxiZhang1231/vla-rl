@@ -6,7 +6,7 @@
 
 # wait 
 
-# bash scripts/run_pi_100k_rl_stack_batch.sh
+bash scripts/run_pi_100k_rl_stack_batch.sh
 
 # wait
 
@@ -14,4 +14,4 @@
 
 # wait 
 
-bash scripts/run_pi_100k_rl_joint_batch.sh
+# bash scripts/run_pi_100k_rl_joint_batch.sh

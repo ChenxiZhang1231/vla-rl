@@ -104,6 +104,8 @@ class OpenVLAOFTInference:
             model_state = torch.load(load_ckpt_path, map_location="cpu")
             vla.load_state_dict(model_state, strict=False)
             print(load_ckpt_path)
+        else:
+            raise
         self.vla = (
             vla
             .eval()

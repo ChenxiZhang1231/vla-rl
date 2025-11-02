@@ -4,7 +4,8 @@ set -euo pipefail
 model_name=vla-adapter
 
 tasks=(
-  bridge_joint.sh
+  # bridge_joint.sh
+  bridge_joint_onlystack.sh
   # drawer_variant_agg.sh
   # drawer_visual_matching.sh
   # move_near_variant_agg.sh
@@ -31,7 +32,7 @@ load_ckpt_paths=(
 suffixes=(9 19 29 39 49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_few-cosmos"
+tag_prefix="bridge_ck5_200k_rl_fs_few-cosmos"
 
 action_ensemble_temp=0.0
 device=0
