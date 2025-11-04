@@ -15,7 +15,7 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp2-openvla_oft_fb_wm_kl-full-fixedbug-faster-bridge-carrot'
+EXPERIMENT_NAME='exp2-openvla_oft_fb_wm_kl-full-fixedbug6-faster-bridge-carrot-lr5e-6-mini128'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
 SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige----20000_chkpt"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
@@ -55,10 +55,10 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
     actor_rollout_ref.model.action_chunks_len=5 \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=5e-6 \
     actor_rollout_ref.actor.optim.warmup_style=constant \
     actor_rollout_ref.actor.optim.params=full \
-    actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
     actor_rollout_ref.actor.ppo_micro_batch_size=8 \
     actor_rollout_ref.actor.use_dynamic_bsz=False \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \

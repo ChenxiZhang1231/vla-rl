@@ -1236,8 +1236,8 @@ class RobHFRollout(BaseRollout):
             image = Image.fromarray(input["full_image"]).convert("RGB")
             if self.config.center_crop:
                 image = center_crop_image(image)
-            # prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
-            prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
+            prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+            # prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
             batch_feature  = self.processor(prompt, image)
             
             if "wrist_image" in input.keys():
