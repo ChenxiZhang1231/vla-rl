@@ -1429,21 +1429,6 @@ class VLAFlowMatching(nn.Module):
         x_t_flat    = x_t_f.reshape(BS * K, CH, D)          # [BSK,CH,D]
         x_next_flat = x_next_f.reshape(BS * K, CH, D)       # [BSK,CH,D]
         t_flat      = t_f.reshape(BS * K)                   # [BSK]
-
-        # 调 denoise_step_sde（一次处理所有 step）
-        # 需要把 prefix mask/KV 扩到 [BS*K]（上面已处理）
-        # denoise_step_sde 内部会 embed_suffix(x_t_flat, t_flat)
-        # outputs_embeds, _ = self.vlm_with_expert.forward(
-        #     attention_mask=torch.cat([
-        #         prefix_pad_masks_rep[:, None, :].expand(BS * K, self.embed_suffix(x_t_flat, t_flat)[1].shape[1], prefix_pad_masks_rep.shape[1]),
-        #         make_att_2d_masks(*self.embed_suffix(x_t_flat, t_flat)[1:])  # (suffix_pad_masks, suffix_att_masks)
-        #     ], dim=2),
-        #     position_ids=(torch.sum(prefix_pad_masks_rep, dim=-1)[:, None] + torch.cumsum(self.embed_suffix(x_t_flat, t_flat)[1], dim=1) - 1),
-        #     past_key_values=past_kv_rep,
-        #     inputs_embeds=[None, self.embed_suffix(x_t_flat, t_flat)[0]],
-        #     use_cache=self.config.use_cache,
-        #     fill_kv_cache=False,
-        # )
         
         suffix_embs, suffix_pad, suffix_att = self.embed_suffix(x_t_flat, t_flat)   # [BSK, Ls, H], [BSK, Ls], [BSK, Ls]
 
@@ -1460,9 +1445,6 @@ class VLAFlowMatching(nn.Module):
             use_cache=self.config.use_cache,
             fill_kv_cache=False,
         )
-        # breakpoint()
-        # 上面为了避免多次计算，可拆开：先一次 self.embed_suffix(...)，再复用结果
-        # 这里做个小优化：实际写法请参考下面“更高效版本”注释
         suffix_out = outputs_embeds[1][:, -self.config.chunk_size :]      # [BSK, CH, H]
         v_t_flat   = self.action_out_proj(suffix_out).to(dtype)           # [BSK, CH, D]
         v_t_all    = v_t_flat.view(B, S, K, CH, D)                        # [B,S,K,CH,D]

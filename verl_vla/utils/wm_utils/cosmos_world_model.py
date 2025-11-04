@@ -223,7 +223,6 @@ class CosMosWorldModel(nn.Module):
         out = np.concatenate(out_chunks, axis=1)   # [B, T, H, W, 3]
         # self.save_video_grid(out, f'debug{step}.mp4')
         # self.save_trajectory_grid_image(out, 'debug.png')
-        # breakpoint()
         return out  # B, chunk_size, H, W, C
     
     def reset(self, current_obs_batch_np):

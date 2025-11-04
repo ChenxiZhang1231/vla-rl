@@ -12,7 +12,8 @@ import cv2 as cv
 from simpler_env.utils.action.action_ensemble import ActionEnsembler
 import sys 
 sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev")
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft")
+sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl_vla/utils/vla_utils/openvla_oft_flow")
+# sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft")
 from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
@@ -79,7 +80,7 @@ class OpenVLAOFTInference:
         ACTION_DIM = 7
         NUM_FLOW_MATCHING_STEPS = 10
         NUM_ACTIONS_CHUNK = 5
-
+        vla.lm_head = vla.language_model.lm_head
         llm_dim = vla.llm_dim
         noisy_action_projector = NoisyActionProjector(
             llm_dim=llm_dim).to(dtype=torch.bfloat16)
@@ -91,7 +92,7 @@ class OpenVLAOFTInference:
         self.noisy_action_projector = vla.noisy_action_projector
 
         action_head = FlowMatchingActionHead(
-                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS  #, num_actions=NUM_ACTIONS_CHUNK,
+                input_dim=llm_dim, hidden_dim=llm_dim, action_dim=ACTION_DIM, num_flow_steps=NUM_FLOW_MATCHING_STEPS, num_actions=NUM_ACTIONS_CHUNK,
             ).to(dtype=torch.bfloat16)
         action_head_path = find_checkpoint_file(saved_model_path, "action_head")
         action_head_state_dict = load_component_state_dict(action_head_path)
@@ -102,8 +103,10 @@ class OpenVLAOFTInference:
         
         if load_ckpt_path is not None:
             model_state = torch.load(load_ckpt_path, map_location="cpu")
-            vla.load_state_dict(model_state, strict=False)
+            vla.load_state_dict(model_state, strict=True)
             print(load_ckpt_path)
+        else:
+            raise
         self.vla = (
             vla
             .eval()
@@ -173,7 +176,8 @@ class OpenVLAOFTInference:
             image = self._resize_image(image)
             image = Image.fromarray(image).convert("RGB")
             
-            prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+            # prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+            prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
             inputs  = self.processor(prompt, image)
 
             with torch.no_grad():
@@ -185,14 +189,14 @@ class OpenVLAOFTInference:
                     do_sample=False,
                     proprio=None,
                     proprio_projector=None,
-                    noisy_action_projector=self.noisy_action_projector,
-                    action_head=self.action_head,
+                    noisy_action_projector=None,
+                    action_head=None,
                     use_film=False,
                     use_sde=False,
                     a_shape=(5,7)
                     # use_sde=True,
                 )
-                raw_actions = raw_actions[0]  # ck, 7
+                raw_actions = raw_actions[0,0]  # ck, 7
             for ac in raw_actions:
                  self.action_queue.append(ac)
         

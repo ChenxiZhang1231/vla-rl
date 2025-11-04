@@ -31,6 +31,7 @@ class Pi05Inference:
         image_size: list[int] = [224, 224],
         action_scale: float = 1.0,
         action_ensemble_temp: float = -0.8,
+        load_ckpt_path: str = None,
     ) -> None:
         gpu_idx = os.environ.get("GPU_IDX", 0)
         self.device = f"cuda:{gpu_idx}"
@@ -61,7 +62,7 @@ class Pi05Inference:
 
         config = _config.get_config("pi05_bridge")
         # Create a trained policy.
-        self.vla = policy_config.create_trained_policy(config, saved_model_path)
+        self.vla = policy_config.create_trained_policy(config, load_ckpt_path)
         
 
         self.image_size = image_size

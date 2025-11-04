@@ -1506,7 +1506,8 @@ class OpenVLAForActionPrediction(PrismaticForConditionalGeneration):
         NUM_PATCHES = self.vision_backbone.get_num_patches() * self.vision_backbone.get_num_images_in_input()
 
         # Run regression or discrete token-based prediction
-        if noisy_action_projector is not None:
+        # if noisy_action_projector is not None:
+        if True:
             normalized_actions, return_dict = self._flow_prediction(
                 input_embeddings,
                 all_actions_mask,

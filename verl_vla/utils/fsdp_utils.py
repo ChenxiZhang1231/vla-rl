@@ -538,6 +538,65 @@ def get_fsdp_wrap_policy_smolvla(root_module, wrap_qkv_linears: bool = False, is
     auto_wrap_policy = functools.partial(_or_policy, policies=policies)
     return auto_wrap_policy, None
 
+              
+def get_fsdp_wrap_policy_pi05(root_module, wrap_qkv_linears: bool = False, is_critic: bool = False, is_lora: bool = False):
+    """
+    返回 (auto_wrap_policy, ignored_modules)
+    - 只 wrap：语言塔 decoder block、视觉 ViT block、（可选）attention 子模块
+    - 忽略：视觉 patch-embed/stem/早期 Conv2d
+    """
+    # ---------- 语言塔 ----------
+    # tag_qkvo(root_module)
+    # tag_text_embed_tokens(root_module)
+    # tag_action(root_module)
+    # tag_laynorm_vit(root_module)
+    if is_critic:
+        tag_value_head(root_module)
+    policies = []
+    
+    for name, m in root_module.named_modules():
+        if name.endswith(("self_attn.q_proj", "self_attn.k_proj",
+                          "self_attn.v_proj", "self_attn.o_proj")):
+            if "vision_model" not in name:
+                setattr(m, "_fsdp_wrap_me", True)
+    
+    for name, m in root_module.named_modules():
+        if name.endswith(("state_proj", "action_in_proj", "action_out_proj", 
+                          "time_mlp_in", "time_mlp_out")):
+            setattr(m, "_fsdp_wrap_me", True)
+            
+    target_suffix = "paligemma.language_model.embed_tokens"
+    for name, m in root_module.named_modules():
+        # if name.endswith(target_suffix) and isinstance(m, nn.Embedding):
+        if isinstance(m, nn.Embedding):
+            setattr(m, "_fsdp_wrap_me", True)
+
+    policies = []
+
+    def is_tagged(m: nn.Module) -> bool:
+        return getattr(m, "_fsdp_wrap_me", False)
+    tag_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=is_tagged)
+    policies.append(tag_policy)
+        
+    # breakpoint()    
+    from transformers.models.siglip.modeling_siglip import SiglipVisionModel
+    from transformers.models.paligemma.modeling_paligemma import PaliGemmaMultiModalProjector
+    from transformers.models.gemma.modeling_gemma import GemmaDecoderLayer, GemmaRMSNorm, GemmaMLP
+    
+    module_classes_to_wrap = {
+        GemmaDecoderLayer,
+        GemmaRMSNorm,
+        GemmaMLP,
+        PaliGemmaMultiModalProjector,
+        SiglipVisionModel,
+    }
+    
+    module_policy = functools.partial(_module_wrap_policy, module_classes=module_classes_to_wrap)
+    policies.append(module_policy)
+
+    auto_wrap_policy = functools.partial(_or_policy, policies=policies)
+    return auto_wrap_policy, None
+
       
 def tag_lm_head(root: nn.Module):
     for name, m in root.named_modules():
