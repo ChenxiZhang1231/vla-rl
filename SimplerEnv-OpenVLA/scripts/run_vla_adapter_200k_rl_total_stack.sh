@@ -1,14 +1,14 @@
-bash scripts/run_vla_adapter_200k_rl_stack_batch.sh
+# bash scripts/run_vla_adapter_200k_rl_stack_batch.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_stack_fa.sh
+# bash scripts/run_vla_adapter_200k_rl_stack_batch_fa.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_stack_batch_fs_cosmos.sh
+# bash scripts/run_vla_adapter_200k_rl_stack_batch_fs_cosmos.sh
 
-wait 
+# wait 
 
 bash scripts/run_vla_adapter_200k_rl_stack_batch_few.sh
 
@@ -25,29 +25,29 @@ wait
 
 
 
-bash scripts/run_vla_adapter_200k_rl_joint_batch.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_batch.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_joint_fa.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_fa.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_joint_batch_fs_cosmos.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_batch_fs_cosmos.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_joint_batch_few.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_batch_few.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_joint_batch_few-cosmos.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_batch_few-cosmos.sh
 
-wait 
+# wait 
 
-bash scripts/run_vla_adapter_200k_rl_joint_batch_40traj.sh
+# bash scripts/run_vla_adapter_200k_rl_joint_batch_40traj.sh
 
-wait 
+# wait 
 
 
 

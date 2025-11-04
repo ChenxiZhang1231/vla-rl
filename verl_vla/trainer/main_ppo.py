@@ -57,7 +57,7 @@ class RobRewardManager():
     def __init__(self, num_examine,config) -> None:
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.config=config
-        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter']:
+        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter', 'pi05']:
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'
@@ -934,7 +934,7 @@ class RobVLMRewardManager():
         self.env_rollout = self.config.reward_model.env_rollout
         self.gen_data_for_wm_rm = self.config.reward_model.gen_data_for_wm_rm
         self.use_world_model = config.actor_rollout_ref.world_model.dit_path != ""
-        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter', 'openvla-oft-flow']:
+        if config.actor_rollout_ref.model.vla in ['smolvla', 'vla-adapter', 'openvla-oft-flow', 'pi05']:
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'

@@ -33,7 +33,7 @@ suffixes=(9 19 29 39 49)
 # suffixes=(49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_fs"
+tag_prefix="bridge_ck5_200k_rl_fs_fixprompt"
 
 action_ensemble_temp=0.0
 device=0

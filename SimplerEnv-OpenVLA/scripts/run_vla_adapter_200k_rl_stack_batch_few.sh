@@ -28,10 +28,10 @@ ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-d
 # )
 
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step19.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step29.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step39.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step9.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step19.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step29.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step39.pt"
   "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/stack-filter-fs-few/step49.pt"
 )
 

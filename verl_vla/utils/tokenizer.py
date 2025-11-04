@@ -55,6 +55,9 @@ def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kw
     
     if "smolvla" in name_or_path:
         return None
+
+    if "pi05" in name_or_path:
+        return None
     
     model = kwargs.get("model", None)
     if model == "openvla-oft":   

@@ -41,6 +41,7 @@ from verl_vla.utils.fsdp_utils import (
     get_init_weight_context_manager, 
     get_fsdp_wrap_policy_vla,
     get_fsdp_wrap_policy_smolvla,
+    get_fsdp_wrap_policy_pi05,
     get_fsdp_wrap_policy_wm,
     get_fsdp_wrap_policy_rm,
     get_fsdp_wrap_policy_vla_adapter,
@@ -219,6 +220,13 @@ class RobActorRolloutRefWorker(Worker):
             #     update_auto_map(local_path)
             #     check_model_logic_mismatch(local_path)
             torch.distributed.barrier()
+        elif self.config.model.vla == "pi05":
+            import sys
+            sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl_vla/utils/vla_utils/pi05")
+            from openpi.training import config as _config
+            from openpi.policies import policy_config
+            from openpi.shared import download
+            torch.distributed.barrier()
         elif self.config.model.vla == "vla-adapter":
             import sys
             sys.path.append('/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl_vla/utils/vla_utils/vla_adapter')
@@ -266,8 +274,12 @@ class RobActorRolloutRefWorker(Worker):
         # override model kwargs
         if self.config.model.vla == "smolvla":
             actor_model_config = SmolVLAConfig()
+        elif self.config.model.vla == "pi05":
+            actor_model_config = _config.get_config("pi05_bridge")
         else:
             actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
+            
+            
         if self.config.model.use_remove_padding:
             from verl_vla.models.registry import check_model_support_rmpad
             check_model_support_rmpad(actor_model_config.model_type)
@@ -284,12 +296,18 @@ class RobActorRolloutRefWorker(Worker):
                 'pad_token_id': self.tokenizer.pad_token_id,
             }
         override_config_kwargs.update(override_model_config)
-        update_model_config(actor_model_config, override_config_kwargs=override_config_kwargs)
+        if self.config.model.vla == "pi05":
+            pass
+        else:
+            update_model_config(actor_model_config, override_config_kwargs=override_config_kwargs)
         if self.rank == 0:
             print(f'Model config after override: {actor_model_config}')
 
-        
-        init_context = get_init_weight_context_manager(use_meta_tensor=not actor_model_config.tie_word_embeddings)
+        if self.config.model.vla == "pi05":
+            use_meta_tensor = False
+        else:
+            use_meta_tensor = not actor_model_config.tie_word_embeddings
+        init_context = get_init_weight_context_manager(use_meta_tensor=use_meta_tensor)
 
         with init_context(), warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -483,7 +501,14 @@ class RobActorRolloutRefWorker(Worker):
                 )
                 self.action_head = None
                 self.noisy_action_projector = None
-                
+            elif self.config.model.vla == "pi05":
+                actor_module = policy_config.create_trained_policy(actor_model_config, local_path)
+                actor_module.n_action_steps = self.config.model.action_chunks_len
+                actor_module.noisy_action_projector = None
+                actor_module.action_head = None
+                self.action_head = None
+                self.noisy_action_projector = None
+                actor_module.paligemma_with_expert.training = True
             # breakpoint()
             # if torch_dtype != torch.float32:
             #     actor_module.to(torch_dtype)
@@ -532,7 +557,6 @@ class RobActorRolloutRefWorker(Worker):
             return bad
         bad = _find_meta_or_zero_storage(actor_module)
         assert not bad, f"Found meta/zero-storage params before FSDP: {bad[:5]} (total={len(bad)})"
-
         if self.rank == 0:
             print_model_size(actor_module)
         # breakpoint()
@@ -558,7 +582,9 @@ class RobActorRolloutRefWorker(Worker):
         if self.config.model.vla == "smolvla":
             # auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None))
             auto_wrap_policy, ignored = get_fsdp_wrap_policy_smolvla(actor_module, wrap_qkv_linears=True)
-            # auto_wrap_policy = None
+        elif self.config.model.vla == "pi05":
+            # auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None))
+            auto_wrap_policy, ignored = get_fsdp_wrap_policy_pi05(actor_module, wrap_qkv_linears=True)
         elif self.config.model.vla == "openvla-oft":
             auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
         elif self.config.model.vla == "vla-adapter":
@@ -584,6 +610,21 @@ class RobActorRolloutRefWorker(Worker):
         # else:
         #     sharding_strategy = ShardingStrategy.FULL_SHARD
         if self.config.model.vla == 'smolvla':
+            sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
+
+            # TODO: add transformer policy
+            actor_module_fsdp = FSDP(
+                actor_module,
+                # param_init_fn=init_fn,
+                use_orig_params=True,
+                auto_wrap_policy=auto_wrap_policy,
+                device_id=torch.cuda.current_device(),
+                sharding_strategy=sharding_strategy,  # zero3
+                mixed_precision=mixed_precision,
+                sync_module_states=True,
+                limit_all_gathers=True,
+                device_mesh=self.device_mesh)
+        elif self.config.model.vla == 'pi05':
             sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
 
             # TODO: add transformer policy
@@ -660,6 +701,21 @@ class RobActorRolloutRefWorker(Worker):
         # TODO: add more optimizer args into config
         if self._is_actor:
             if self.config.model.vla == 'smolvla':
+                from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
+                actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
+                                            lr=optim_config.lr,
+                                            betas=optim_config.get('betas', (0.9, 0.999)),
+                                            weight_decay=optim_config.get('weight_decay', 1e-2))
+
+                total_steps = optim_config.get('total_training_steps', 0)
+                num_warmup_steps_ratio = optim_config.get('lr_warmup_steps_ratio', 0.)
+                num_warmup_steps = int(num_warmup_steps_ratio * total_steps)
+
+                print(f'Total steps: {total_steps}, num_warmup_steps: {num_warmup_steps}')
+
+                actor_lr_scheduler = get_constant_schedule_with_warmup(optimizer=actor_optimizer,
+                                                                    num_warmup_steps=num_warmup_steps)
+            elif self.config.model.vla == 'pi05':
                 from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
                 actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
                                             lr=optim_config.lr,
@@ -1155,7 +1211,7 @@ class RobActorRolloutRefWorker(Worker):
                                               noisy_action_projector=self.noisy_action_projector,
                                               actor_optimizer=self.actor_optimizer,
                                               processor_path=self.config.rollout.pretrained_checkpoint)
-            if self.config.model.vla == 'smolvla':
+            if self.config.model.vla in ['smolvla', 'pi05']:
                 self.checkpoint_manager = FSDPCheckpointManagerSmolVLA(
                     model=self.actor_module_fsdp,
                     optimizer=self.actor_optimizer,
@@ -1284,6 +1340,8 @@ class RobActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('Before update policy', logger=logger)
         if self.actor.config.vla == 'smolvla':
             metrics = self.actor.update_policy_smolvla(data=data)
+        elif self.actor.config.vla == 'pi05':
+            metrics = self.actor.update_policy_pi05(data=data)
         elif self.actor.config.vla == 'vla-adapter':
             metrics = self.actor.update_policy_vla_adapter(data=data)
         elif self.actor.config.vla == 'openvla-oft-flow':
@@ -1511,6 +1569,47 @@ class RobActorRolloutRefWorker(Worker):
         torch.distributed.barrier()
         torch.cuda.empty_cache()
         return output
+    
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_ref_log_prob_pi05(self, data: DataProto):
+        assert self._is_ref
+
+        data = data.to('cuda')
+
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.ref_module_fsdp,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+        micro_batch_size = self.config.ref.log_prob_micro_batch_size
+        data.meta_info['micro_batch_size'] = micro_batch_size
+        data.meta_info['temperature'] = self.config.rollout.temperature
+        data.meta_info['max_token_len'] = self.config.ref.log_prob_max_token_len_per_gpu
+        data.meta_info['use_dynamic_bsz'] = self.config.ref.log_prob_use_dynamic_bsz
+        data.meta_info['pad_token_id'] = self.tokenizer.pad_token_id if self.tokenizer is not None else -1
+        output = self.ref_policy.compute_log_prob(data=data)
+        # breakpoint()
+        
+        if len(output) == 4:
+            ref_log_prob, ref_mean, ref_std, out_metric = output
+            logp_outer = out_metric['logp_outer']
+            logp_elem = out_metric['logp_elem']
+            output = DataProto.from_dict(tensors={'ref_log_prob': ref_log_prob,
+                                                'ref_mean': ref_mean,
+                                                'ref_std': ref_std,
+                                                'ref_logp_outer': logp_outer,
+                                                'ref_logp_elem': logp_elem,
+                                                })
+        else:
+            output = DataProto.from_dict(tensors={'ref_log_prob': output})
+        output = output.to('cpu')
+
+        if self._is_offload_param:
+            offload_fsdp_param_and_grad(module=self.ref_module_fsdp, offload_grad=self._is_offload_grad)
+        torch.cuda.synchronize()
+        torch.distributed.barrier()
+        torch.cuda.empty_cache()
+        return output
+    
     
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def compute_ref_log_prob_vla_adapter(self, data: DataProto):
