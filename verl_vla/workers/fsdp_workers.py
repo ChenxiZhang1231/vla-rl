@@ -509,6 +509,12 @@ class RobActorRolloutRefWorker(Worker):
                 self.action_head = None
                 self.noisy_action_projector = None
                 actor_module.paligemma_with_expert.training = True
+                paligemma = actor_module.paligemma_with_expert.paligemma 
+
+                vit = paligemma.model.vision_tower
+
+                for p in vit.parameters():
+                    p.requires_grad = False
             # breakpoint()
             # if torch_dtype != torch.float32:
             #     actor_module.to(torch_dtype)
@@ -634,7 +640,7 @@ class RobActorRolloutRefWorker(Worker):
                 use_orig_params=True,
                 auto_wrap_policy=auto_wrap_policy,
                 device_id=torch.cuda.current_device(),
-                sharding_strategy=sharding_strategy,  # zero3
+                sharding_strategy=sharding_strategy,
                 mixed_precision=mixed_precision,
                 sync_module_states=True,
                 limit_all_gathers=True,
@@ -717,7 +723,8 @@ class RobActorRolloutRefWorker(Worker):
                                                                     num_warmup_steps=num_warmup_steps)
             elif self.config.model.vla == 'pi05':
                 from verl_vla.utils.torch_functional import get_constant_schedule_with_warmup
-                actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
+                trainable_params = [p for p in actor_module_fsdp.parameters() if p.requires_grad]
+                actor_optimizer = optim.AdamW(trainable_params,
                                             lr=optim_config.lr,
                                             betas=optim_config.get('betas', (0.9, 0.999)),
                                             weight_decay=optim_config.get('weight_decay', 1e-2))
