@@ -176,8 +176,8 @@ class OpenVLAOFTInference:
             image = self._resize_image(image)
             image = Image.fromarray(image).convert("RGB")
             
-            # prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
-            prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
+            prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+            # prompt = f'<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nWhat action should the robot take to {task_description.lower()}?<|im_end|>\n<|im_start|>assistant\n'
             inputs  = self.processor(prompt, image)
 
             with torch.no_grad():

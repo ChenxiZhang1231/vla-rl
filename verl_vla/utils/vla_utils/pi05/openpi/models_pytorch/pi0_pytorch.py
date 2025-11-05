@@ -176,14 +176,17 @@ class PI0Pytorch(nn.Module):
             mean=0.0,
             std=1.0,
             size=shape,
-            dtype=torch.float32,
+            # dtype=torch.float32,
+            dtype=torch.bfloat16,
             device=device,
         )
 
     def sample_time(self, bsize, device):
         time_beta = sample_beta(1.5, 1.0, bsize, device)
         time = time_beta * 0.999 + 0.001
-        return time.to(dtype=torch.float32, device=device)
+        # return time.to(dtype=torch.float32, device=device)
+        return time.to(dtype=torch.bfloat16, device=device)
+        
 
     @torch.no_grad()
     def predict_action_chunk(
@@ -195,7 +198,7 @@ class PI0Pytorch(nn.Module):
         recompute_log_prob: bool = False
     ) -> Tensor:
         # Make a copy since transformations may modify the inputs in place.
-        self.eval()
+        # self.eval()
         sample_rng_or_pytorch_device = batch['observation/image_is_pad'].device
         img_np = batch['observation/image'].cpu().numpy()
         batch['observation/image_is_pad'] = batch['observation/image_is_pad'].cpu().float()
@@ -211,7 +214,7 @@ class PI0Pytorch(nn.Module):
                  'observation/state': np.zeros([bs, 8]),
                  'prompt': prompt}
         inputs = self._input_transform(image)
-        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device), inputs)
+        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device, dtype=torch.bfloat16), inputs)
         
         # observation = _model.Observation.from_dict(inputs)
         # self.sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
@@ -219,14 +222,15 @@ class PI0Pytorch(nn.Module):
             logp_input = batch
         else:
             logp_input = None
-        actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
-            inputs,
-            noise,
-            use_sde=use_sde,
-            return_logprob=return_logprob,
-            recompute_log_prob=recompute_log_prob,
-            logp_input=logp_input,
-        )
+        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+                inputs,
+                noise,
+                use_sde=use_sde,
+                return_logprob=return_logprob,
+                recompute_log_prob=recompute_log_prob,
+                logp_input=logp_input,
+            )
 
         # outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
 
@@ -264,7 +268,7 @@ class PI0Pytorch(nn.Module):
                  'observation/state': np.zeros([bs, 8]),
                  'prompt': prompt}
         inputs = self._input_transform(image)
-        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device), inputs)
+        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device, dtype=torch.bfloat16), inputs)
         
         # observation = _model.Observation.from_dict(inputs)
         # self.sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
@@ -272,14 +276,15 @@ class PI0Pytorch(nn.Module):
             logp_input = batch
         else:
             logp_input = None
-        actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
-            inputs,
-            noise,
-            use_sde=use_sde,
-            return_logprob=return_logprob,
-            recompute_log_prob=recompute_log_prob,
-            logp_input=logp_input,
-        )
+        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
+                inputs,
+                noise,
+                use_sde=use_sde,
+                return_logprob=return_logprob,
+                recompute_log_prob=recompute_log_prob,
+                logp_input=logp_input,
+            )
 
         # outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
 
@@ -366,10 +371,12 @@ class PI0Pytorch(nn.Module):
             return None, lang_tokens, lang_masks, return_dict
 
         if use_sde:
+            images = [img.to(torch.bfloat16) for img in images]
+            lang_tokens = lang_tokens.to(torch.long)
             return_dict = self.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
             if return_logprob:
                 return_dict, log_probs = return_dict
-            actions = return_dict['x_next'][-1].detach().cpu().numpy()
+            actions = return_dict['x_next'][-1].detach().cpu().to(torch.float32).numpy()
         else:
             return_dict = self.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
             actions = return_dict['x_next'][-1].detach().cpu().numpy()
