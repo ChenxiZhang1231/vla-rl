@@ -4,8 +4,8 @@ set -euo pipefail
 model_name=vla-adapter
 
 tasks=(
-  # bridge_joint.sh
-  bridge_joint_onlystack.sh
+  bridge_joint.sh
+  # bridge_joint_onlystack.sh
   # drawer_variant_agg.sh
   # drawer_visual_matching.sh
   # move_near_variant_agg.sh
@@ -21,11 +21,25 @@ ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-d
 
 # 外层遍历的“加载用/合并后” ckpt
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step19.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step29.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step39.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step49.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step9.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step19.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step29.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step39.pt"
+  # "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step19.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step39.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step59.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step79.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step99.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step119.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step139.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step159.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step179.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step199.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step219.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step239.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts/bridge/joint-filter-fs-continue/step259.pt"
+
 )
 
 # 统一的 tag 后缀（steps）
@@ -33,7 +47,7 @@ suffixes=(9 19 29 39 49)
 # suffixes=(49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_fs_fixprompt"
+tag_prefix="bridge_ck5_200k_rl_fs_fixprompt_total"
 
 action_ensemble_temp=0.0
 device=0

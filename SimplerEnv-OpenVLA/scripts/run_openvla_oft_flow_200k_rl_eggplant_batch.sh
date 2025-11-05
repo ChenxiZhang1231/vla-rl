@@ -20,21 +20,21 @@ tasks=(
 # 外层遍历的“加载用/合并后” ckpt
 ckpt_path=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openvla-oft/outputs/openvla-7b+bridge_orig+b8+lr-0.0001+lora-r64+dropout-0.0--image_aug--OpenVLA-OFT--brdige-repeat----200000_chkpt/
 load_ckpt_paths=(
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step9.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step19.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step29.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step39.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step49.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step59.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step69.pt"
-  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb5_mini128/bridge/eggplant/step79.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step9.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step19.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step29.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step39.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step49.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step59.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step69.pt"
+  "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/work_dirs/merged_ckpts_openvla_fb6_mini128/bridge/eggplant/step79.pt"
 )
 
 # 统一的 tag 后缀（steps）
 suffixes=(9 19 29 39 49)
 
 # 可选：你的 tag 前缀（自定义，便于筛选）
-tag_prefix="bridge_ck5_200k_rl_openvla_fb5_fs_mini128_final_2"
+tag_prefix="bridge_ck5_200k_rl_openvla_fb6_fs_mini128_openprompt"
 
 action_ensemble_temp=0.0
 device=0
