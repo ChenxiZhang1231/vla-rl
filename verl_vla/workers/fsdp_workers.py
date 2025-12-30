@@ -222,7 +222,7 @@ class RobActorRolloutRefWorker(Worker):
             torch.distributed.barrier()
         elif self.config.model.vla == "pi05":
             import sys
-            sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/verl_vla/utils/vla_utils/pi05")
+            sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/verl_vla/utils/vla_utils/pi05")
             from openpi.training import config as _config
             from openpi.policies import policy_config
             from openpi.shared import download

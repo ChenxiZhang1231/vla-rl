@@ -15,9 +15,11 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-pi05_fb_wm_ffp-full-faster-bridge-carrot'
+EXPERIMENT_NAME='exp1-pi05_wm_ffp-full-faster-bridge-carrot-fly-wheel'
+# EXPERIMENT_NAME='debug'
+
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
-SFT_MODEL_PATH="/inspire/hdd/project/robotsimulation/public/models/openpi/pi05_bridge/pi05_bridge_1028_01/200000"
+SFT_MODEL_PATH="/inspire/hdd/project/robotsimulation/public/models/openpi05/pi05_bridge/pi05_bridge_1028_01/200000"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="bridge_orig"
