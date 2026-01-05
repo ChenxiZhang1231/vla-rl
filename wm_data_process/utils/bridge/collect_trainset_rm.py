@@ -74,7 +74,7 @@ candidates_exact = {
 def main():
     parser = argparse.ArgumentParser(description="Process dataset videos with synchronized metadata + 2D projections.")
     parser.add_argument("--dataset_dirs", type=Path, default='/inspire/ssd/project/robotsimulation/public/data/bridge', help="the dataset root")
-    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl_train_rm', help="processed output path")
+    parser.add_argument("--output_dir", type=Path, default='/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/bridge_select_trajs', help="processed output path")
     parser.add_argument("--data_mix", type=str, default='bridge_orig')
     args = parser.parse_args()
 

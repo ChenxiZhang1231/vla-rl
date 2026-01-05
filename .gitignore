@@ -154,4 +154,4 @@ result_analyse/
 config.json.back.*
 *.jpg
 events.out.tfevents.*
-SimplerEnv-OpenVLA/results/*
+SimplerEnv-OpenVLA/results/**.safetensors

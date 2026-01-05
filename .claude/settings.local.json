@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(ETILS_USE_IMPORTS=0 python:*)",
+      "Bash(timeout:*)"
+    ]
+  }
+}

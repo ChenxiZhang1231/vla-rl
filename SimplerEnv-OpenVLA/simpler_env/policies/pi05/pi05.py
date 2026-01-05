@@ -7,6 +7,7 @@ from collections import deque
 from PIL import Image
 import torch
 import cv2 as cv
+from safetensors.torch import load_file
 from simpler_env.utils.action.action_ensemble import ActionEnsembler
 from .geometry import quat2mat, mat2euler
 import numpy as np
@@ -14,7 +15,7 @@ import torch
 import sys
 # sys.path.insert(0, "/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/lerobot_pi/src")
 # from lerobot.policies.pi05 import PI05Policy, PI05Config
-sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/openpi/src")
+sys.path.append("/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prophrl/openpi/src")
 from openpi.training import config as _config
 from openpi.policies import policy_config
 from openpi.shared import download
@@ -62,8 +63,16 @@ class Pi05Inference:
 
         config = _config.get_config("pi05_bridge")
         # Create a trained policy.
-        self.vla = policy_config.create_trained_policy(config, load_ckpt_path)
-        
+        init_ckpt_path = "/inspire/hdd/project/robotsimulation/public/models/openpi05/pi05_bridge/pi05_bridge_1028_01/200000"
+        self.vla = policy_config.create_trained_policy(config, init_ckpt_path)
+        del self.vla._model.paligemma_with_expert.paligemma.lm_head
+        # Load checkpoint based on file format
+        if load_ckpt_path.endswith(".safetensors"):
+            model_state = load_file(load_ckpt_path, device="cpu")
+        else:
+            model_state = torch.load(load_ckpt_path, map_location="cpu", weights_only=False)
+        self.vla._model.load_state_dict(model_state, strict=False)
+        print(load_ckpt_path)
 
         self.image_size = image_size
         self.action_scale = action_scale

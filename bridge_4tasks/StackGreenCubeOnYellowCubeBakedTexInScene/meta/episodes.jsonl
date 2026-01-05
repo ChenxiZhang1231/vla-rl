@@ -1,0 +1,1550 @@
+{"episode_index": 0, "tasks": ["put the blue cube on the right side of the table on top of the rectangular block"], "length": 47}
+{"episode_index": 1, "tasks": ["put the rectangle block on top of the red arch and yellow block"], "length": 48}
+{"episode_index": 2, "tasks": ["take the yellow cube and move in to the left"], "length": 48}
+{"episode_index": 3, "tasks": ["move the triangular to right side of the table from the block."], "length": 47}
+{"episode_index": 4, "tasks": ["put the rectangle block on top of the written rectangle block"], "length": 45}
+{"episode_index": 5, "tasks": ["remove yellow cube from the tower and place it on the table"], "length": 35}
+{"episode_index": 6, "tasks": ["move cube from tower on right side of the table"], "length": 48}
+{"episode_index": 7, "tasks": ["put the green cube on top of  blue block"], "length": 31}
+{"episode_index": 8, "tasks": ["put the light blue cube on the right side of the red spoon"], "length": 33}
+{"episode_index": 9, "tasks": ["put the red cube on top of the tower"], "length": 48}
+{"episode_index": 10, "tasks": ["put the rectangle block on top of the cube with a hole"], "length": 48}
+{"episode_index": 11, "tasks": ["put the cube with a hole on top of the block"], "length": 29}
+{"episode_index": 12, "tasks": ["put the block on top of two cube"], "length": 39}
+{"episode_index": 13, "tasks": ["put the cube on top of the cylinder"], "length": 48}
+{"episode_index": 14, "tasks": ["move the red block to the left side of the table"], "length": 44}
+{"episode_index": 15, "tasks": ["remove the green block from top of the blue block and put it on top of yellow rectangular block"], "length": 48}
+{"episode_index": 16, "tasks": ["rotated the white cube with a hole 45 degrees"], "length": 40}
+{"episode_index": 17, "tasks": ["put the block rectangular of the table"], "length": 45}
+{"episode_index": 18, "tasks": ["move the brown cube to the top of the white cylinder"], "length": 47}
+{"episode_index": 19, "tasks": ["put the yellow rectangular block on the blue arch"], "length": 47}
+{"episode_index": 20, "tasks": ["put the blue triangle on top of the yellow cube"], "length": 48}
+{"episode_index": 21, "tasks": ["put redcube in pan and put pan on stove"], "length": 66}
+{"episode_index": 22, "tasks": ["put the green block on top of the yellow block"], "length": 48}
+{"episode_index": 23, "tasks": ["move the yellow cube to the top of the cylinder"], "length": 48}
+{"episode_index": 24, "tasks": ["move the green cube and put it into yellow cube"], "length": 48}
+{"episode_index": 25, "tasks": ["put the cube with a hole onto the left side of the table."], "length": 37}
+{"episode_index": 26, "tasks": ["pick rectangle block from the table and place it on top of another block"], "length": 44}
+{"episode_index": 27, "tasks": ["placed the green cube to the top of the yellow cube"], "length": 32}
+{"episode_index": 28, "tasks": ["move the wooden block to the top of the yellow block"], "length": 45}
+{"episode_index": 29, "tasks": ["put the grey cube on top of the rectangular block"], "length": 48}
+{"episode_index": 30, "tasks": ["move the cylindrical block with a hole in the middle and put it on top of the green rectangular block"], "length": 48}
+{"episode_index": 31, "tasks": ["removed the yellow cube from the tower and moved it to the right"], "length": 46}
+{"episode_index": 32, "tasks": ["put the white cube in the middle of a table"], "length": 37}
+{"episode_index": 33, "tasks": ["put the block with a hole on the stick"], "length": 43}
+{"episode_index": 34, "tasks": ["put the cylindrical stick on top of the cube"], "length": 48}
+{"episode_index": 35, "tasks": ["Remove the green cube from top of the table"], "length": 39}
+{"episode_index": 36, "tasks": ["remove the yellow triangle from blue tower to the blue block"], "length": 41}
+{"episode_index": 37, "tasks": ["take the block off the blue rectangular block and put it on top of the cylinder"], "length": 48}
+{"episode_index": 38, "tasks": ["put the green rectangle block on top of the yellow rectangle block"], "length": 38}
+{"episode_index": 39, "tasks": ["Take the green cube from the blue cube and put it on the red rectangle"], "length": 48}
+{"episode_index": 40, "tasks": ["Put the red cube on the top of the yellow rectangle"], "length": 48}
+{"episode_index": 41, "tasks": ["put the blue block on top of the rectangular block"], "length": 48}
+{"episode_index": 42, "tasks": ["put red block from arch to left side."], "length": 48}
+{"episode_index": 43, "tasks": ["put the yellow cube on top of the red cube"], "length": 48}
+{"episode_index": 44, "tasks": ["put redcube in pan and put pan on stove"], "length": 74}
+{"episode_index": 45, "tasks": ["put the block on top of the cube with hole in the middle"], "length": 38}
+{"episode_index": 46, "tasks": ["move the yellow block above the green arch and the tower"], "length": 46}
+{"episode_index": 47, "tasks": ["put the white block on top of the other white block"], "length": 43}
+{"episode_index": 48, "tasks": ["take the yellow cube off of the rectangular block and put it on top of the white block"], "length": 48}
+{"episode_index": 49, "tasks": ["put the red cylinder on top of L-shape block"], "length": 44}
+{"episode_index": 50, "tasks": ["put the cube on top of the rectangle"], "length": 46}
+{"episode_index": 51, "tasks": ["put redcube in pan and put pan on stove"], "length": 78}
+{"episode_index": 52, "tasks": ["remove the red cube and put it on top of the green arch"], "length": 47}
+{"episode_index": 53, "tasks": ["put the yellow block on the tower"], "length": 46}
+{"episode_index": 54, "tasks": ["moves the block to the left side of the table"], "length": 38}
+{"episode_index": 55, "tasks": ["picked yellow rectangular cube and placed on a tower"], "length": 48}
+{"episode_index": 56, "tasks": ["move one blue block forward"], "length": 42}
+{"episode_index": 57, "tasks": ["put the white rectangular block on top of the white block"], "length": 48}
+{"episode_index": 58, "tasks": ["move the green arch from the blue rectangular block on top of arch and put it on top other block"], "length": 40}
+{"episode_index": 59, "tasks": ["put the arch block on top of the tower"], "length": 39}
+{"episode_index": 60, "tasks": ["pick up the red cube on the table and put it next to the red cube on the green arch"], "length": 48}
+{"episode_index": 61, "tasks": ["put two blocks on top of the other block with red marking"], "length": 41}
+{"episode_index": 62, "tasks": ["put the yellow cube on top of the tower"], "length": 48}
+{"episode_index": 63, "tasks": ["Put the yellow block on top of the red arch"], "length": 48}
+{"episode_index": 64, "tasks": ["move the rectangle block in the middle of the table"], "length": 37}
+{"episode_index": 65, "tasks": ["pick the rectangular cube and put it on the plus and cube"], "length": 42}
+{"episode_index": 66, "tasks": ["remove the cube off of the arch"], "length": 40}
+{"episode_index": 67, "tasks": ["put the red arch on top of the blue rectangle block"], "length": 35}
+{"episode_index": 68, "tasks": ["Place the blue cube to the left of the red knife."], "length": 48}
+{"episode_index": 69, "tasks": ["move the blue block to the right of the table"], "length": 40}
+{"episode_index": 70, "tasks": ["put the blue rectangle on top of the cylinder and the yellow cube."], "length": 48}
+{"episode_index": 71, "tasks": ["put the block on the tower"], "length": 38}
+{"episode_index": 72, "tasks": ["move the blue block on top of the uncolored cubes"], "length": 48}
+{"episode_index": 73, "tasks": ["put a yellow block in the middle of the table"], "length": 32}
+{"episode_index": 74, "tasks": ["put the blue block on top of the red block"], "length": 47}
+{"episode_index": 75, "tasks": ["Stack the cube on top of the other"], "length": 41}
+{"episode_index": 76, "tasks": ["putting the yellow cube on top of green and red cube"], "length": 47}
+{"episode_index": 77, "tasks": ["move the white block on middle of the table"], "length": 48}
+{"episode_index": 78, "tasks": ["put the red arch on  top of the blue rectangular block"], "length": 37}
+{"episode_index": 79, "tasks": ["put the blue cube on top of  the green cube"], "length": 48}
+{"episode_index": 80, "tasks": ["Put the Cylindricalblock above the tower"], "length": 48}
+{"episode_index": 81, "tasks": ["remove the green cube on top and move it to the left."], "length": 48}
+{"episode_index": 82, "tasks": ["picking the yellow block puting it to the right"], "length": 37}
+{"episode_index": 83, "tasks": ["move the red block on the middle of the table"], "length": 38}
+{"episode_index": 84, "tasks": ["removed the rectangle block from the arch"], "length": 48}
+{"episode_index": 85, "tasks": ["move the yellow block from top of stack and move to the table."], "length": 48}
+{"episode_index": 86, "tasks": ["removed the building block from the right and added it o set on the left"], "length": 47}
+{"episode_index": 87, "tasks": ["take green block from blue block"], "length": 37}
+{"episode_index": 88, "tasks": ["move the block"], "length": 30}
+{"episode_index": 89, "tasks": ["put the rectangular block on top of the two blue cubes"], "length": 48}
+{"episode_index": 90, "tasks": ["put the green square block to thre top of red block"], "length": 48}
+{"episode_index": 91, "tasks": ["Place the cube on the top right just off the stove area."], "length": 39}
+{"episode_index": 92, "tasks": ["move the blue rectangular block at the bottom of the red rectangular block"], "length": 31}
+{"episode_index": 93, "tasks": ["put the red block in the blue cylinder"], "length": 37}
+{"episode_index": 94, "tasks": ["put the stick in the cube with a hole"], "length": 45}
+{"episode_index": 95, "tasks": ["put the yellow block on top of the green arch"], "length": 48}
+{"episode_index": 96, "tasks": ["Put the red cylinder in the cube with the hole"], "length": 48}
+{"episode_index": 97, "tasks": ["Put the thing to the top of cube arch"], "length": 41}
+{"episode_index": 98, "tasks": ["put the blue rectangular block on top of the yellow rectangular block"], "length": 40}
+{"episode_index": 99, "tasks": ["move the blue cube to the left on green cube"], "length": 48}
+{"episode_index": 100, "tasks": ["Move the yellow block in the middle of the table"], "length": 34}
+{"episode_index": 101, "tasks": ["put the blue block on the white cylynder"], "length": 48}
+{"episode_index": 102, "tasks": ["move the green block to the left"], "length": 46}
+{"episode_index": 103, "tasks": ["takes the cylinder and places it on top of the orange block"], "length": 48}
+{"episode_index": 104, "tasks": ["remove the block off of the red cube and put it on top of the blue triangle"], "length": 46}
+{"episode_index": 105, "tasks": ["placed blue rectangular block from the table to on top of the arch"], "length": 48}
+{"episode_index": 106, "tasks": ["Put the small yellow block on top of the bigger yellow block"], "length": 45}
+{"episode_index": 107, "tasks": ["move the blue block to on the green cloth"], "length": 40}
+{"episode_index": 108, "tasks": ["remove the green rectangle block from the yellow rectangle block"], "length": 39}
+{"episode_index": 109, "tasks": ["pick up the green arch on top of the white cylinder and blue cube and put it on the table"], "length": 48}
+{"episode_index": 110, "tasks": ["put down the red cube to the table between the green arch and blue triangle"], "length": 46}
+{"episode_index": 111, "tasks": ["put the green cube on top of the yellow cube."], "length": 48}
+{"episode_index": 112, "tasks": ["put the red cube on top of rectangular block"], "length": 48}
+{"episode_index": 113, "tasks": ["move the rectangular block from a rectangular block to the center of the wooden table"], "length": 42}
+{"episode_index": 114, "tasks": ["put the white figure on top of the cube"], "length": 42}
+{"episode_index": 115, "tasks": ["take the yellow cube on top of the red arch and put it on top of the other cube"], "length": 36}
+{"episode_index": 116, "tasks": ["put the cube on top of the arch"], "length": 48}
+{"episode_index": 117, "tasks": ["put the blue cube on top of the plus"], "length": 48}
+{"episode_index": 118, "tasks": ["put the small cylinder on top of the cube with a hole"], "length": 48}
+{"episode_index": 119, "tasks": ["put the rectangular block on top of another rectangular block"], "length": 45}
+{"episode_index": 120, "tasks": ["pick yellow cube from the tower and place it on the table"], "length": 34}
+{"episode_index": 121, "tasks": ["Remove the blue cube from the arch and put on the left side of the table"], "length": 41}
+{"episode_index": 122, "tasks": ["put the green triangle on top of the red cube."], "length": 48}
+{"episode_index": 123, "tasks": ["move blue block on top of white block"], "length": 48}
+{"episode_index": 124, "tasks": ["Removed the cube from the tower and put it on top of the cube with a hole"], "length": 48}
+{"episode_index": 125, "tasks": ["It took the blue cube from the tower and put it and the right edge of the table"], "length": 48}
+{"episode_index": 126, "tasks": ["put the green cube on  the tower to the left of the table"], "length": 28}
+{"episode_index": 127, "tasks": ["pick red cube from tower and place it on top of the table"], "length": 39}
+{"episode_index": 128, "tasks": ["put the block on top of the tower"], "length": 48}
+{"episode_index": 129, "tasks": ["remove the white cube from the blue cube and placed it on the table."], "length": 43}
+{"episode_index": 130, "tasks": ["remove the yellow block and put in the table"], "length": 46}
+{"episode_index": 131, "tasks": ["put the blue block on top of the yellow block"], "length": 35}
+{"episode_index": 132, "tasks": ["put the top rectangular block on the upper part of the table"], "length": 32}
+{"episode_index": 133, "tasks": ["move the rectangular block on the right side of the table"], "length": 32}
+{"episode_index": 134, "tasks": ["Put yellow Cylindrical block above the blue block with circle"], "length": 41}
+{"episode_index": 135, "tasks": ["move the green cube to the left of the table next to the yellow cube"], "length": 48}
+{"episode_index": 136, "tasks": ["Move the cube on top of the wooden block shaped like a bridge, beside another cube"], "length": 48}
+{"episode_index": 137, "tasks": ["take the blue rectangle block from the cylinder and put it in the middle of the table"], "length": 46}
+{"episode_index": 138, "tasks": ["take the cylinder off of the circular block and put it on top side of the table"], "length": 33}
+{"episode_index": 139, "tasks": ["put the green triangle on the top of the red block"], "length": 41}
+{"episode_index": 140, "tasks": ["move the red block to the right"], "length": 40}
+{"episode_index": 141, "tasks": ["pick green block and place on table"], "length": 29}
+{"episode_index": 142, "tasks": ["remove the red block on the top of the red block and put on the green block"], "length": 38}
+{"episode_index": 143, "tasks": ["puting the white block to the left"], "length": 39}
+{"episode_index": 144, "tasks": ["put the green cube in middle of the table"], "length": 37}
+{"episode_index": 145, "tasks": ["remonter le cube au dessus"], "length": 45}
+{"episode_index": 146, "tasks": ["put the green cube on top of the yellow rectangle"], "length": 45}
+{"episode_index": 147, "tasks": ["put the object green on top the cube"], "length": 48}
+{"episode_index": 148, "tasks": ["Put the green cube on the left side of the table"], "length": 46}
+{"episode_index": 149, "tasks": ["put the cube with hole on top of the block with hole"], "length": 48}
+{"episode_index": 150, "tasks": ["put redcube in pan and put pan on stove"], "length": 69}
+{"episode_index": 151, "tasks": ["put the blue rectangle block on top of the cube"], "length": 48}
+{"episode_index": 152, "tasks": ["put the green block on top of the blue rectangular block"], "length": 41}
+{"episode_index": 153, "tasks": ["move blue cube from the cylinder to the top of the tower"], "length": 28}
+{"episode_index": 154, "tasks": ["Put the rectangular block at the top of the arch"], "length": 48}
+{"episode_index": 155, "tasks": ["put the cube wiht a hole on top of the plus"], "length": 46}
+{"episode_index": 156, "tasks": ["Put the red block on the top of green arch"], "length": 48}
+{"episode_index": 157, "tasks": ["move green block to the right side of table"], "length": 47}
+{"episode_index": 158, "tasks": ["put the yellow triangle in the blue block"], "length": 42}
+{"episode_index": 159, "tasks": ["remove a block from the rectangular tower and put it on the left"], "length": 39}
+{"episode_index": 160, "tasks": ["put the cube with a hole on top of the cube"], "length": 40}
+{"episode_index": 161, "tasks": ["take the red rectangle block from the tower and put in the middle of the table"], "length": 46}
+{"episode_index": 162, "tasks": ["put the red arch on top of the blue block"], "length": 48}
+{"episode_index": 163, "tasks": ["put redcube in pan and put pan on stove"], "length": 70}
+{"episode_index": 164, "tasks": ["remove the cube from the cylinder and put it in the red block"], "length": 46}
+{"episode_index": 165, "tasks": ["remove the green arch from the tower and put into the blue block"], "length": 48}
+{"episode_index": 166, "tasks": ["remove the cube from the white rectangular block and put it on top the blue block"], "length": 48}
+{"episode_index": 167, "tasks": ["Put the blue cube on top of the other blue cube."], "length": 48}
+{"episode_index": 168, "tasks": ["move the cube to the left side."], "length": 37}
+{"episode_index": 169, "tasks": ["Take the red cube off the tower and place it on the yellow rectangular block"], "length": 48}
+{"episode_index": 170, "tasks": ["put the cone block on the center of the table"], "length": 34}
+{"episode_index": 171, "tasks": ["put the blue block on top of the red block"], "length": 48}
+{"episode_index": 172, "tasks": ["move the triangular block from the cylinder"], "length": 42}
+{"episode_index": 173, "tasks": ["move the rectangular block to the right side of the table"], "length": 39}
+{"episode_index": 174, "tasks": ["put the block on top of the yellow cube"], "length": 48}
+{"episode_index": 175, "tasks": ["put redcube in pan and put pan on stove"], "length": 69}
+{"episode_index": 176, "tasks": ["put the block on the tower"], "length": 48}
+{"episode_index": 177, "tasks": ["put the blue cube on the top edge of the cloth"], "length": 32}
+{"episode_index": 178, "tasks": ["put blue cube on top of yellow object"], "length": 48}
+{"episode_index": 179, "tasks": ["move the solid block to the right side of the table"], "length": 45}
+{"episode_index": 180, "tasks": ["remove the block rectangular and put it in the middle table"], "length": 45}
+{"episode_index": 181, "tasks": ["picking the blue block puting it  ontop of the pyramid"], "length": 44}
+{"episode_index": 182, "tasks": ["put the cube with a hole on top of the yellow block"], "length": 40}
+{"episode_index": 183, "tasks": ["move one of the cube on top of the tower"], "length": 48}
+{"episode_index": 184, "tasks": ["move the red cube to the left"], "length": 48}
+{"episode_index": 185, "tasks": ["removed white object next from the pea green block"], "length": 25}
+{"episode_index": 186, "tasks": ["move the block from the red arch and put it on top of the cube"], "length": 44}
+{"episode_index": 187, "tasks": ["put the green block on top of the yellow block"], "length": 41}
+{"episode_index": 188, "tasks": ["put the red block down to the desk"], "length": 40}
+{"episode_index": 189, "tasks": ["put the red block on top of the white arch"], "length": 48}
+{"episode_index": 190, "tasks": ["put the green cube on top of the rectangle block"], "length": 44}
+{"episode_index": 191, "tasks": ["move the green block to the left of the table"], "length": 43}
+{"episode_index": 192, "tasks": ["put the red cube on top of the yellow rectangle"], "length": 48}
+{"episode_index": 193, "tasks": ["put the green rectanular block on top of the yellow block"], "length": 37}
+{"episode_index": 194, "tasks": ["remove the blue block from the tower and put it in the center of the table"], "length": 41}
+{"episode_index": 195, "tasks": ["put the block on top of the green cube"], "length": 48}
+{"episode_index": 196, "tasks": ["move the cube to the bottom left side of the table"], "length": 44}
+{"episode_index": 197, "tasks": ["put the block with whole on the pole"], "length": 48}
+{"episode_index": 198, "tasks": ["place the green rectangular block on top of blue one"], "length": 48}
+{"episode_index": 199, "tasks": ["move the green cube next to the yellow cube"], "length": 39}
+{"episode_index": 200, "tasks": ["remove the block from the tower to put it on top of the cylinder"], "length": 48}
+{"episode_index": 201, "tasks": ["put the green cube on top of the yellow cube"], "length": 48}
+{"episode_index": 202, "tasks": ["take the cone off the green block and put it on the plus"], "length": 43}
+{"episode_index": 203, "tasks": ["put the blue block on top of the cylinder"], "length": 48}
+{"episode_index": 204, "tasks": ["Take the block off of the tower and put it to the left edge of the table"], "length": 36}
+{"episode_index": 205, "tasks": ["take the rectangular block in the middle of the table and put it on top of the tower"], "length": 48}
+{"episode_index": 206, "tasks": ["pickup the cube from on top of the tower and place it on the table"], "length": 33}
+{"episode_index": 207, "tasks": ["put the yellow block on top of the stick"], "length": 48}
+{"episode_index": 208, "tasks": ["Grab the white cube and move it to the edge of the cloth"], "length": 48}
+{"episode_index": 209, "tasks": ["put the blue cube on top of the red cube"], "length": 48}
+{"episode_index": 210, "tasks": ["put the cube on top of the rectangular block"], "length": 48}
+{"episode_index": 211, "tasks": ["take the block off of the arch and put it to the right side of the table"], "length": 40}
+{"episode_index": 212, "tasks": ["put the blue rectangular block on top of the green rectangular block"], "length": 35}
+{"episode_index": 213, "tasks": ["move the blue block to the right side of the table"], "length": 48}
+{"episode_index": 214, "tasks": ["Take the red cube and place it on top of the cylinder"], "length": 48}
+{"episode_index": 215, "tasks": ["put red block on top of the pile"], "length": 48}
+{"episode_index": 216, "tasks": ["put the block with hole on the white rectangle"], "length": 42}
+{"episode_index": 217, "tasks": ["put the cube to the top"], "length": 48}
+{"episode_index": 218, "tasks": ["put the short cylinder on the rectangular block"], "length": 39}
+{"episode_index": 219, "tasks": ["pick up the yellow block from on top of the tower and place it on the table"], "length": 38}
+{"episode_index": 220, "tasks": ["place red cube on top of another cube"], "length": 45}
+{"episode_index": 221, "tasks": ["put the blue block on top of the arch"], "length": 48}
+{"episode_index": 222, "tasks": ["put the spiral block on top of the green arch"], "length": 48}
+{"episode_index": 223, "tasks": ["placed the white block on the star"], "length": 48}
+{"episode_index": 224, "tasks": ["put the cylinder on the yellow block"], "length": 36}
+{"episode_index": 225, "tasks": ["put the yellow rectangular block on top of the green arch"], "length": 48}
+{"episode_index": 226, "tasks": ["remove the ball from the cup and put it on the left side of the cube"], "length": 48}
+{"episode_index": 227, "tasks": ["take the arch on top of the rectangular block"], "length": 48}
+{"episode_index": 228, "tasks": ["move the red cube off the green rectangle block and put in the bottom part of the table"], "length": 45}
+{"episode_index": 229, "tasks": ["move the blue cube on top of yellow cube"], "length": 46}
+{"episode_index": 230, "tasks": ["put the blue rectangular block on top of the green rectangular block"], "length": 48}
+{"episode_index": 231, "tasks": ["put the green block on top of the blue and red rectangular blocks"], "length": 48}
+{"episode_index": 232, "tasks": ["put the green cube on top of the  wooden rectangular block"], "length": 48}
+{"episode_index": 233, "tasks": ["take the red block and put on top of the yellow cube"], "length": 40}
+{"episode_index": 234, "tasks": ["cup the red block on top of two the yellow arch"], "length": 35}
+{"episode_index": 235, "tasks": ["put the white block on top of white block"], "length": 48}
+{"episode_index": 236, "tasks": ["removed the pawn from the red cube"], "length": 46}
+{"episode_index": 237, "tasks": ["pick up the red cube and put it back on the table"], "length": 25}
+{"episode_index": 238, "tasks": ["move the blue cube to bottom left of the cloth"], "length": 39}
+{"episode_index": 239, "tasks": ["put a triangle on the cube"], "length": 47}
+{"episode_index": 240, "tasks": ["Remove the cylinder from the blocks and put  on the right side"], "length": 30}
+{"episode_index": 241, "tasks": ["put the rectangle block on top of the tower"], "length": 48}
+{"episode_index": 242, "tasks": ["move the figure from the square block with hole to the table"], "length": 33}
+{"episode_index": 243, "tasks": ["put the mehron block on the cyriles"], "length": 48}
+{"episode_index": 244, "tasks": ["put the red arch on top of the yellow block"], "length": 48}
+{"episode_index": 245, "tasks": ["put the cylinder on top of the cube in the middle of the table"], "length": 48}
+{"episode_index": 246, "tasks": ["put the cube on the top of the other cube"], "length": 48}
+{"episode_index": 247, "tasks": ["put the red arc on top of the blue rectangular block"], "length": 48}
+{"episode_index": 248, "tasks": ["put the red cube on the top of the cone"], "length": 48}
+{"episode_index": 249, "tasks": ["Place the white cube directly right of the purple cloth."], "length": 40}
+{"episode_index": 250, "tasks": ["put the green block on top of a rectangular block"], "length": 42}
+{"episode_index": 251, "tasks": ["put the red arch on top of the yellow block"], "length": 48}
+{"episode_index": 252, "tasks": ["put the green cube on top of the tower"], "length": 37}
+{"episode_index": 253, "tasks": ["put the cube on top of the cube"], "length": 44}
+{"episode_index": 254, "tasks": ["put redcube in pan and put pan on stove"], "length": 68}
+{"episode_index": 255, "tasks": ["put the blue block on the right side"], "length": 41}
+{"episode_index": 256, "tasks": ["Pick the green rectangle block and put on the table between yellow and red block"], "length": 34}
+{"episode_index": 257, "tasks": ["take the red cube and put it on the ring"], "length": 41}
+{"episode_index": 258, "tasks": ["put the blue block on top of green block"], "length": 48}
+{"episode_index": 259, "tasks": ["remove the block with a hole out off the stick"], "length": 30}
+{"episode_index": 260, "tasks": ["put the blue cube on top of the cylinder"], "length": 47}
+{"episode_index": 261, "tasks": ["move the block with a punch hole from the middle of the table to the top of the block tower"], "length": 48}
+{"episode_index": 262, "tasks": ["put the yellow block on top of the green and red blocks"], "length": 47}
+{"episode_index": 263, "tasks": ["put the block with a hole in the middle on top of the block with sphere on top"], "length": 48}
+{"episode_index": 264, "tasks": ["put the green cube on top of the blue rectangle"], "length": 48}
+{"episode_index": 265, "tasks": ["put the yellow block on table"], "length": 44}
+{"episode_index": 266, "tasks": ["moved the white cube and placed it on the Centre of the table"], "length": 43}
+{"episode_index": 267, "tasks": ["Place the orange cube in the silver pot."], "length": 27}
+{"episode_index": 268, "tasks": ["put the cylinder block on top of the red hexagon block"], "length": 41}
+{"episode_index": 269, "tasks": ["remove a green block from the middle tower and put it on the left"], "length": 48}
+{"episode_index": 270, "tasks": ["Put ths block with circle above the another"], "length": 48}
+{"episode_index": 271, "tasks": ["put down the rectangular cube on the side of the table from the tower"], "length": 44}
+{"episode_index": 272, "tasks": ["remove the white block from the top and put it on the table"], "length": 48}
+{"episode_index": 273, "tasks": ["put the block on top of the tower"], "length": 48}
+{"episode_index": 274, "tasks": ["put the long block on top of arch with a ridge"], "length": 42}
+{"episode_index": 275, "tasks": ["put the yellow cube on  top of the arch"], "length": 44}
+{"episode_index": 276, "tasks": ["put the cylinder on top of the green cube"], "length": 46}
+{"episode_index": 277, "tasks": ["move the cube to the top left of the right burner"], "length": 33}
+{"episode_index": 278, "tasks": ["taking off the yellow rectangular block and place it in the middle of the table"], "length": 48}
+{"episode_index": 279, "tasks": ["put the blue block on top of the green block"], "length": 44}
+{"episode_index": 280, "tasks": ["pick up the blue cube and put it on the cylinder"], "length": 39}
+{"episode_index": 281, "tasks": ["put the rectangular block on top of the cube with a hole"], "length": 38}
+{"episode_index": 282, "tasks": ["remove the red cube from the green arc top and placed it on the table"], "length": 43}
+{"episode_index": 283, "tasks": ["Place the cube with a slot on top of the rectangular block"], "length": 36}
+{"episode_index": 284, "tasks": ["take the cube with a hole off of thin cylinder and put it on the table"], "length": 39}
+{"episode_index": 285, "tasks": ["put the blue rectangle on top of the red cube"], "length": 48}
+{"episode_index": 286, "tasks": ["remove the blue cube to put it on the left side of the table"], "length": 44}
+{"episode_index": 287, "tasks": ["remove the triangle block from tower and put it in the right side of the table"], "length": 37}
+{"episode_index": 288, "tasks": ["put the blue cube on top of the ring"], "length": 48}
+{"episode_index": 289, "tasks": ["put the blue cube on the middle of the table"], "length": 47}
+{"episode_index": 290, "tasks": ["blue rectangular block placed on the left side of the table"], "length": 32}
+{"episode_index": 291, "tasks": ["Put the blue cube on top of the red arch"], "length": 48}
+{"episode_index": 292, "tasks": ["put the yellow block on top of the cube"], "length": 48}
+{"episode_index": 293, "tasks": ["put the yellow rectangular block on top of the blue block"], "length": 48}
+{"episode_index": 294, "tasks": ["put the red block on top of the cylinder"], "length": 48}
+{"episode_index": 295, "tasks": ["put red cube on other red cubes"], "length": 46}
+{"episode_index": 296, "tasks": ["put the block on top of the yellow prism"], "length": 35}
+{"episode_index": 297, "tasks": ["put redcube in pan and put pan on stove"], "length": 71}
+{"episode_index": 298, "tasks": ["move the white block from top of the green arch and put it on the white block"], "length": 39}
+{"episode_index": 299, "tasks": ["put the blue cube on top of the cylinder"], "length": 48}
+{"episode_index": 300, "tasks": ["put the red arch on top of the blue rectangular block"], "length": 48}
+{"episode_index": 301, "tasks": ["remove the yellow cube from the tower and move it to the right."], "length": 48}
+{"episode_index": 302, "tasks": ["Put the cube with hole to the top of the cube"], "length": 45}
+{"episode_index": 303, "tasks": ["move the rectangular block to the  left"], "length": 33}
+{"episode_index": 304, "tasks": ["put the quadrilateral object on top of the rectangular block"], "length": 29}
+{"episode_index": 305, "tasks": ["put cube on plate and smalltomato in pot or pan in sink"], "length": 78}
+{"episode_index": 306, "tasks": ["put the green block on the table"], "length": 35}
+{"episode_index": 307, "tasks": ["put the red cube on top of two red cubes on right"], "length": 47}
+{"episode_index": 308, "tasks": ["put the yellow cube on top of the cylinder"], "length": 38}
+{"episode_index": 309, "tasks": ["put the blue rectangle block on top of the white rectangle block"], "length": 38}
+{"episode_index": 310, "tasks": ["Take blue rectangle and put on top of red and green cube"], "length": 47}
+{"episode_index": 311, "tasks": ["put the rectangular block on top of the arch"], "length": 45}
+{"episode_index": 312, "tasks": ["Remove blue block from the tower and put it on the red arch"], "length": 48}
+{"episode_index": 313, "tasks": ["put the red block to the top of the other 3 block"], "length": 35}
+{"episode_index": 314, "tasks": ["take the rectangular block off of the arch and put it on the  other block"], "length": 33}
+{"episode_index": 315, "tasks": ["move yellow cube from tower and place it on top of cylinder"], "length": 48}
+{"episode_index": 316, "tasks": ["put the brown pawn on top of the blue rectangular block"], "length": 42}
+{"episode_index": 317, "tasks": ["remove the green cube on top of the yellow cuboid and put it on top of the blue cube"], "length": 48}
+{"episode_index": 318, "tasks": ["put the cylinder on top of the blue block"], "length": 40}
+{"episode_index": 319, "tasks": ["put the rectangular block on top of the other rectangular block"], "length": 48}
+{"episode_index": 320, "tasks": ["put the green block on top of the yellow block"], "length": 33}
+{"episode_index": 321, "tasks": ["Put the red cube on top of the blue cube"], "length": 41}
+{"episode_index": 322, "tasks": ["take the cube and put it on top of the arch"], "length": 45}
+{"episode_index": 323, "tasks": ["has removed the green block off top  of the blocks and put it in front of the table"], "length": 48}
+{"episode_index": 324, "tasks": ["put the bleu cube on top of the red hexagone"], "length": 42}
+{"episode_index": 325, "tasks": ["move the  blue cube on the block and put it on the table"], "length": 48}
+{"episode_index": 326, "tasks": ["fixed the position of the block with a hole"], "length": 36}
+{"episode_index": 327, "tasks": ["move the blue block from the left side and put it on the other tower"], "length": 48}
+{"episode_index": 328, "tasks": ["move the yellow rectangular block from the tower and put it on top of the blue arch"], "length": 48}
+{"episode_index": 329, "tasks": ["Move the cube to the middle of the table"], "length": 47}
+{"episode_index": 330, "tasks": ["take the block on the middle and put it on top of the rectangular block on the left side"], "length": 27}
+{"episode_index": 331, "tasks": ["put the block on top of the plus on the tower"], "length": 47}
+{"episode_index": 332, "tasks": ["pput the yellow cube on top of the red hexagon"], "length": 47}
+{"episode_index": 333, "tasks": ["Move the red  cube to the right"], "length": 32}
+{"episode_index": 334, "tasks": ["put the brown king in front of the red cube"], "length": 38}
+{"episode_index": 335, "tasks": ["put the cylinder on top of the cube"], "length": 48}
+{"episode_index": 336, "tasks": ["put the blue block on top of the arch"], "length": 48}
+{"episode_index": 337, "tasks": ["take the blue rectangular block off of the tower and put it in the middle of the table"], "length": 45}
+{"episode_index": 338, "tasks": ["remove the cylinder from yellow block and put it in the center of the table"], "length": 36}
+{"episode_index": 339, "tasks": ["put the blue block on top of yellow rectangular block"], "length": 47}
+{"episode_index": 340, "tasks": ["put the blue block on top of the yellow block"], "length": 48}
+{"episode_index": 341, "tasks": ["move the rectangular block to the center of the table"], "length": 33}
+{"episode_index": 342, "tasks": ["put the yellow cube on the red block"], "length": 48}
+{"episode_index": 343, "tasks": ["put red block on top of the green cube"], "length": 41}
+{"episode_index": 344, "tasks": ["Removed the blue block from the other blocks"], "length": 48}
+{"episode_index": 345, "tasks": ["the robot has placed the red block on top of the green block ."], "length": 34}
+{"episode_index": 346, "tasks": ["put redcube in pan and put pan on stove"], "length": 74}
+{"episode_index": 347, "tasks": ["put redcube in pan and put pan on stove"], "length": 69}
+{"episode_index": 348, "tasks": ["Move the green block  to the left side of the table"], "length": 48}
+{"episode_index": 349, "tasks": ["put the red cube block on top of the green rectangular"], "length": 48}
+{"episode_index": 350, "tasks": ["put the square block with hole on top of the rectangular block with brown carving"], "length": 34}
+{"episode_index": 351, "tasks": ["Put the triangle on top of the yellow block"], "length": 48}
+{"episode_index": 352, "tasks": ["pick the square block from the tower and put it in the middle of the table."], "length": 38}
+{"episode_index": 353, "tasks": ["Remove blue arch from the block and put it on the middle of the table"], "length": 45}
+{"episode_index": 354, "tasks": ["move the yellow cube and put it on top of the cylinder"], "length": 48}
+{"episode_index": 355, "tasks": ["take the blue block puzzle and put it on the top top o white and green blocks"], "length": 39}
+{"episode_index": 356, "tasks": ["pick cube from top of rectangle block and it on the table"], "length": 29}
+{"episode_index": 357, "tasks": ["put a yellow hexagon on top of a cube"], "length": 39}
+{"episode_index": 358, "tasks": ["put the yellow block on top of the green block"], "length": 48}
+{"episode_index": 359, "tasks": ["the blue cube is placed on top of it"], "length": 41}
+{"episode_index": 360, "tasks": ["take the red cube from the right of the table and put it on top of the red cubes"], "length": 48}
+{"episode_index": 361, "tasks": ["put the yellow cube on top of the yellow block"], "length": 48}
+{"episode_index": 362, "tasks": ["Take the yellow cube and put it on the blue rectangle"], "length": 38}
+{"episode_index": 363, "tasks": ["put the rectangular block on top of the tower"], "length": 48}
+{"episode_index": 364, "tasks": ["take the cube with a hole off from the thin cylinder and put it on the table"], "length": 45}
+{"episode_index": 365, "tasks": ["put the cube with a hole on the other cube"], "length": 48}
+{"episode_index": 366, "tasks": ["put the yellow cube on the table"], "length": 35}
+{"episode_index": 367, "tasks": ["put the brown object on top of cube on right"], "length": 48}
+{"episode_index": 368, "tasks": ["put the red cube on top of the yellow cube"], "length": 48}
+{"episode_index": 369, "tasks": ["took the green cube and put it on the table"], "length": 40}
+{"episode_index": 370, "tasks": ["put the blue cube on top of the red cube"], "length": 37}
+{"episode_index": 371, "tasks": ["put the blue cube on top of the green cube"], "length": 48}
+{"episode_index": 372, "tasks": ["move the green cube into the top of middle tower."], "length": 45}
+{"episode_index": 373, "tasks": ["Move the yellow rectangular block slightly to the left"], "length": 41}
+{"episode_index": 374, "tasks": ["remove the block  and put it to the right"], "length": 45}
+{"episode_index": 375, "tasks": ["put the rectangular on top of the rectangular block next to it"], "length": 44}
+{"episode_index": 376, "tasks": ["put the cylinder on top of the two stock cubes"], "length": 40}
+{"episode_index": 377, "tasks": ["put the arch on top of the rectangular block"], "length": 41}
+{"episode_index": 378, "tasks": ["move the red cube to the right side of the table"], "length": 43}
+{"episode_index": 379, "tasks": ["put the white block on  top of the green cube"], "length": 32}
+{"episode_index": 380, "tasks": ["put the yellow rectangle on top of the green cube from the top of the blue arch"], "length": 44}
+{"episode_index": 381, "tasks": ["move the cube to right side of the table"], "length": 37}
+{"episode_index": 382, "tasks": ["take red block and put on top of the another red block"], "length": 48}
+{"episode_index": 383, "tasks": ["put the brown block up right at the left side"], "length": 36}
+{"episode_index": 384, "tasks": ["move the cube on the left side of the table"], "length": 48}
+{"episode_index": 385, "tasks": ["put the plus on top of the green cube"], "length": 36}
+{"episode_index": 386, "tasks": ["removed the blue block from the tower and put it on the left side of the table."], "length": 36}
+{"episode_index": 387, "tasks": ["align the cubes"], "length": 24}
+{"episode_index": 388, "tasks": ["put the block on top of the arch"], "length": 48}
+{"episode_index": 389, "tasks": ["move the rectangular block towards the cylinder block"], "length": 24}
+{"episode_index": 390, "tasks": ["put the green cube on top of the yellow cube"], "length": 48}
+{"episode_index": 391, "tasks": ["put the arch on top of the block"], "length": 48}
+{"episode_index": 392, "tasks": ["Take off the blue prism to put it between the yellow prism and red cube"], "length": 48}
+{"episode_index": 393, "tasks": ["place the cube on top of the tower"], "length": 48}
+{"episode_index": 394, "tasks": ["put the cube with a hole on top of the plus"], "length": 43}
+{"episode_index": 395, "tasks": ["pick up the white cube with hole and put it on  the top of red cube"], "length": 48}
+{"episode_index": 396, "tasks": ["put the green bock down on the yellow block"], "length": 48}
+{"episode_index": 397, "tasks": ["put the blue block on top of the yellow cube"], "length": 48}
+{"episode_index": 398, "tasks": ["put the cube with a hole on top of the plus"], "length": 47}
+{"episode_index": 399, "tasks": ["pick up the cube from the cloth and place it on the left of the table"], "length": 41}
+{"episode_index": 400, "tasks": ["put the block on top of another block to the left"], "length": 48}
+{"episode_index": 401, "tasks": ["take the green rectangular block and put it on the table"], "length": 46}
+{"episode_index": 402, "tasks": ["remove the yellow block from the tower and put it on the right side of the table."], "length": 45}
+{"episode_index": 403, "tasks": ["put the red block on the bottom edge of the cloth"], "length": 45}
+{"episode_index": 404, "tasks": ["put the blue rectangle to the top of block"], "length": 48}
+{"episode_index": 405, "tasks": ["move the block with a hole on the left side of the table"], "length": 34}
+{"episode_index": 406, "tasks": ["put redcube in pan and put pan on stove"], "length": 77}
+{"episode_index": 407, "tasks": ["put the blue cube to the blue cube in the right"], "length": 48}
+{"episode_index": 408, "tasks": ["Place the blue cube in the silver pot."], "length": 48}
+{"episode_index": 409, "tasks": ["pick a blue plastic on a yellow cube"], "length": 48}
+{"episode_index": 410, "tasks": ["put the cube on top of another cube"], "length": 35}
+{"episode_index": 411, "tasks": ["Put the cube on top of the other cube"], "length": 41}
+{"episode_index": 412, "tasks": ["move the green cube to the top of the yellow cube"], "length": 36}
+{"episode_index": 413, "tasks": ["put the plus on top of the green cube"], "length": 46}
+{"episode_index": 414, "tasks": ["put the  block rectangle on top of the other"], "length": 42}
+{"episode_index": 415, "tasks": ["pick up the plus and put down on the upper of yellow cube"], "length": 48}
+{"episode_index": 416, "tasks": ["put the rectangle block on top of the arch"], "length": 48}
+{"episode_index": 417, "tasks": ["Take the square block with a hole and place it in the table."], "length": 48}
+{"episode_index": 418, "tasks": ["put the plus-shaped block on top of the green block"], "length": 37}
+{"episode_index": 419, "tasks": ["Take the yellow cube and put it on top of the red cube"], "length": 48}
+{"episode_index": 420, "tasks": ["put the square with a hole on top of the block"], "length": 42}
+{"episode_index": 421, "tasks": ["put the yellow block on top of the yellow cube"], "length": 47}
+{"episode_index": 422, "tasks": ["put the white rectangular block on top of the white rectangular block"], "length": 47}
+{"episode_index": 423, "tasks": ["put the red cube on top of the blue arch"], "length": 45}
+{"episode_index": 424, "tasks": ["take the cube object and put it into the silver pot."], "length": 41}
+{"episode_index": 425, "tasks": ["Put the cube in front of the spoon"], "length": 47}
+{"episode_index": 426, "tasks": ["put the plus sign on top of green cube"], "length": 48}
+{"episode_index": 427, "tasks": ["remove the red block from the top of the tower and put it on the yellow tower"], "length": 45}
+{"episode_index": 428, "tasks": ["move the blue block to the edge of the cloth"], "length": 32}
+{"episode_index": 429, "tasks": ["remove the white block from the arch and place it on the centre of the table"], "length": 43}
+{"episode_index": 430, "tasks": ["put the green cube on top of the yellow block"], "length": 48}
+{"episode_index": 431, "tasks": ["put the blue block on top of the red arch"], "length": 48}
+{"episode_index": 432, "tasks": ["remove the yellow cube"], "length": 46}
+{"episode_index": 433, "tasks": ["put the spherical brown object on top of rectangular block on right"], "length": 48}
+{"episode_index": 434, "tasks": ["Remove the block from the stack and move to the right side of the table"], "length": 44}
+{"episode_index": 435, "tasks": ["move the green arch next to the block tower"], "length": 42}
+{"episode_index": 436, "tasks": ["put the circle block down"], "length": 48}
+{"episode_index": 437, "tasks": ["put the red cube on top of the white cube"], "length": 45}
+{"episode_index": 438, "tasks": ["put the red arch on top of the blue rectangular block"], "length": 48}
+{"episode_index": 439, "tasks": ["move the yellow cube to the bottom of the table"], "length": 31}
+{"episode_index": 440, "tasks": ["put the wooden block with a hole in the middle on the right side of the green triangle"], "length": 38}
+{"episode_index": 441, "tasks": ["put the cube on the top of an arc  block tower"], "length": 42}
+{"episode_index": 442, "tasks": ["move the cube to the table at the top of the arch cylinder"], "length": 46}
+{"episode_index": 443, "tasks": ["put the red cube on top of the red arch"], "length": 48}
+{"episode_index": 444, "tasks": ["put the blue cube on top of the white cylinder"], "length": 48}
+{"episode_index": 445, "tasks": ["remove the blue cube from the tower and put it on top of the other blue cube"], "length": 36}
+{"episode_index": 446, "tasks": ["remove the yellow cube on the white arc and placed it on the green cube."], "length": 48}
+{"episode_index": 447, "tasks": ["remove the plus block from the top of the left side tower to the top of the right side tower"], "length": 48}
+{"episode_index": 448, "tasks": ["remove the red cube from the tower and put it on the left"], "length": 48}
+{"episode_index": 449, "tasks": ["move the cube to the right table"], "length": 48}
+{"episode_index": 450, "tasks": ["put the yellow block on top of blue block"], "length": 48}
+{"episode_index": 451, "tasks": ["put the yellow block on top of the blue block"], "length": 48}
+{"episode_index": 452, "tasks": ["put blue block on top of yellow block"], "length": 48}
+{"episode_index": 453, "tasks": ["lift the block from the green arch and put it back"], "length": 38}
+{"episode_index": 454, "tasks": ["put the blue cube on top of the tower"], "length": 48}
+{"episode_index": 455, "tasks": ["put the stick on top of rectangle block"], "length": 39}
+{"episode_index": 456, "tasks": ["move the topmost rectangular block to the right"], "length": 48}
+{"episode_index": 457, "tasks": ["move the blue cube from the edge of cloth on the table to right"], "length": 32}
+{"episode_index": 458, "tasks": ["put the block on top of the tower"], "length": 46}
+{"episode_index": 459, "tasks": ["remove the red cuboid on top of yellow cuboid and put it on top of the blue cube"], "length": 47}
+{"episode_index": 460, "tasks": ["place the stick inside the cube with hole"], "length": 47}
+{"episode_index": 461, "tasks": ["move the blue block from the left side of the table and put it on top of the red block"], "length": 44}
+{"episode_index": 462, "tasks": ["take white rectangle on top of blue block and put down next to yellow cube"], "length": 48}
+{"episode_index": 463, "tasks": ["move the blue block on the right side of the other block"], "length": 48}
+{"episode_index": 464, "tasks": ["put the green arch on top of the blue rectangular block"], "length": 48}
+{"episode_index": 465, "tasks": ["Put the pawn above the yellow square block"], "length": 45}
+{"episode_index": 466, "tasks": ["put the cube on the top of the other cube with a hole"], "length": 42}
+{"episode_index": 467, "tasks": ["move the yellow block from the top of the red block to the top of the triangular block"], "length": 48}
+{"episode_index": 468, "tasks": ["Put the blue block in the bowl."], "length": 48}
+{"episode_index": 469, "tasks": ["put the green stack to the right side of the table"], "length": 43}
+{"episode_index": 470, "tasks": ["put the green block on top of the cylinder"], "length": 46}
+{"episode_index": 471, "tasks": ["put the blue cube on top of the cylinder"], "length": 42}
+{"episode_index": 472, "tasks": ["move the rectangular block on top of two cube and put it on top of rectangular block on the right"], "length": 41}
+{"episode_index": 473, "tasks": ["put the green arch on top of the blue block"], "length": 40}
+{"episode_index": 474, "tasks": ["move the cube to the top of the tower"], "length": 48}
+{"episode_index": 475, "tasks": ["Move the cube from the left of the table to the right, close to the red piece"], "length": 32}
+{"episode_index": 476, "tasks": ["put the blue cube on top of the yellow cube"], "length": 48}
+{"episode_index": 477, "tasks": ["Place the small cube directly right of the blue spoon."], "length": 37}
+{"episode_index": 478, "tasks": ["put the rectangular block on top of the arc"], "length": 39}
+{"episode_index": 479, "tasks": ["move the green block on top of the blue block"], "length": 48}
+{"episode_index": 480, "tasks": ["move the pot to above the white and block object"], "length": 35}
+{"episode_index": 481, "tasks": ["Put the grey cube on the yellow cloth."], "length": 41}
+{"episode_index": 482, "tasks": ["put the yellow block on top of the green arch"], "length": 48}
+{"episode_index": 483, "tasks": ["put the yellow cube on top of the tower"], "length": 43}
+{"episode_index": 484, "tasks": ["put the green block on top of the yellow block"], "length": 34}
+{"episode_index": 485, "tasks": ["put the red arch on top of the yellow block"], "length": 48}
+{"episode_index": 486, "tasks": ["remove a block from the tower and cubes and put it on the left"], "length": 31}
+{"episode_index": 487, "tasks": ["put the red cube on top of the blue cube"], "length": 48}
+{"episode_index": 488, "tasks": ["put the blue cube on top of the yellow cube in the tower"], "length": 42}
+{"episode_index": 489, "tasks": ["put the block with red drawing on the table"], "length": 30}
+{"episode_index": 490, "tasks": ["place the rectangular block to the left"], "length": 48}
+{"episode_index": 491, "tasks": ["put the small block on top of the rectangle block"], "length": 48}
+{"episode_index": 492, "tasks": ["put the wood cube on top of the square with hole"], "length": 48}
+{"episode_index": 493, "tasks": ["removed the cube with a hole"], "length": 45}
+{"episode_index": 494, "tasks": ["Place the red rectangular block on top of the blue arch"], "length": 48}
+{"episode_index": 495, "tasks": ["Move the blue rectangular block to the center of the table"], "length": 48}
+{"episode_index": 496, "tasks": ["Put the blue arch on top of the red rectangle block"], "length": 48}
+{"episode_index": 497, "tasks": ["move the yellow cube to the right  and placed it on top of the green cube"], "length": 48}
+{"episode_index": 498, "tasks": ["place the white block on top of the red hexagon"], "length": 48}
+{"episode_index": 499, "tasks": ["put the green cube down next the blue arch"], "length": 48}
+{"episode_index": 500, "tasks": ["moved the green block on top of the red block"], "length": 43}
+{"episode_index": 501, "tasks": ["put the square cube on top of the rectangular cube"], "length": 44}
+{"episode_index": 502, "tasks": ["put a cylinder on top of the block"], "length": 40}
+{"episode_index": 503, "tasks": ["Put the green cube on top of the cube with a hole"], "length": 43}
+{"episode_index": 504, "tasks": ["put the green cube on top of the brown cube"], "length": 48}
+{"episode_index": 505, "tasks": ["put the cube on top of the plus"], "length": 44}
+{"episode_index": 506, "tasks": ["put the yellow cube on top of the blue cube"], "length": 48}
+{"episode_index": 507, "tasks": ["put the block on top of the red rectangle"], "length": 48}
+{"episode_index": 508, "tasks": ["move the 'L' shaped block from table put on the rectagle block"], "length": 29}
+{"episode_index": 509, "tasks": ["moved the stick and cube from the right side of the table to the left"], "length": 35}
+{"episode_index": 510, "tasks": ["put the yellow rectangular block on top of the green rectangular block"], "length": 42}
+{"episode_index": 511, "tasks": ["put the rectangular block on top of the two rectangular block"], "length": 40}
+{"episode_index": 512, "tasks": ["put the maroon cylinder on top of the yellow cube"], "length": 48}
+{"episode_index": 513, "tasks": ["put the plus on top of the green block"], "length": 48}
+{"episode_index": 514, "tasks": ["move the yellow block away from the red arch"], "length": 34}
+{"episode_index": 515, "tasks": ["move one red cube to the right"], "length": 43}
+{"episode_index": 516, "tasks": ["put the blue block in yellow block"], "length": 43}
+{"episode_index": 517, "tasks": ["put the arch block on other side"], "length": 47}
+{"episode_index": 518, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 33}
+{"episode_index": 519, "tasks": ["Take the rectangular block and place it on top of the cube and cylinder"], "length": 48}
+{"episode_index": 520, "tasks": ["put the cylinder on the yellow cube"], "length": 45}
+{"episode_index": 521, "tasks": ["move the cylinder from the blue cube to the yellow cube"], "length": 43}
+{"episode_index": 522, "tasks": ["put the blue block on top of the red block"], "length": 40}
+{"episode_index": 523, "tasks": ["take red block and put top of red block"], "length": 48}
+{"episode_index": 524, "tasks": ["move the blocks with hole to the top middle of the table"], "length": 40}
+{"episode_index": 525, "tasks": ["put the yellow rectangular block on top of the red arch"], "length": 48}
+{"episode_index": 526, "tasks": ["remove the cube from the tower and put it in the middle of the table"], "length": 47}
+{"episode_index": 527, "tasks": ["put the red cube on the top of the arch."], "length": 39}
+{"episode_index": 528, "tasks": ["put the cylinder on top of the yellow cube"], "length": 48}
+{"episode_index": 529, "tasks": ["put the rectangular block on top of the pile"], "length": 43}
+{"episode_index": 530, "tasks": ["take off the red cube put it on the left side of the tower"], "length": 41}
+{"episode_index": 531, "tasks": ["Put the red hexagon on top of the yellow square block"], "length": 48}
+{"episode_index": 532, "tasks": ["move the block to the left"], "length": 22}
+{"episode_index": 533, "tasks": ["put the red cheese to the top of block"], "length": 47}
+{"episode_index": 534, "tasks": ["remove the yellow cube from the tower and put in the middle of the table"], "length": 22}
+{"episode_index": 535, "tasks": ["put the cylinder on top of the blue cube"], "length": 46}
+{"episode_index": 536, "tasks": ["take the red block and put it on the green block"], "length": 41}
+{"episode_index": 537, "tasks": ["move rectangular cube to the right"], "length": 29}
+{"episode_index": 538, "tasks": ["put the wooden block between the two objects on the table"], "length": 41}
+{"episode_index": 539, "tasks": ["put the triangle block off the blue cube and put uit on the table"], "length": 37}
+{"episode_index": 540, "tasks": ["put the yellow block the the right side of the table"], "length": 44}
+{"episode_index": 541, "tasks": ["put the plus on top of the yellow cube"], "length": 43}
+{"episode_index": 542, "tasks": ["move the red cube and put it on the blue block"], "length": 48}
+{"episode_index": 543, "tasks": ["Pick the green block and put it on the table"], "length": 39}
+{"episode_index": 544, "tasks": ["Put the cube with a hole on the top of other cube"], "length": 48}
+{"episode_index": 545, "tasks": ["put the yellow block on top of the green block"], "length": 48}
+{"episode_index": 546, "tasks": ["put the red triangle on the yellow block"], "length": 46}
+{"episode_index": 547, "tasks": ["put the green block on top of the arch"], "length": 46}
+{"episode_index": 548, "tasks": ["move the yellow cube on top of the blue rectangle"], "length": 48}
+{"episode_index": 549, "tasks": ["put the blue rectangular block on top of the green arch"], "length": 48}
+{"episode_index": 550, "tasks": ["remove the yellow blocks from tower and put it in the table"], "length": 48}
+{"episode_index": 551, "tasks": ["put the stick inside the hole in the  cube"], "length": 48}
+{"episode_index": 552, "tasks": ["position the rectangular blocks on the left side of the table on top of each other"], "length": 38}
+{"episode_index": 553, "tasks": ["remove the green cube off of the yellow block and place it on top of the red block"], "length": 48}
+{"episode_index": 554, "tasks": ["Put the chess piece on block with hole"], "length": 38}
+{"episode_index": 555, "tasks": ["remove the blue block off of the rectangular and put on the green block"], "length": 42}
+{"episode_index": 556, "tasks": ["put the yellow block on top of another block"], "length": 46}
+{"episode_index": 557, "tasks": ["take the cylinder off of the green cube and put it on top of the yellow cube"], "length": 47}
+{"episode_index": 558, "tasks": ["remove the red block from the tower to down on the table"], "length": 44}
+{"episode_index": 559, "tasks": ["put the green cube on top of the cube"], "length": 46}
+{"episode_index": 560, "tasks": ["remove the blue block from the tower and put it on the further left side"], "length": 37}
+{"episode_index": 561, "tasks": ["put the blue block on the yellow block"], "length": 48}
+{"episode_index": 562, "tasks": ["move the yellow block to the bottom right of the table"], "length": 48}
+{"episode_index": 563, "tasks": ["put the yellow cube on top of the green cube"], "length": 48}
+{"episode_index": 564, "tasks": ["put the yellow rectangular block on top of the blue arc"], "length": 48}
+{"episode_index": 565, "tasks": ["put the blue block on top of the red cube"], "length": 48}
+{"episode_index": 566, "tasks": ["remove the cube from the tower"], "length": 34}
+{"episode_index": 567, "tasks": ["moved yellow block on plus sign to rectangular block on table"], "length": 48}
+{"episode_index": 568, "tasks": ["put the yellow cube on top of the red rectangular block"], "length": 44}
+{"episode_index": 569, "tasks": ["put the block on top of the tower"], "length": 48}
+{"episode_index": 570, "tasks": ["move the blue rectangular block from the red rectangular block and put it on top of the arch"], "length": 48}
+{"episode_index": 571, "tasks": ["Put the ring block above the tall thin cylinder"], "length": 48}
+{"episode_index": 572, "tasks": ["put the yellow block to the other side of desk"], "length": 38}
+{"episode_index": 573, "tasks": ["put the green cube on top of the red arch"], "length": 48}
+{"episode_index": 574, "tasks": ["Take the turquoise block off the blue block"], "length": 36}
+{"episode_index": 575, "tasks": ["move the blue block to the top side of the table"], "length": 48}
+{"episode_index": 576, "tasks": ["put the red arch to the left side of the yellow block"], "length": 35}
+{"episode_index": 577, "tasks": ["put the blue rectangular block on top of the green cube"], "length": 48}
+{"episode_index": 578, "tasks": ["put the green block on top of the yellow block"], "length": 37}
+{"episode_index": 579, "tasks": ["take the cube off of the other cube and put it on top of the red object"], "length": 45}
+{"episode_index": 580, "tasks": ["Put the circular block on the cylinder"], "length": 48}
+{"episode_index": 581, "tasks": ["move a blue curl block from a cup to the top a cube"], "length": 37}
+{"episode_index": 582, "tasks": ["put the block stick on top of the blue block"], "length": 48}
+{"episode_index": 583, "tasks": ["transferred the wooden block on the top of the wooden block with red"], "length": 48}
+{"episode_index": 584, "tasks": ["remove the cube from the red hexagon and put it on top of the cube"], "length": 48}
+{"episode_index": 585, "tasks": ["take the yellow cube from the tower and put it on the left side of the table"], "length": 37}
+{"episode_index": 586, "tasks": ["Take the rectangular off of the arch and place it on top of the other block"], "length": 36}
+{"episode_index": 587, "tasks": ["take the Rectangular block and put it on top of the cube"], "length": 48}
+{"episode_index": 588, "tasks": ["take the blue cube out of the red pot and put it between the two bottom burners"], "length": 44}
+{"episode_index": 589, "tasks": ["put the bigger block with a hole on top of the pestle"], "length": 48}
+{"episode_index": 590, "tasks": ["Take the yellow cube and put it next to the blocks"], "length": 38}
+{"episode_index": 591, "tasks": ["move the solid brown block slightly in front"], "length": 48}
+{"episode_index": 592, "tasks": ["put the parallelepiped on top of the cube"], "length": 42}
+{"episode_index": 593, "tasks": ["take a blue cube off the tower and put it to the right of the tower"], "length": 31}
+{"episode_index": 594, "tasks": ["Place the silver pot on the front right corner of the table with the butter cube in front of it."], "length": 43}
+{"episode_index": 595, "tasks": ["put the green cube on the top of standing blue rectangular"], "length": 48}
+{"episode_index": 596, "tasks": ["put the blue block in the top of the green bolck"], "length": 48}
+{"episode_index": 597, "tasks": ["take the brown cube off of the yellow cube and put it on top of the green cube"], "length": 45}
+{"episode_index": 598, "tasks": ["put the green rectangular block on top the yellow one"], "length": 33}
+{"episode_index": 599, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 48}
+{"episode_index": 600, "tasks": ["put the yellow rectangle block in bottom left"], "length": 48}
+{"episode_index": 601, "tasks": ["remove the cube from the tower and put it in the middle of the table"], "length": 48}
+{"episode_index": 602, "tasks": ["remove the rectangular block from the tower and put it on the table"], "length": 48}
+{"episode_index": 603, "tasks": ["put the white block on top of the other arch"], "length": 36}
+{"episode_index": 604, "tasks": ["put the cube on top of cube with hole"], "length": 43}
+{"episode_index": 605, "tasks": ["put the cube on the left on top of the red hexagonal prism"], "length": 38}
+{"episode_index": 606, "tasks": ["Move green  cube on top of rectangle"], "length": 48}
+{"episode_index": 607, "tasks": ["take the red cube and put it on the left"], "length": 48}
+{"episode_index": 608, "tasks": ["put redcube in pan and put pan on stove"], "length": 78}
+{"episode_index": 609, "tasks": ["put redcube in pan and put pan on stove"], "length": 74}
+{"episode_index": 610, "tasks": ["put the red square block between two blue blocks"], "length": 41}
+{"episode_index": 611, "tasks": ["take the rectangular block off of the cube and put it on top of the other rectangular block"], "length": 48}
+{"episode_index": 612, "tasks": ["move the yellow rectangular block to the left"], "length": 42}
+{"episode_index": 613, "tasks": ["put the cube on the left side of the table"], "length": 48}
+{"episode_index": 614, "tasks": ["Move the white cube to the other side of the table"], "length": 48}
+{"episode_index": 615, "tasks": ["move the cube to the top of the arch"], "length": 48}
+{"episode_index": 616, "tasks": ["put the cylinder on top of the blue cubes"], "length": 41}
+{"episode_index": 617, "tasks": ["put the yellow block on the top left of the table"], "length": 38}
+{"episode_index": 618, "tasks": ["put redcube in pan and put pan on stove"], "length": 72}
+{"episode_index": 619, "tasks": ["put cube on plate and smalltomato in pot or pan in sink"], "length": 78}
+{"episode_index": 620, "tasks": ["put the red block on top of the blue arch"], "length": 47}
+{"episode_index": 621, "tasks": ["put the yellow block on top of the tower"], "length": 45}
+{"episode_index": 622, "tasks": ["Put the yellow cube to the right side of the table"], "length": 48}
+{"episode_index": 623, "tasks": ["move cube at the bottom of the table"], "length": 48}
+{"episode_index": 624, "tasks": ["move the white block to the right"], "length": 30}
+{"episode_index": 625, "tasks": ["placed the yellow block to the right side of the table"], "length": 47}
+{"episode_index": 626, "tasks": ["put the yellow cube on top of the cylinder"], "length": 48}
+{"episode_index": 627, "tasks": ["put the yellow cube on top of the cylinder"], "length": 47}
+{"episode_index": 628, "tasks": ["put the rectangular block on top of the other rectangular block"], "length": 43}
+{"episode_index": 629, "tasks": ["take the yellow cube off of the red block and put it on the table"], "length": 37}
+{"episode_index": 630, "tasks": ["put the green cube block on top of the red cube"], "length": 48}
+{"episode_index": 631, "tasks": ["remove the yellow block from the blue block"], "length": 38}
+{"episode_index": 632, "tasks": ["Remove blue block from red hexagon and put on the right, put the cylinder on top of the red hexagon"], "length": 43}
+{"episode_index": 633, "tasks": ["put the green block on top of the yellow block"], "length": 35}
+{"episode_index": 634, "tasks": ["remove the red rectangular block from the tower and put it on the right side"], "length": 48}
+{"episode_index": 635, "tasks": ["put the blue block on top of red block"], "length": 48}
+{"episode_index": 636, "tasks": ["put the green and yelow block of the table"], "length": 32}
+{"episode_index": 637, "tasks": ["put the wooden cube beside the wooden cylinder"], "length": 30}
+{"episode_index": 638, "tasks": ["put the blue block on the right edge of the cloth"], "length": 31}
+{"episode_index": 639, "tasks": ["Remove the rod from the cube and put on top of the table"], "length": 48}
+{"episode_index": 640, "tasks": ["put the yellow cube on the top of red cube"], "length": 48}
+{"episode_index": 641, "tasks": ["Pick up the cube and place it on the right of the red fork"], "length": 47}
+{"episode_index": 642, "tasks": ["put the rectangle block with the red stain on top of the plain rectangle block"], "length": 40}
+{"episode_index": 643, "tasks": ["Put the rectangular block on top of the tower"], "length": 48}
+{"episode_index": 644, "tasks": ["put the cube with a hole on top of the yellow cube"], "length": 48}
+{"episode_index": 645, "tasks": ["put the blue block onto the green napkin"], "length": 34}
+{"episode_index": 646, "tasks": ["Put the white block on top of rectangular tower"], "length": 48}
+{"episode_index": 647, "tasks": ["remove the rectangular block with red mark from the tower and put it in the middle of the table"], "length": 48}
+{"episode_index": 648, "tasks": ["put the red cube on top of the tower"], "length": 47}
+{"episode_index": 649, "tasks": ["put cube on top of cube tower"], "length": 41}
+{"episode_index": 650, "tasks": ["Place plus on top of yellow cube"], "length": 47}
+{"episode_index": 651, "tasks": ["put the yellow block in middle of the table"], "length": 40}
+{"episode_index": 652, "tasks": ["put the yellow cube on top of the red cube"], "length": 48}
+{"episode_index": 653, "tasks": ["put the block on the top of the other block"], "length": 42}
+{"episode_index": 654, "tasks": ["put the long block on the yellow cube"], "length": 48}
+{"episode_index": 655, "tasks": ["placed cube on table"], "length": 48}
+{"episode_index": 656, "tasks": ["put the red cube on top of the cube with a hole"], "length": 39}
+{"episode_index": 657, "tasks": ["move the yellow block on top of the cylinder"], "length": 35}
+{"episode_index": 658, "tasks": ["take the  cube and put it next to the rectangle block"], "length": 48}
+{"episode_index": 659, "tasks": ["remove the blue triangle on top of white cube and put it on the table"], "length": 48}
+{"episode_index": 660, "tasks": ["removed the cube from top of the green cube and put it on top of the yellow cube."], "length": 48}
+{"episode_index": 661, "tasks": ["put the red cube on top of the block"], "length": 48}
+{"episode_index": 662, "tasks": ["put the green triangle on the red cube"], "length": 48}
+{"episode_index": 663, "tasks": ["puting the brown polygone ontop of the yellow block"], "length": 48}
+{"episode_index": 664, "tasks": ["remove the yellow block from the green cube to the blue block"], "length": 47}
+{"episode_index": 665, "tasks": ["put the rectangle  on top of a cube"], "length": 48}
+{"episode_index": 666, "tasks": ["put the red cube on top of the tower"], "length": 48}
+{"episode_index": 667, "tasks": ["put the white block on top of the arch"], "length": 48}
+{"episode_index": 668, "tasks": ["move the yellow block on the lower left side of the table"], "length": 31}
+{"episode_index": 669, "tasks": ["move the red cube on top of the yellow cube"], "length": 48}
+{"episode_index": 670, "tasks": ["put the green cube on top of the tower"], "length": 48}
+{"episode_index": 671, "tasks": ["put the white cube on top of the cylinder"], "length": 48}
+{"episode_index": 672, "tasks": ["Remove blue cube from the tower"], "length": 48}
+{"episode_index": 673, "tasks": ["put the yellow block on top of the red arch"], "length": 39}
+{"episode_index": 674, "tasks": ["Take the plus from the top of the tower and put it on top of the cube."], "length": 48}
+{"episode_index": 675, "tasks": ["move the red block from the tower to the top right"], "length": 48}
+{"episode_index": 676, "tasks": ["put the yellow block on top of the  blue"], "length": 48}
+{"episode_index": 677, "tasks": ["put the yellow block on top of the blue block"], "length": 48}
+{"episode_index": 678, "tasks": ["move blue roof over cube"], "length": 47}
+{"episode_index": 679, "tasks": ["put the yellow cube on top of the green cube"], "length": 48}
+{"episode_index": 680, "tasks": ["put cylinder from the table on top of yellow block"], "length": 42}
+{"episode_index": 681, "tasks": ["put the plus on top of the green cube"], "length": 48}
+{"episode_index": 682, "tasks": ["move the red hexagon to the top of the yellow cube"], "length": 48}
+{"episode_index": 683, "tasks": ["Pick up the cube and place it on the right of the red fork"], "length": 41}
+{"episode_index": 684, "tasks": ["pickup the cube and place it on top of the blue arch"], "length": 46}
+{"episode_index": 685, "tasks": ["put the red cube on top of blue cube"], "length": 48}
+{"episode_index": 686, "tasks": ["Put the block on top of the cylinder"], "length": 45}
+{"episode_index": 687, "tasks": ["Moves the green cube from white arc and placed it in the middle of the table"], "length": 37}
+{"episode_index": 688, "tasks": ["put the cylinder on top of the stack"], "length": 41}
+{"episode_index": 689, "tasks": ["put the white cube on top of the red cube"], "length": 48}
+{"episode_index": 690, "tasks": ["move the red cube from the top of the tower and put it beside the cylinder."], "length": 48}
+{"episode_index": 691, "tasks": ["moving grey coloured items onto yellow blocks"], "length": 42}
+{"episode_index": 692, "tasks": ["remove the cube from the tower and put it in the middle of the table"], "length": 48}
+{"episode_index": 693, "tasks": ["put the arch on top of the block"], "length": 39}
+{"episode_index": 694, "tasks": ["put the blue cube on top of the green rectangular block"], "length": 47}
+{"episode_index": 695, "tasks": ["put the plus on  top of the green cube"], "length": 38}
+{"episode_index": 696, "tasks": ["put the green cube to the top of cylinder"], "length": 48}
+{"episode_index": 697, "tasks": ["put the yellow block on top of the red cube"], "length": 48}
+{"episode_index": 698, "tasks": ["Move the cylinder from the block with hole to the table"], "length": 48}
+{"episode_index": 699, "tasks": ["Remove the yellow block in the middle and palce it on the right side"], "length": 43}
+{"episode_index": 700, "tasks": ["take back the green cube and put it on top of the yellow cube"], "length": 43}
+{"episode_index": 701, "tasks": ["put the shaped block on top of the tower"], "length": 48}
+{"episode_index": 702, "tasks": ["place the blue cube on top of the green cube"], "length": 48}
+{"episode_index": 703, "tasks": ["put the red block on top of the other block"], "length": 48}
+{"episode_index": 704, "tasks": ["put the blue cube on top of the tower with the other blue cube"], "length": 47}
+{"episode_index": 705, "tasks": ["Put the green cube on top of the arch, bedside the yellow cube"], "length": 48}
+{"episode_index": 706, "tasks": ["put the red cube on top of white cube"], "length": 38}
+{"episode_index": 707, "tasks": ["le robot prends le cube blanche petit et mets sur le grands cub"], "length": 48}
+{"episode_index": 708, "tasks": ["take the L block and put on top of the rectangle"], "length": 39}
+{"episode_index": 709, "tasks": ["stack cuboid to the left"], "length": 44}
+{"episode_index": 710, "tasks": ["put the yellow block on top of the blue block"], "length": 48}
+{"episode_index": 711, "tasks": ["take the green cube and put it on the right side of the table"], "length": 48}
+{"episode_index": 712, "tasks": ["put the top red block down next to the yellow block"], "length": 48}
+{"episode_index": 713, "tasks": ["Move the rectangular block at the table"], "length": 38}
+{"episode_index": 714, "tasks": ["put the blue cube on top of the cylinder"], "length": 44}
+{"episode_index": 715, "tasks": ["put the blue rectangular block on top of the yellow block"], "length": 45}
+{"episode_index": 716, "tasks": ["Pick up the pot and place it behind the blue block"], "length": 48}
+{"episode_index": 717, "tasks": ["put the yellow block on top of the cube with a hole"], "length": 40}
+{"episode_index": 718, "tasks": ["put the yellow block on top of the tower"], "length": 48}
+{"episode_index": 719, "tasks": ["put the green cube to the right side of the red cube"], "length": 33}
+{"episode_index": 720, "tasks": ["move the red rectangular block above the ice cream toy"], "length": 35}
+{"episode_index": 721, "tasks": ["put the yellow block on top of the red arch"], "length": 37}
+{"episode_index": 722, "tasks": ["put the yellow cube on top of the tower"], "length": 48}
+{"episode_index": 723, "tasks": ["put the green rectangular block on top of the yellow rectangular block."], "length": 48}
+{"episode_index": 724, "tasks": ["placed a white cube on top of the blue cloth"], "length": 35}
+{"episode_index": 725, "tasks": ["put the cube on the hole cube"], "length": 48}
+{"episode_index": 726, "tasks": ["put the red block on top of the white arch"], "length": 48}
+{"episode_index": 727, "tasks": ["put the green cube on top of the yellow rectangle"], "length": 40}
+{"episode_index": 728, "tasks": ["move the yellow rectangle block to the left"], "length": 48}
+{"episode_index": 729, "tasks": ["removed the block from the blue arch and put it on the green cube"], "length": 48}
+{"episode_index": 730, "tasks": ["put the yellow cube on top of the cube with hole in the middle"], "length": 40}
+{"episode_index": 731, "tasks": ["move red cube from the top of another cube and place it on the arch"], "length": 48}
+{"episode_index": 732, "tasks": ["put the yellow cube on top of the green cube"], "length": 48}
+{"episode_index": 733, "tasks": ["Put the cup with ball at the top of the rectangular block"], "length": 46}
+{"episode_index": 734, "tasks": ["put the green arch on the top of blue rectangular block"], "length": 48}
+{"episode_index": 735, "tasks": ["moves the yellow cube to middle of the table"], "length": 42}
+{"episode_index": 736, "tasks": ["place cube on top of yellow block"], "length": 42}
+{"episode_index": 737, "tasks": ["put the blue rectangular block on top of the green arch"], "length": 39}
+{"episode_index": 738, "tasks": ["place rectangle block on top of another block"], "length": 42}
+{"episode_index": 739, "tasks": ["put the cylinder on top the block"], "length": 48}
+{"episode_index": 740, "tasks": ["blue rectangular block placed on green arch"], "length": 48}
+{"episode_index": 741, "tasks": ["take the green cube off of the red arch to the left side of the table"], "length": 48}
+{"episode_index": 742, "tasks": ["Pick the right blue square and put it above the left side blue block"], "length": 40}
+{"episode_index": 743, "tasks": ["Put the red block on top of the yellow block"], "length": 48}
+{"episode_index": 744, "tasks": ["move the white block on the left of the table"], "length": 34}
+{"episode_index": 745, "tasks": ["put the red cube on top of the other red cube"], "length": 42}
+{"episode_index": 746, "tasks": ["move the yellow rectangle next to the red cube"], "length": 39}
+{"episode_index": 747, "tasks": ["It moved the yellow block on top of the blue arch"], "length": 43}
+{"episode_index": 748, "tasks": ["put the scalene triangle on top of the green cube"], "length": 48}
+{"episode_index": 749, "tasks": ["put the long cube on top of the cube."], "length": 39}
+{"episode_index": 750, "tasks": ["put the plus on the top of the green cube"], "length": 45}
+{"episode_index": 751, "tasks": ["Put the piece on to of the blue block"], "length": 37}
+{"episode_index": 752, "tasks": ["removed the T block and placed it on top of the hollow block"], "length": 48}
+{"episode_index": 753, "tasks": ["remove the green cube from the red cube and put it in the middle of the table"], "length": 27}
+{"episode_index": 754, "tasks": ["move the cube to the left"], "length": 40}
+{"episode_index": 755, "tasks": ["put the block on top of the cylinder"], "length": 48}
+{"episode_index": 756, "tasks": ["Put the green block on top of the yellow block"], "length": 34}
+{"episode_index": 757, "tasks": ["take the green cube off of the arch and put it on the cylinder"], "length": 43}
+{"episode_index": 758, "tasks": ["take the yellow block off of the green block and put it on top of the red hexagon"], "length": 47}
+{"episode_index": 759, "tasks": ["put the green cube on top of the red hexagon"], "length": 48}
+{"episode_index": 760, "tasks": ["put the green block on top of the blue block"], "length": 48}
+{"episode_index": 761, "tasks": ["put the rectangle on the table on top of the rectangle in the stack"], "length": 41}
+{"episode_index": 762, "tasks": ["Remove the white block on top and place it on the right side near the yelow block"], "length": 38}
+{"episode_index": 763, "tasks": ["put the yellow block on top on the brown arch"], "length": 22}
+{"episode_index": 764, "tasks": ["put the cube with a hole on top of the red arch."], "length": 48}
+{"episode_index": 765, "tasks": ["move the red rectangle on top of red cube"], "length": 45}
+{"episode_index": 766, "tasks": ["put the blue rectangle block on top of the ring"], "length": 48}
+{"episode_index": 767, "tasks": ["put the blue cube on top of the wood cube"], "length": 46}
+{"episode_index": 768, "tasks": ["place the white block on top of the yellow block"], "length": 48}
+{"episode_index": 769, "tasks": ["remove the green block from the blue block and put it in the table"], "length": 40}
+{"episode_index": 770, "tasks": ["put the blue rectangular cube to the top of the blue and red rectangular cubes"], "length": 43}
+{"episode_index": 771, "tasks": ["Move the green towel behind the blue block"], "length": 27}
+{"episode_index": 772, "tasks": ["put the red cube on top of the yellow rectangle"], "length": 45}
+{"episode_index": 773, "tasks": ["put the yellow cube on top of the red cube"], "length": 48}
+{"episode_index": 774, "tasks": ["put the cube in table"], "length": 48}
+{"episode_index": 775, "tasks": ["move the yellow block into another surface"], "length": 47}
+{"episode_index": 776, "tasks": ["put cube on top of the cylinder"], "length": 48}
+{"episode_index": 777, "tasks": ["Took the red block and put it in the middle"], "length": 23}
+{"episode_index": 778, "tasks": ["remove the plus from arch and put it on top of the blue block"], "length": 40}
+{"episode_index": 779, "tasks": ["put the small block onto the colored blocks"], "length": 48}
+{"episode_index": 780, "tasks": ["put the blue block in the left on the top of the green block"], "length": 48}
+{"episode_index": 781, "tasks": ["remove cylendre on cube"], "length": 39}
+{"episode_index": 782, "tasks": ["put the blue rectangular block on top of the arch"], "length": 48}
+{"episode_index": 783, "tasks": ["move the yellow rectangular block to the top of the green arch"], "length": 48}
+{"episode_index": 784, "tasks": ["Take the cube off of the rectangular block"], "length": 40}
+{"episode_index": 785, "tasks": ["put the arch on top of the blue block"], "length": 48}
+{"episode_index": 786, "tasks": ["put the yellow rectangular block on top of the green rectangular block"], "length": 43}
+{"episode_index": 787, "tasks": ["put the arch on top of the block"], "length": 48}
+{"episode_index": 788, "tasks": ["move the red block to the right"], "length": 37}
+{"episode_index": 789, "tasks": ["put the white arc block on top of the blue arch block"], "length": 48}
+{"episode_index": 790, "tasks": ["put the yellow triangle block to the right side of the table"], "length": 47}
+{"episode_index": 791, "tasks": ["put the rectangle block on top of another rectangle block"], "length": 48}
+{"episode_index": 792, "tasks": ["put the chess piece on top of the blocks"], "length": 48}
+{"episode_index": 793, "tasks": ["put the blue rectangular block on top of the green arch"], "length": 48}
+{"episode_index": 794, "tasks": ["move the rectangle block from the middle to the left side of the table"], "length": 32}
+{"episode_index": 795, "tasks": ["put the blue cube on top of the green cube"], "length": 48}
+{"episode_index": 796, "tasks": ["Move the green cube on the top of yellow cube"], "length": 46}
+{"episode_index": 797, "tasks": ["put the blue block on the top of green arch"], "length": 48}
+{"episode_index": 798, "tasks": ["remove the green cube from the yellow cube and put it on the left"], "length": 40}
+{"episode_index": 799, "tasks": ["take the yellow rectangle and put it on top of the green cube"], "length": 48}
+{"episode_index": 800, "tasks": ["move the red cube from the green cube and put it on the left side of the table"], "length": 41}
+{"episode_index": 801, "tasks": ["put the block on top on the other block"], "length": 35}
+{"episode_index": 802, "tasks": ["Take the block off of the tower"], "length": 48}
+{"episode_index": 803, "tasks": ["put the object on top of the yellow block"], "length": 48}
+{"episode_index": 804, "tasks": ["put the yellow block on top of the red arck"], "length": 48}
+{"episode_index": 805, "tasks": ["move the green cube to the middle of the table"], "length": 42}
+{"episode_index": 806, "tasks": ["remove one maroon chess piece from the block and put on the table"], "length": 34}
+{"episode_index": 807, "tasks": ["separates the red cubes"], "length": 33}
+{"episode_index": 808, "tasks": ["place the red cube on top of the yellow block"], "length": 48}
+{"episode_index": 809, "tasks": ["put the cylinder on top of the yellow cube"], "length": 48}
+{"episode_index": 810, "tasks": ["put the white block on top of the red cube"], "length": 46}
+{"episode_index": 811, "tasks": ["remove whihe thing and put it in other block"], "length": 45}
+{"episode_index": 812, "tasks": ["pick rectangle block from the tower and place it on top of two cube"], "length": 48}
+{"episode_index": 813, "tasks": ["pick up the green cube and put it on the top of yellow rectangle"], "length": 48}
+{"episode_index": 814, "tasks": ["move the cube to the right"], "length": 37}
+{"episode_index": 815, "tasks": ["put the blue block on top of other blue block"], "length": 46}
+{"episode_index": 816, "tasks": ["put the cylinder on top of the yellow cube"], "length": 48}
+{"episode_index": 817, "tasks": ["removed the brown chess from the cube with a hole and put it on the table"], "length": 26}
+{"episode_index": 818, "tasks": ["put the yellow cube on top of the red arch"], "length": 44}
+{"episode_index": 819, "tasks": ["aligned the cube well on top of  the block"], "length": 44}
+{"episode_index": 820, "tasks": ["take the cylinder from the yellow rectangle block and put it on top of the plus"], "length": 44}
+{"episode_index": 821, "tasks": ["put the yellow cube on top of the red block"], "length": 48}
+{"episode_index": 822, "tasks": ["put the green block on top of the yellow block"], "length": 36}
+{"episode_index": 823, "tasks": ["move the green rectangular block from the top of the yellow one and put it on the table"], "length": 42}
+{"episode_index": 824, "tasks": ["put the yellow cube on top of the blue block"], "length": 48}
+{"episode_index": 825, "tasks": ["put the blue rectangular block on top of the red arch"], "length": 48}
+{"episode_index": 826, "tasks": ["move the cube and put it on the rectangular block"], "length": 48}
+{"episode_index": 827, "tasks": ["put the yellow triangle to the top of blue block"], "length": 36}
+{"episode_index": 828, "tasks": ["put the rectangular block with the red marking on top of the rectangular  block in the middle of the table"], "length": 48}
+{"episode_index": 829, "tasks": ["held the long block and put it aside"], "length": 34}
+{"episode_index": 830, "tasks": ["took the rectangular block and put it on top of the cylinder"], "length": 45}
+{"episode_index": 831, "tasks": ["move the blue cube from the one tower to other tower."], "length": 46}
+{"episode_index": 832, "tasks": ["put wood cylinder on top of yellow cube"], "length": 47}
+{"episode_index": 833, "tasks": ["move the yellow triangle to the right side top of  block"], "length": 48}
+{"episode_index": 834, "tasks": ["Put the wood block on top of the wood block"], "length": 47}
+{"episode_index": 835, "tasks": ["remove the yellow block from the red arch and put it on top of the blue block"], "length": 48}
+{"episode_index": 836, "tasks": ["put the red cube on top of the green cube"], "length": 48}
+{"episode_index": 837, "tasks": ["put the rectangle block on top of the leftmost cylinder"], "length": 45}
+{"episode_index": 838, "tasks": ["remove the white arch from the white block and put it on the center of the table"], "length": 25}
+{"episode_index": 839, "tasks": ["put the red block on top of the tower"], "length": 48}
+{"episode_index": 840, "tasks": ["put the rectangular block on a similar rectangular block"], "length": 33}
+{"episode_index": 841, "tasks": ["remove the green cube from the tower and put it in the middle of the table"], "length": 42}
+{"episode_index": 842, "tasks": ["move the block in the top of the block"], "length": 40}
+{"episode_index": 843, "tasks": ["put the blue rectangular block on top of the cylinder"], "length": 48}
+{"episode_index": 844, "tasks": ["take the yellow cube from tower and put down on the table"], "length": 39}
+{"episode_index": 845, "tasks": ["pick up the green cube  from the blue triangle shape and put  it on top of the blue arch"], "length": 48}
+{"episode_index": 846, "tasks": ["put the block on the second block"], "length": 40}
+{"episode_index": 847, "tasks": ["move the white block to the upper center of the table"], "length": 48}
+{"episode_index": 848, "tasks": ["Put the rectangluarblock on the top od cylinder"], "length": 39}
+{"episode_index": 849, "tasks": ["put the arch on top of the yellow and green cube"], "length": 48}
+{"episode_index": 850, "tasks": ["put the block with a hole on top of the white cubu"], "length": 48}
+{"episode_index": 851, "tasks": ["picks a green block from a pile and moves it across"], "length": 48}
+{"episode_index": 852, "tasks": ["move one of the red cube from the top next to the another red cube"], "length": 46}
+{"episode_index": 853, "tasks": ["put the green cube on top of yellow block"], "length": 48}
+{"episode_index": 854, "tasks": ["put yellow cube on top of table"], "length": 48}
+{"episode_index": 855, "tasks": ["move the yellow cube to the left of the tower"], "length": 48}
+{"episode_index": 856, "tasks": ["place the cone top of the yellow block"], "length": 48}
+{"episode_index": 857, "tasks": ["put one yellow cube on top the yellow block"], "length": 48}
+{"episode_index": 858, "tasks": ["put the green cube on top of the arch"], "length": 39}
+{"episode_index": 859, "tasks": ["put the cube red on top"], "length": 48}
+{"episode_index": 860, "tasks": ["put the thin block on top of the yellow block"], "length": 40}
+{"episode_index": 861, "tasks": ["remove the yellow cube from the green block and put it on top of the blue and red cubes"], "length": 48}
+{"episode_index": 862, "tasks": ["put the plus on top of the green cube"], "length": 41}
+{"episode_index": 863, "tasks": ["move the yellow block to the right side of table"], "length": 33}
+{"episode_index": 864, "tasks": ["put the block on top of the arc"], "length": 48}
+{"episode_index": 865, "tasks": ["move the yellow cube on top of the red block"], "length": 40}
+{"episode_index": 866, "tasks": ["put the red cube on top of the 2 red cubes"], "length": 48}
+{"episode_index": 867, "tasks": ["Place the yellow block on the blue cloth."], "length": 37}
+{"episode_index": 868, "tasks": ["put the red cylinder in the blue block"], "length": 48}
+{"episode_index": 869, "tasks": ["remove the cylinder in top of object and put on top of the cube"], "length": 40}
+{"episode_index": 870, "tasks": ["put blue triangle on top of the red block"], "length": 48}
+{"episode_index": 871, "tasks": ["remove the rectangular block from the tower and put it on the left side"], "length": 37}
+{"episode_index": 872, "tasks": ["put the cube on top of the arch"], "length": 29}
+{"episode_index": 873, "tasks": ["move the cylinder from the top of the yellow cube to the top of the tower"], "length": 46}
+{"episode_index": 874, "tasks": ["remove the yellow cube from the blue cube and put it on the left"], "length": 41}
+{"episode_index": 875, "tasks": ["put the green cube on top of the red block"], "length": 46}
+{"episode_index": 876, "tasks": ["Pick the wall block above the rectangular block and put it on the table"], "length": 35}
+{"episode_index": 877, "tasks": ["remove the blue cube off of the cylinder and put it in the middle of the table"], "length": 48}
+{"episode_index": 878, "tasks": ["Put yellow cube on top of of blue cube"], "length": 45}
+{"episode_index": 879, "tasks": ["put the rectangular block in he top to bottom right"], "length": 41}
+{"episode_index": 880, "tasks": ["put the white block on top of another white block"], "length": 43}
+{"episode_index": 881, "tasks": ["take the rectangular block off of the green object and stack it on top of the other two rectangles"], "length": 45}
+{"episode_index": 882, "tasks": ["move the hollow cube from the top of red cube to the top of yellow rectangular block"], "length": 40}
+{"episode_index": 883, "tasks": ["removed the  blue block from the tower and placed it at the left side of the table"], "length": 48}
+{"episode_index": 884, "tasks": ["put the cube with a hole on top of the plus"], "length": 29}
+{"episode_index": 885, "tasks": ["remove the green arch from the blue block"], "length": 48}
+{"episode_index": 886, "tasks": ["put redcube in pan and put pan on stove"], "length": 78}
+{"episode_index": 887, "tasks": ["put the bell on the blue block"], "length": 46}
+{"episode_index": 888, "tasks": ["Remove rectangle block and move to left"], "length": 28}
+{"episode_index": 889, "tasks": ["put the cube to the left of the table"], "length": 48}
+{"episode_index": 890, "tasks": ["put the white block on top of another block"], "length": 48}
+{"episode_index": 891, "tasks": ["put the red cube on top of the yellow cube"], "length": 48}
+{"episode_index": 892, "tasks": ["take the round block and put it on the blue square"], "length": 47}
+{"episode_index": 893, "tasks": ["put the cylinder block on top of red arch block"], "length": 48}
+{"episode_index": 894, "tasks": ["put yellow rectangle on top of blue block"], "length": 42}
+{"episode_index": 895, "tasks": ["move the cube to the top of the table above the sphere"], "length": 31}
+{"episode_index": 896, "tasks": ["put the cube on top of the cube with a hole"], "length": 46}
+{"episode_index": 897, "tasks": ["put the yellow block on top of the red arch"], "length": 48}
+{"episode_index": 898, "tasks": ["put the stick in the cube with a hole"], "length": 44}
+{"episode_index": 899, "tasks": ["move the cube to the top left of the table"], "length": 35}
+{"episode_index": 900, "tasks": ["picking the white  block  puting it on top of the red block"], "length": 42}
+{"episode_index": 901, "tasks": ["put the blue cube on the top of right tower."], "length": 46}
+{"episode_index": 902, "tasks": ["take the cube with a hole and put it on top of the blue rectangle"], "length": 41}
+{"episode_index": 903, "tasks": ["take the rectanble to put it on top of the red block"], "length": 41}
+{"episode_index": 904, "tasks": ["remove the yellow rectangular block off the tower and put it on top of the red arch"], "length": 45}
+{"episode_index": 905, "tasks": ["put the rectangle on the top of the cube"], "length": 48}
+{"episode_index": 906, "tasks": ["remove the pawn on top of the cube"], "length": 30}
+{"episode_index": 907, "tasks": ["put the green triangle on top of the cube with a hole"], "length": 41}
+{"episode_index": 908, "tasks": ["put the green block on top of the rectangular block"], "length": 48}
+{"episode_index": 909, "tasks": ["take off the red block from the tower and place it on top of the yellow cube"], "length": 48}
+{"episode_index": 910, "tasks": ["put the blue block on the top of the blue block"], "length": 48}
+{"episode_index": 911, "tasks": ["removed rectangular object from the cube"], "length": 45}
+{"episode_index": 912, "tasks": ["pu the blue triangle on top of the yellow cube"], "length": 48}
+{"episode_index": 913, "tasks": ["take the green cube off of the arch and put it on the upper middle part of the table"], "length": 36}
+{"episode_index": 914, "tasks": ["take the cube with a hole from the table and placed it on top  of the white cube"], "length": 48}
+{"episode_index": 915, "tasks": ["put the green cube on top of the green arch"], "length": 46}
+{"episode_index": 916, "tasks": ["put the blue block to the other side"], "length": 34}
+{"episode_index": 917, "tasks": ["put the blue  block on the  left edge of the cloth"], "length": 39}
+{"episode_index": 918, "tasks": ["put the yellow block on top of the green arch"], "length": 48}
+{"episode_index": 919, "tasks": ["put the green block on top of the yellow block"], "length": 38}
+{"episode_index": 920, "tasks": ["move the red cube on top of the wood cube"], "length": 48}
+{"episode_index": 921, "tasks": ["moved the blue block to the center of the table"], "length": 32}
+{"episode_index": 922, "tasks": ["put the yellow block on the blue block"], "length": 44}
+{"episode_index": 923, "tasks": ["put the cylinder  on top of the yellow block."], "length": 48}
+{"episode_index": 924, "tasks": ["Put the blue block above the tower"], "length": 48}
+{"episode_index": 925, "tasks": ["put the yellow cube on top of the plus"], "length": 48}
+{"episode_index": 926, "tasks": ["move the red cube to the other side of the table"], "length": 32}
+{"episode_index": 927, "tasks": ["take the maroon figure from top of yellow block and put it on the top of the table"], "length": 36}
+{"episode_index": 928, "tasks": ["put the block rectangular muticolor of the table"], "length": 39}
+{"episode_index": 929, "tasks": ["place rectangle block on top of the arch"], "length": 48}
+{"episode_index": 930, "tasks": ["moved brown rectangular block to left"], "length": 48}
+{"episode_index": 931, "tasks": ["move the white rectangular block near the arch"], "length": 41}
+{"episode_index": 932, "tasks": ["move white rectangular block from left to right block"], "length": 39}
+{"episode_index": 933, "tasks": ["put the cube with a hole on top of the cylinder block"], "length": 48}
+{"episode_index": 934, "tasks": ["Move go down the red block"], "length": 29}
+{"episode_index": 935, "tasks": ["remove the green cube from the tower and put it on the right of the table"], "length": 39}
+{"episode_index": 936, "tasks": ["put the plus on the green cube"], "length": 36}
+{"episode_index": 937, "tasks": ["put the cylindrical object from top of the block to the right of the table."], "length": 36}
+{"episode_index": 938, "tasks": ["put the red arch on the top of the blue block"], "length": 48}
+{"episode_index": 939, "tasks": ["put the arch on top of the red and yellow blocks"], "length": 48}
+{"episode_index": 940, "tasks": ["put the square block on top of the red block"], "length": 48}
+{"episode_index": 941, "tasks": ["remove the cube from the arch and put it on top of the rectangular block"], "length": 45}
+{"episode_index": 942, "tasks": ["put the red arch on top of the yellow rectangular block"], "length": 48}
+{"episode_index": 943, "tasks": ["place the yellow cube on top of blue block"], "length": 48}
+{"episode_index": 944, "tasks": ["put the green cube in the cylindre objet"], "length": 48}
+{"episode_index": 945, "tasks": ["put redcube in pan and put pan on stove"], "length": 65}
+{"episode_index": 946, "tasks": ["put the red block on top of the yellow block"], "length": 45}
+{"episode_index": 947, "tasks": ["put the blue triangle on top of the white block"], "length": 48}
+{"episode_index": 948, "tasks": ["put the yellow cube on top of one block"], "length": 48}
+{"episode_index": 949, "tasks": ["put the stick on top of the rectangular block"], "length": 43}
+{"episode_index": 950, "tasks": ["put the brown king on top of theblock"], "length": 35}
+{"episode_index": 951, "tasks": ["take green block and put near the white block"], "length": 31}
+{"episode_index": 952, "tasks": ["put the cube on top of the tower"], "length": 47}
+{"episode_index": 953, "tasks": ["put the blue rectangular block on top of the green arch on the left side of the table"], "length": 48}
+{"episode_index": 954, "tasks": ["put the green cube on top of the yellow block"], "length": 46}
+{"episode_index": 955, "tasks": ["put the yellow cube on top of green cube"], "length": 48}
+{"episode_index": 956, "tasks": ["put the yellow cube on top of the arch"], "length": 48}
+{"episode_index": 957, "tasks": ["put the blue rectangular block on top of the arch"], "length": 48}
+{"episode_index": 958, "tasks": ["moved the blue cube to the upper left side of the stove"], "length": 27}
+{"episode_index": 959, "tasks": ["move the block to the middle of the table"], "length": 47}
+{"episode_index": 960, "tasks": ["put the yellow block on top of the red block"], "length": 47}
+{"episode_index": 961, "tasks": ["move the yellow cube to the top of the cylinder"], "length": 42}
+{"episode_index": 962, "tasks": ["Move the blue cube to the right side"], "length": 39}
+{"episode_index": 963, "tasks": ["put the red cube on top of the left cube"], "length": 46}
+{"episode_index": 964, "tasks": ["Take the rectangle block and put it on block on the left"], "length": 48}
+{"episode_index": 965, "tasks": ["put cube on plate and smalltomato in pot or pan in sink"], "length": 78}
+{"episode_index": 966, "tasks": ["put the cylinder block on top of the arch"], "length": 41}
+{"episode_index": 967, "tasks": ["put the yellow rectangular block on top of the green and red cubes"], "length": 48}
+{"episode_index": 968, "tasks": ["remove the cube from the tower and put it in left side of the table"], "length": 48}
+{"episode_index": 969, "tasks": ["Move the green rectangular block in the center of the table"], "length": 35}
+{"episode_index": 970, "tasks": ["put the yellow block on top of the blue arch"], "length": 48}
+{"episode_index": 971, "tasks": ["pick a triangle and put it on the red cube"], "length": 48}
+{"episode_index": 972, "tasks": ["move the cube from the red cube to the top of the cylinder"], "length": 48}
+{"episode_index": 973, "tasks": ["put the cylinder on the blue rectangular block"], "length": 46}
+{"episode_index": 974, "tasks": ["put the block on top of another block"], "length": 34}
+{"episode_index": 975, "tasks": ["move the blue cube to the lower right side"], "length": 35}
+{"episode_index": 976, "tasks": ["move the green rectangular block to the center of the table"], "length": 36}
+{"episode_index": 977, "tasks": ["put the brown to the top of yellow block"], "length": 47}
+{"episode_index": 978, "tasks": ["put the block on top of the other block"], "length": 48}
+{"episode_index": 979, "tasks": ["place the green cube on top of the yellow cube"], "length": 45}
+{"episode_index": 980, "tasks": ["put the blue rectangular block on top of the arch"], "length": 48}
+{"episode_index": 981, "tasks": ["put the yelow block on the top and remove in the the right"], "length": 42}
+{"episode_index": 982, "tasks": ["put redcube in pan and put pan on stove"], "length": 75}
+{"episode_index": 983, "tasks": ["pick and put the white cylinder on the top of the yellow cube"], "length": 36}
+{"episode_index": 984, "tasks": ["put the blue block on top of the cylinder"], "length": 46}
+{"episode_index": 985, "tasks": ["put the wooden arch on top of the cylindrical cube"], "length": 39}
+{"episode_index": 986, "tasks": ["Put the Yellow block above the blue block and put it to the left of the table"], "length": 30}
+{"episode_index": 987, "tasks": ["put the pawn on top of the cube with hole in the middle"], "length": 48}
+{"episode_index": 988, "tasks": ["put the blue cube on top of the red cube"], "length": 48}
+{"episode_index": 989, "tasks": ["move the yellow cube on top of cylindrical block and put it on top of the rectangular block"], "length": 48}
+{"episode_index": 990, "tasks": ["put the knob on top of the yellow rectangular block"], "length": 46}
+{"episode_index": 991, "tasks": ["Put the rectangle block on top of a block"], "length": 48}
+{"episode_index": 992, "tasks": ["move the block to slunt on the right"], "length": 35}
+{"episode_index": 993, "tasks": ["move the rectangular block ontop of the blue block"], "length": 48}
+{"episode_index": 994, "tasks": ["put the red arch on the yellow block"], "length": 48}
+{"episode_index": 995, "tasks": ["put the red block on top of the blue block"], "length": 42}
+{"episode_index": 996, "tasks": ["put the red cube on the top of the green arch"], "length": 48}
+{"episode_index": 997, "tasks": ["put the rectangular block on the arch"], "length": 48}
+{"episode_index": 998, "tasks": ["put the red cube on top of the blue rectangular block"], "length": 48}
+{"episode_index": 999, "tasks": ["put the yellow block on top of the red block"], "length": 48}
+{"episode_index": 1000, "tasks": ["put the yellow block on top of the tower"], "length": 48}
+{"episode_index": 1001, "tasks": ["put blue block on green block from right side"], "length": 48}
+{"episode_index": 1002, "tasks": ["put the cube on top of the another cube"], "length": 48}
+{"episode_index": 1003, "tasks": ["put the thin cylinder into the hole of square block"], "length": 48}
+{"episode_index": 1004, "tasks": ["put the red cube on top of the green cube"], "length": 48}
+{"episode_index": 1005, "tasks": ["remove the green cube from the tower and put it on the right"], "length": 40}
+{"episode_index": 1006, "tasks": ["blue block put to the left side of the sink"], "length": 48}
+{"episode_index": 1007, "tasks": ["remove the plus block from the tower and put it on top of the block with a hole"], "length": 38}
+{"episode_index": 1008, "tasks": ["move the red rectangular block to the left"], "length": 48}
+{"episode_index": 1009, "tasks": ["put the arch block on the rectangle block"], "length": 48}
+{"episode_index": 1010, "tasks": ["put the green cube on top of the red cube"], "length": 45}
+{"episode_index": 1011, "tasks": ["put the green cube on top of the green arc"], "length": 47}
+{"episode_index": 1012, "tasks": ["put the cube on top of the cylinder"], "length": 48}
+{"episode_index": 1013, "tasks": ["put the topmost cube on top of the cube below it"], "length": 45}
+{"episode_index": 1014, "tasks": ["move the block to the top right wood block"], "length": 47}
+{"episode_index": 1015, "tasks": ["put the yellow cube on top of the blue cube"], "length": 38}
+{"episode_index": 1016, "tasks": ["transfer the blue cube to the bottom right corner of the stove"], "length": 42}
+{"episode_index": 1017, "tasks": ["move the red cube to  the top of the white cube"], "length": 48}
+{"episode_index": 1018, "tasks": ["put redcube in pan and put pan on stove"], "length": 78}
+{"episode_index": 1019, "tasks": ["putting the red cube to the right of the table"], "length": 41}
+{"episode_index": 1020, "tasks": ["put the red block in between the arch and the cube"], "length": 48}
+{"episode_index": 1021, "tasks": ["put the red cube on top of the cylinder"], "length": 48}
+{"episode_index": 1022, "tasks": ["remove the cube with the hole from the small pole and put it to the right"], "length": 48}
+{"episode_index": 1023, "tasks": ["put the cube with a hole on top of the plus"], "length": 42}
+{"episode_index": 1024, "tasks": ["put the cube on top of the other cub"], "length": 35}
+{"episode_index": 1025, "tasks": ["Take the yellow block off of the red arch and place it on top the blue arch"], "length": 43}
+{"episode_index": 1026, "tasks": ["move the cube on the left of table"], "length": 38}
+{"episode_index": 1027, "tasks": ["remove the yellow rectangular block on top of the white rectangular block and put it to the left"], "length": 21}
+{"episode_index": 1028, "tasks": ["put the white cube behind the arch and rectangular cubes"], "length": 34}
+{"episode_index": 1029, "tasks": ["Move the blue block on the top of rectangle block"], "length": 48}
+{"episode_index": 1030, "tasks": ["put the pawn on top of the red cube"], "length": 42}
+{"episode_index": 1031, "tasks": ["put the rectangular block on top of the two cylinders"], "length": 48}
+{"episode_index": 1032, "tasks": ["move the arch from the rectangular block to the middle of the table"], "length": 44}
+{"episode_index": 1033, "tasks": ["take the block and put top of the arch and remove from arch"], "length": 37}
+{"episode_index": 1034, "tasks": ["put one blue block on top of the arch"], "length": 48}
+{"episode_index": 1035, "tasks": ["Move block to the top of blue rectangle on tower to left of table"], "length": 48}
+{"episode_index": 1036, "tasks": ["put the yellow cube on top of the red cube"], "length": 48}
+{"episode_index": 1037, "tasks": ["put the red object on the top of a cube"], "length": 48}
+{"episode_index": 1038, "tasks": ["put the red cube on top of the green block"], "length": 37}
+{"episode_index": 1039, "tasks": ["puting th yellow block on top of the arc"], "length": 37}
+{"episode_index": 1040, "tasks": ["put blue rectangle on green cube"], "length": 48}
+{"episode_index": 1041, "tasks": ["put the blue triangle on top of the red cube"], "length": 48}
+{"episode_index": 1042, "tasks": ["Pick up the blue block and place it behind the yellow cloth"], "length": 48}
+{"episode_index": 1043, "tasks": ["put the blue block on the yellow block"], "length": 48}
+{"episode_index": 1044, "tasks": ["put the yellow cube on top of the cylinder"], "length": 47}
+{"episode_index": 1045, "tasks": ["put the yellow cube on top of green cube"], "length": 48}
+{"episode_index": 1046, "tasks": ["put the red cube on top of the white arch"], "length": 48}
+{"episode_index": 1047, "tasks": ["put the yellow rectangular block on top of the blue other rectangular block"], "length": 46}
+{"episode_index": 1048, "tasks": ["put the yellow cube on top of the tower"], "length": 44}
+{"episode_index": 1049, "tasks": ["take the yellow cube off of the tower and place it on the right side of the table"], "length": 38}
+{"episode_index": 1050, "tasks": ["Pick the green rectangle block and put it on the table between the yellow and red block"], "length": 32}
+{"episode_index": 1051, "tasks": ["place the block with the hole on top of the block"], "length": 43}
+{"episode_index": 1052, "tasks": ["move the blue cube from the top left edge of the cloth to the bottom right of the table"], "length": 37}
+{"episode_index": 1053, "tasks": ["put the red block on top of the blue block"], "length": 48}
+{"episode_index": 1054, "tasks": ["move the rectangular block to the top of the other rectangular block"], "length": 42}
+{"episode_index": 1055, "tasks": ["take the circular block and put it on the table"], "length": 30}
+{"episode_index": 1056, "tasks": ["put the remaining cube on top of the tower"], "length": 48}
+{"episode_index": 1057, "tasks": ["move the blue block to the middle of the table"], "length": 34}
+{"episode_index": 1058, "tasks": ["remove the rectangular block off of the blue rectangular block and put it on top of the green cube"], "length": 48}
+{"episode_index": 1059, "tasks": ["move the white stack to the center"], "length": 48}
+{"episode_index": 1060, "tasks": ["put the yellow block on top of the red arch"], "length": 48}
+{"episode_index": 1061, "tasks": ["put the green block on top of the yellow block"], "length": 48}
+{"episode_index": 1062, "tasks": ["put the yellow block on top of the blue block"], "length": 48}
+{"episode_index": 1063, "tasks": ["put the blue cube on top of the red arch"], "length": 43}
+{"episode_index": 1064, "tasks": ["put the yellow block away and replaced it in the same position"], "length": 25}
+{"episode_index": 1065, "tasks": ["remove the red hexagon from the top of the arch and put it on top of the yellow cube"], "length": 48}
+{"episode_index": 1066, "tasks": ["Move thin white block on top of flat white block on right"], "length": 31}
+{"episode_index": 1067, "tasks": ["Put the green cube on top of the blue cube"], "length": 40}
+{"episode_index": 1068, "tasks": ["move the blue triangle on top of the rectangular block"], "length": 48}
+{"episode_index": 1069, "tasks": ["put the cylinder on top of the white block"], "length": 31}
+{"episode_index": 1070, "tasks": ["put the green rectangular block on top of the red arch"], "length": 47}
+{"episode_index": 1071, "tasks": ["pick the white cylinder block and put it on top of the blue cube"], "length": 41}
+{"episode_index": 1072, "tasks": ["put the cube on top of the red rectangle block"], "length": 48}
+{"episode_index": 1073, "tasks": ["move the cube with a hole to the left"], "length": 48}
+{"episode_index": 1074, "tasks": ["move the rectangular block from the right tower to the left"], "length": 48}
+{"episode_index": 1075, "tasks": ["put the yellow triangle onto the top of the cube."], "length": 47}
+{"episode_index": 1076, "tasks": ["Place the single yellow cube on top of the other yellow cube on the tower."], "length": 38}
+{"episode_index": 1077, "tasks": ["put the green cube block on top of the blue cube"], "length": 48}
+{"episode_index": 1078, "tasks": ["put redcube in pan and put pan on stove"], "length": 75}
+{"episode_index": 1079, "tasks": ["put the blue block on top of the cylinder"], "length": 48}
+{"episode_index": 1080, "tasks": ["put the rectangle block on the top of the other rectangle"], "length": 41}
+{"episode_index": 1081, "tasks": ["put the written rectangle block on top of the block"], "length": 40}
+{"episode_index": 1082, "tasks": ["remove rectangle in the yellow cube"], "length": 48}
+{"episode_index": 1083, "tasks": ["move the top block in from the middle to the top of the right block"], "length": 42}
+{"episode_index": 1084, "tasks": ["put the rectangular block on the left tower"], "length": 48}
+{"episode_index": 1085, "tasks": ["move the arch to the left blocks"], "length": 45}
+{"episode_index": 1086, "tasks": ["Put the red arch on top of the yellow block"], "length": 48}
+{"episode_index": 1087, "tasks": ["Pick up the cube and place it on the right of the purple cloth at the back of the table"], "length": 43}
+{"episode_index": 1088, "tasks": ["put the blue cube on top of the blue cube in the top middle of the table"], "length": 41}
+{"episode_index": 1089, "tasks": ["placez le cube jaune le plus haut du tour"], "length": 48}
+{"episode_index": 1090, "tasks": ["put the hexagon block on the top green rectangular"], "length": 48}
+{"episode_index": 1091, "tasks": ["put the blue cube on top of the red hexagon"], "length": 43}
+{"episode_index": 1092, "tasks": ["put the cube in the middle of the table."], "length": 45}
+{"episode_index": 1093, "tasks": ["put the green cube on top of the plus"], "length": 38}
+{"episode_index": 1094, "tasks": ["take the blue cube off of the cylinder and put it on top of the other blue cube"], "length": 43}
+{"episode_index": 1095, "tasks": ["move the block with a punch hole on top of the tower"], "length": 48}
+{"episode_index": 1096, "tasks": ["put the green block at the center of the table"], "length": 43}
+{"episode_index": 1097, "tasks": ["put the double cylinder on top of the block"], "length": 43}
+{"episode_index": 1098, "tasks": ["put the red block on the top of the blue block"], "length": 48}
+{"episode_index": 1099, "tasks": ["move the red cube towards the right side"], "length": 47}
+{"episode_index": 1100, "tasks": ["take the green cube off of the plus and put it on the rectangular block"], "length": 44}
+{"episode_index": 1101, "tasks": ["placed the block with red drawing on the left side of table"], "length": 41}
+{"episode_index": 1102, "tasks": ["moved the wavy block next to the pile of block at the center of the table"], "length": 38}
+{"episode_index": 1103, "tasks": ["put down the yellow cube and from top of the red rectangle"], "length": 30}
+{"episode_index": 1104, "tasks": ["put the blue rectangular block on top of the red rectangular block"], "length": 38}
+{"episode_index": 1105, "tasks": ["move the green block in right table"], "length": 37}
+{"episode_index": 1106, "tasks": ["move the blue rectangular block from the right to the left side"], "length": 40}
+{"episode_index": 1107, "tasks": ["put the cube on top of the red cube"], "length": 48}
+{"episode_index": 1108, "tasks": ["put the block of the table"], "length": 46}
+{"episode_index": 1109, "tasks": ["put the blue triangle on top of the green cube"], "length": 48}
+{"episode_index": 1110, "tasks": ["remove rectangle block from the tower and place it on the left side of table"], "length": 37}
+{"episode_index": 1111, "tasks": ["removed maroon object from the orange cube"], "length": 43}
+{"episode_index": 1112, "tasks": ["put the blue block on top of the figures on the left"], "length": 48}
+{"episode_index": 1113, "tasks": ["the blue cube is placed there"], "length": 48}
+{"episode_index": 1114, "tasks": ["Put the rectangular block on the cube"], "length": 48}
+{"episode_index": 1115, "tasks": ["Put the block at the top of the tower"], "length": 48}
+{"episode_index": 1116, "tasks": ["move the rectangular block from the yellow block to the left of the table"], "length": 48}
+{"episode_index": 1117, "tasks": ["put the cylinder to the blue cube"], "length": 43}
+{"episode_index": 1118, "tasks": ["move the plus beside the green block"], "length": 48}
+{"episode_index": 1119, "tasks": ["move the cube from the left side and put it on top of the other cube in the right side"], "length": 47}
+{"episode_index": 1120, "tasks": ["put the red block on top of the cylinder"], "length": 44}
+{"episode_index": 1121, "tasks": ["move the blue cube to the right side of the table"], "length": 38}
+{"episode_index": 1122, "tasks": ["Drops a wooden block on another wooden block"], "length": 48}
+{"episode_index": 1123, "tasks": ["put the cylinder on top of the red block"], "length": 42}
+{"episode_index": 1124, "tasks": ["remove the yellow cube from the green cube and put it on top of the cylinder"], "length": 43}
+{"episode_index": 1125, "tasks": ["put wood cube on top of wood rectangle"], "length": 48}
+{"episode_index": 1126, "tasks": ["putting the block in the hole"], "length": 48}
+{"episode_index": 1127, "tasks": ["move the brown cube and put it on top of the green one"], "length": 48}
+{"episode_index": 1128, "tasks": ["put the red cube on top of the circular object"], "length": 48}
+{"episode_index": 1129, "tasks": ["stack the sticks on top of the other sticks"], "length": 43}
+{"episode_index": 1130, "tasks": ["take the blue arch off of the tower and put it on top of the rectangle block"], "length": 46}
+{"episode_index": 1131, "tasks": ["put the yellow cube on top of the white block"], "length": 48}
+{"episode_index": 1132, "tasks": ["move the blue block from top of the cylinder to the left"], "length": 48}
+{"episode_index": 1133, "tasks": ["remove the yellow block from the tower and move closest to the right side of the triangle"], "length": 48}
+{"episode_index": 1134, "tasks": ["put the red cube on top of the arch"], "length": 48}
+{"episode_index": 1135, "tasks": ["move the blue cube to to left of the table"], "length": 33}
+{"episode_index": 1136, "tasks": ["place cube on top of another cube"], "length": 40}
+{"episode_index": 1137, "tasks": ["put the red rectangle block on top of the green rectangle block"], "length": 43}
+{"episode_index": 1138, "tasks": ["Put the cube at the top of the tower"], "length": 39}
+{"episode_index": 1139, "tasks": ["put the yellow rectangular block on top of the red rectangular block"], "length": 42}
+{"episode_index": 1140, "tasks": ["take the rectangular block and place it on top of the white cylinder"], "length": 36}
+{"episode_index": 1141, "tasks": ["Put rectangle block on top of the rectangle block"], "length": 48}
+{"episode_index": 1142, "tasks": ["move the white block to the right side of the table"], "length": 30}
+{"episode_index": 1143, "tasks": ["put the yellow  block on top of the tower"], "length": 43}
+{"episode_index": 1144, "tasks": ["put the arch on top of green and yellow cubes"], "length": 48}
+{"episode_index": 1145, "tasks": ["put the green triangular block on yellow square block"], "length": 46}
+{"episode_index": 1146, "tasks": ["take the cube to put it on top of the rectangle"], "length": 43}
+{"episode_index": 1147, "tasks": ["put bowl behind block"], "length": 44}
+{"episode_index": 1148, "tasks": ["put the cylinder on top of the yellow cube"], "length": 48}
+{"episode_index": 1149, "tasks": ["put the red block on top of the blue rectangle"], "length": 38}
+{"episode_index": 1150, "tasks": ["Put the red block beside the green block"], "length": 48}
+{"episode_index": 1151, "tasks": ["put the green   block on top of yellow block"], "length": 45}
+{"episode_index": 1152, "tasks": ["move rectangular yellow block and put it on top of red block"], "length": 36}
+{"episode_index": 1153, "tasks": ["put the block on top of the yellow block"], "length": 48}
+{"episode_index": 1154, "tasks": ["move the object on top of the green block"], "length": 41}
+{"episode_index": 1155, "tasks": ["put the yellow block on top of the red rectangular block"], "length": 48}
+{"episode_index": 1156, "tasks": ["put the yellow cube on top of the red cube"], "length": 41}
+{"episode_index": 1157, "tasks": ["put one rectangular block on top of the two cubes"], "length": 48}
+{"episode_index": 1158, "tasks": ["put the rectangular block on top of the cylinder"], "length": 48}
+{"episode_index": 1159, "tasks": ["put the blue cube on top of the blue cube"], "length": 43}
+{"episode_index": 1160, "tasks": ["put the yellow rectangular block on top of the arch"], "length": 48}
+{"episode_index": 1161, "tasks": ["put the pawn on the red cube"], "length": 45}
+{"episode_index": 1162, "tasks": ["breakdown the tower into individual blocks of colors yellow, red and green"], "length": 34}
+{"episode_index": 1163, "tasks": ["Move the blue block to the right"], "length": 48}
+{"episode_index": 1164, "tasks": ["put the blue cube on the bottom right cloth"], "length": 38}
+{"episode_index": 1165, "tasks": ["Remove the blue cube from the tower and put it on top of the plus"], "length": 46}
+{"episode_index": 1166, "tasks": ["put the blue rectangular block on the cylinder"], "length": 48}
+{"episode_index": 1167, "tasks": ["Picked the green cube and placed it on top of the red cube"], "length": 48}
+{"episode_index": 1168, "tasks": ["move the red cube from top of wood cylinder to the left side of the green pyramid"], "length": 44}
+{"episode_index": 1169, "tasks": ["put the brown roller on top the cube"], "length": 48}
+{"episode_index": 1170, "tasks": ["put the white block on top of the red one"], "length": 31}
+{"episode_index": 1171, "tasks": ["put the block on top of the tower"], "length": 48}
+{"episode_index": 1172, "tasks": ["take the green rectangle block and put it above the green cube"], "length": 48}
+{"episode_index": 1173, "tasks": ["remove the cube with hole from the cylinder"], "length": 48}
+{"episode_index": 1174, "tasks": ["remove the cube from the tower and put it in the right side of the table"], "length": 42}
+{"episode_index": 1175, "tasks": ["put the red block to the top of the green block"], "length": 48}
+{"episode_index": 1176, "tasks": ["put the cylinder on top of the cube with hole"], "length": 48}
+{"episode_index": 1177, "tasks": ["put the red polygon on top of the blue cube and then place on the left side of wood pyramid"], "length": 27}
+{"episode_index": 1178, "tasks": ["put the cube with a hole on to the top of the yellow cube."], "length": 48}
+{"episode_index": 1179, "tasks": ["Put the green triangle at the top of the cube"], "length": 48}
+{"episode_index": 1180, "tasks": ["put white block on top of square block with a hole"], "length": 48}
+{"episode_index": 1181, "tasks": ["Move the yellow cube to the left of the green towel."], "length": 48}
+{"episode_index": 1182, "tasks": ["move the red block from the tower then remove the yellow block from the tower"], "length": 44}
+{"episode_index": 1183, "tasks": ["put the cylinder on top of the rectangular block"], "length": 39}
+{"episode_index": 1184, "tasks": ["Put the square with a hole above the white rectangle block"], "length": 48}
+{"episode_index": 1185, "tasks": ["move the white arch near the green and yellow cubes"], "length": 37}
+{"episode_index": 1186, "tasks": ["remove the blue cube from the tower and put it on top of the red cube"], "length": 48}
+{"episode_index": 1187, "tasks": ["move the thick rectangular block from the right to the left of the cube with a hole"], "length": 45}
+{"episode_index": 1188, "tasks": ["put the block on top of the  tower"], "length": 48}
+{"episode_index": 1189, "tasks": ["move the wood elongated pyramid on top of the yellow cube"], "length": 48}
+{"episode_index": 1190, "tasks": ["put the cube with a hole on top of the plus"], "length": 48}
+{"episode_index": 1191, "tasks": ["put the blue rectangular block on the top of the red arch"], "length": 39}
+{"episode_index": 1192, "tasks": ["remove the red cube from the tower and put it on the left"], "length": 35}
+{"episode_index": 1193, "tasks": ["Place the white rectangular block on top of the arch"], "length": 47}
+{"episode_index": 1194, "tasks": ["move the cube on left of the table"], "length": 42}
+{"episode_index": 1195, "tasks": ["put the red arch on the top of the yellow rectangular block"], "length": 48}
+{"episode_index": 1196, "tasks": ["Put the red cube top of the tray angle"], "length": 48}
+{"episode_index": 1197, "tasks": ["put the two rectangular sticks on the two cubes"], "length": 48}
+{"episode_index": 1198, "tasks": ["Place the blue cube on the top left burner."], "length": 32}
+{"episode_index": 1199, "tasks": ["move the square block to the top of the blue arch."], "length": 48}
+{"episode_index": 1200, "tasks": ["Put the green the cube at the top of the blue cube"], "length": 48}
+{"episode_index": 1201, "tasks": ["take the red block to put it on top of the yellow cube"], "length": 48}
+{"episode_index": 1202, "tasks": ["remov the red block on to the tower"], "length": 40}
+{"episode_index": 1203, "tasks": ["move the yellow block from the tower into the center of the table"], "length": 42}
+{"episode_index": 1204, "tasks": ["put the yellow rectangle on top of the green cube"], "length": 46}
+{"episode_index": 1205, "tasks": ["put the red cube on top of the yellow cube"], "length": 35}
+{"episode_index": 1206, "tasks": ["take the green cube off of the red cube and put it on the table"], "length": 40}
+{"episode_index": 1207, "tasks": ["move the red cube from the top of the tower to the  surface of the table"], "length": 48}
+{"episode_index": 1208, "tasks": ["take the rectangular block and put it on top of the other rectangular block"], "length": 48}
+{"episode_index": 1209, "tasks": ["put the rectangular block on top of the blue rectangular block"], "length": 48}
+{"episode_index": 1210, "tasks": ["put the green cube to the right side of the table, next to the yellow cube"], "length": 44}
+{"episode_index": 1211, "tasks": ["move the block to the right side of the table"], "length": 24}
+{"episode_index": 1212, "tasks": ["put the rectangular block on top of another block"], "length": 38}
+{"episode_index": 1213, "tasks": ["put the cube on top of the green cube"], "length": 36}
+{"episode_index": 1214, "tasks": ["Put the red block on top of the yellow cube."], "length": 31}
+{"episode_index": 1215, "tasks": ["put the block with a hole on the middle of the table"], "length": 42}
+{"episode_index": 1216, "tasks": ["Put the cube to the other cube"], "length": 40}
+{"episode_index": 1217, "tasks": ["put the red block on the top of the red arch"], "length": 48}
+{"episode_index": 1218, "tasks": ["put the rectangle beside blocks"], "length": 33}
+{"episode_index": 1219, "tasks": ["move the yellow cube on top of the cylinder"], "length": 47}
+{"episode_index": 1220, "tasks": ["put the red block on top of the green arch"], "length": 48}
+{"episode_index": 1221, "tasks": ["Put the small block at the top of the blue arch"], "length": 45}
+{"episode_index": 1222, "tasks": ["put one block on top of the arch"], "length": 48}
+{"episode_index": 1223, "tasks": ["pick red cube from the table and place it on top of rectangle block"], "length": 38}
+{"episode_index": 1224, "tasks": ["Take the green cube and put it next to the yellow cube"], "length": 48}
+{"episode_index": 1225, "tasks": ["remove the cube off of the tower and put it on the left side of the table"], "length": 48}
+{"episode_index": 1226, "tasks": ["put the blue rectangular block on top of the red block"], "length": 48}
+{"episode_index": 1227, "tasks": ["move the green block from the arch to the surface of yellow block"], "length": 48}
+{"episode_index": 1228, "tasks": ["moved the blue block from the cloth to the table"], "length": 35}
+{"episode_index": 1229, "tasks": ["put the green block on top of the red block"], "length": 48}
+{"episode_index": 1230, "tasks": ["take the brown object and put it on top of the blue cube"], "length": 48}
+{"episode_index": 1231, "tasks": ["take the red block and put it in the middle of the table"], "length": 34}
+{"episode_index": 1232, "tasks": ["move the blue cube from the top of green arch to the top of red cube"], "length": 44}
+{"episode_index": 1233, "tasks": ["remove the cube from the tower and put it in the middle of the table"], "length": 21}
+{"episode_index": 1234, "tasks": ["take the red cube off of the left red cube and put it on top of the right red cube"], "length": 48}
+{"episode_index": 1235, "tasks": ["put redcube in pan and put pan on stove"], "length": 69}
+{"episode_index": 1236, "tasks": ["take the cube from the cylinder and put it in the middle of the table"], "length": 45}
+{"episode_index": 1237, "tasks": ["put the blue block on the green cube"], "length": 48}
+{"episode_index": 1238, "tasks": ["put block in pan"], "length": 38}
+{"episode_index": 1239, "tasks": ["take the blue  cube and put it on top of the grreen cube"], "length": 47}
+{"episode_index": 1240, "tasks": ["put the cup in the top of the rectangular block"], "length": 48}
+{"episode_index": 1241, "tasks": ["put the block on top of the red arch"], "length": 48}
+{"episode_index": 1242, "tasks": ["Turn a red arch upside down and place it on top of a yellow block"], "length": 45}
+{"episode_index": 1243, "tasks": ["move the arch on top of the blocks"], "length": 48}
+{"episode_index": 1244, "tasks": ["put the yellow block on top of the green cube"], "length": 48}
+{"episode_index": 1245, "tasks": ["pick green cube from the table place it on the top of an arch"], "length": 44}
+{"episode_index": 1246, "tasks": ["Put a yellow cube on top of a green arch"], "length": 48}
+{"episode_index": 1247, "tasks": ["move the red hexagon from the top of a block and put it on the table"], "length": 45}
+{"episode_index": 1248, "tasks": ["move the blue block next to the red block"], "length": 42}
+{"episode_index": 1249, "tasks": ["put the red cube on top of the blue cube"], "length": 43}
+{"episode_index": 1250, "tasks": ["Picked the green cube"], "length": 42}
+{"episode_index": 1251, "tasks": ["put the green cube on the bottom right side of the table"], "length": 42}
+{"episode_index": 1252, "tasks": ["put the yellow rectangular block on top of the tower on the right side of the table"], "length": 48}
+{"episode_index": 1253, "tasks": ["put the cylinder on top of the blue block"], "length": 48}
+{"episode_index": 1254, "tasks": ["move the green arch into the top of the blue block"], "length": 42}
+{"episode_index": 1255, "tasks": ["put the blue cube on top of the red arch"], "length": 48}
+{"episode_index": 1256, "tasks": ["take the brown cylinder and put it on top of the blue cube"], "length": 48}
+{"episode_index": 1257, "tasks": ["It took the yellow cube and put it on top of the arch"], "length": 48}
+{"episode_index": 1258, "tasks": ["Remove the red arch on the stack and put on the left side of the table"], "length": 48}
+{"episode_index": 1259, "tasks": ["remove the red block from the arch"], "length": 47}
+{"episode_index": 1260, "tasks": ["Take the blue block off of the red block and place it to the right"], "length": 40}
+{"episode_index": 1261, "tasks": ["take blue cube out of the drawer"], "length": 36}
+{"episode_index": 1262, "tasks": ["take the cylinder off of the red arch and put it on top of the white cube"], "length": 41}
+{"episode_index": 1263, "tasks": ["Put the cube with a hole on top of the tower"], "length": 43}
+{"episode_index": 1264, "tasks": ["move the cube with a hole and put it in the middle of the table"], "length": 34}
+{"episode_index": 1265, "tasks": ["Take the red block"], "length": 48}
+{"episode_index": 1266, "tasks": ["move blue cube to utmost bottom left corner"], "length": 35}
+{"episode_index": 1267, "tasks": ["Put the blue block in the middle of the table"], "length": 35}
+{"episode_index": 1268, "tasks": ["put the red block on the tower"], "length": 48}
+{"episode_index": 1269, "tasks": ["Take the red cube from the tower and put it on top of the other cube on the table"], "length": 48}
+{"episode_index": 1270, "tasks": ["put the yellow cube next to the red cube"], "length": 48}
+{"episode_index": 1271, "tasks": ["grab the red block and put it on top of the green block"], "length": 44}
+{"episode_index": 1272, "tasks": ["put the white rectangular block on top of the arch"], "length": 48}
+{"episode_index": 1273, "tasks": ["move the green block from the yellow block to the middle of the table"], "length": 34}
+{"episode_index": 1274, "tasks": ["move the blue cube to the right side of the table under a tower of blocks"], "length": 36}
+{"episode_index": 1275, "tasks": ["move the wood stick inside the 3d square block with hole"], "length": 48}
+{"episode_index": 1276, "tasks": ["remove the stick from the cube with a hole on top and put it on the table"], "length": 48}
+{"episode_index": 1277, "tasks": ["toma el conejo de peluche y pon en la cubeta roja"], "length": 46}
+{"episode_index": 1278, "tasks": ["move the blue cube on top of the tower"], "length": 48}
+{"episode_index": 1279, "tasks": ["remove the red object from the white cube and put it in the upper middle of the table"], "length": 29}
+{"episode_index": 1280, "tasks": ["put the yellow cube on top of the blue rectangular block"], "length": 44}
+{"episode_index": 1281, "tasks": ["move the blue block into the center of the table"], "length": 47}
+{"episode_index": 1282, "tasks": ["put the blue triangle on top of the red cube"], "length": 45}
+{"episode_index": 1283, "tasks": ["put the red cube on top of the red rectangle"], "length": 47}
+{"episode_index": 1284, "tasks": ["put the onion on top of the red cube"], "length": 48}
+{"episode_index": 1285, "tasks": ["put the yellow block on top of the tower"], "length": 44}
+{"episode_index": 1286, "tasks": ["put the yellow block on top of the red block"], "length": 48}
+{"episode_index": 1287, "tasks": ["put the cube on top of the rectangular"], "length": 37}
+{"episode_index": 1288, "tasks": ["put the L block on top of the pile"], "length": 40}
+{"episode_index": 1289, "tasks": ["Move the green block and place it in the middle of yellow and red block"], "length": 42}
+{"episode_index": 1290, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 46}
+{"episode_index": 1291, "tasks": ["put the block on top of the other block"], "length": 48}
+{"episode_index": 1292, "tasks": ["put rectangle block above blue arch"], "length": 48}
+{"episode_index": 1293, "tasks": ["put redcube in pan and put pan on stove"], "length": 69}
+{"episode_index": 1294, "tasks": ["Remove blue rectangle from the tower and put on the block"], "length": 48}
+{"episode_index": 1295, "tasks": ["put the yellow cube on top of the blue cube"], "length": 39}
+{"episode_index": 1296, "tasks": ["take the onion and put it on top of the blue rectangle block"], "length": 48}
+{"episode_index": 1297, "tasks": ["put the cube with a hole on top of the cube without a hole"], "length": 45}
+{"episode_index": 1298, "tasks": ["put the cube on top of the yellow rectangular block"], "length": 48}
+{"episode_index": 1299, "tasks": ["put the plus on top of the blue cube"], "length": 48}
+{"episode_index": 1300, "tasks": ["remove the blue cube from the tower and put it on top of the red cube"], "length": 48}
+{"episode_index": 1301, "tasks": ["Remove the blue block to the side"], "length": 37}
+{"episode_index": 1302, "tasks": ["Place the red cube on top of the two cubes on the right side of the table"], "length": 48}
+{"episode_index": 1303, "tasks": ["remove the yellow triangle from the blue block and put it in the right side of the table"], "length": 32}
+{"episode_index": 1304, "tasks": ["move the blocks with red marking to the center of the table"], "length": 33}
+{"episode_index": 1305, "tasks": ["put the block on top of the rectangular block on the arch"], "length": 41}
+{"episode_index": 1306, "tasks": ["move the blue cube from the top of the yellow cube to the left side of the table"], "length": 35}
+{"episode_index": 1307, "tasks": ["put the yellow cube on top of the blue rectangle"], "length": 48}
+{"episode_index": 1308, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 48}
+{"episode_index": 1309, "tasks": ["put the block down left"], "length": 48}
+{"episode_index": 1310, "tasks": ["put the yellow cube on top of the blue cube"], "length": 46}
+{"episode_index": 1311, "tasks": ["put the cube with hole from the cube tower to the floor"], "length": 36}
+{"episode_index": 1312, "tasks": ["put the red block on the top of green block"], "length": 48}
+{"episode_index": 1313, "tasks": ["Take the red cube off the tower"], "length": 42}
+{"episode_index": 1314, "tasks": ["put the yellow block on top of the red arch"], "length": 48}
+{"episode_index": 1315, "tasks": ["remove the yellow cube from the tower and put it in the left side of the table"], "length": 41}
+{"episode_index": 1316, "tasks": ["put the cube with a hole on top of the plus"], "length": 42}
+{"episode_index": 1317, "tasks": ["put yellow block on top of red block"], "length": 48}
+{"episode_index": 1318, "tasks": ["put the red cube on top of the tower"], "length": 48}
+{"episode_index": 1319, "tasks": ["put the brown chess on top of the cube"], "length": 42}
+{"episode_index": 1320, "tasks": ["put the green block in the middle of the table"], "length": 45}
+{"episode_index": 1321, "tasks": ["put the green cube on top of the block"], "length": 48}
+{"episode_index": 1322, "tasks": ["put the yellow cube on top of the green cube"], "length": 48}
+{"episode_index": 1323, "tasks": ["picking the yellow block and pushing it aside to the right"], "length": 40}
+{"episode_index": 1324, "tasks": ["put the red object from top of table to the top of rectangel beside the the cube with the hole"], "length": 48}
+{"episode_index": 1325, "tasks": ["move the l-shape block to the middle of the table"], "length": 37}
+{"episode_index": 1326, "tasks": ["pick the yellow cube and place on left of the table"], "length": 37}
+{"episode_index": 1327, "tasks": ["move the green block on top of the red one and put it to the left side of the table"], "length": 35}
+{"episode_index": 1328, "tasks": ["put the red triangle on the cube with hole"], "length": 39}
+{"episode_index": 1329, "tasks": ["Move cube on top of cube with hole"], "length": 33}
+{"episode_index": 1330, "tasks": ["pick up the white rectangle block and put it on top of the  blue rectangle block"], "length": 39}
+{"episode_index": 1331, "tasks": ["Take the cylinder off of the blue cube and put it on top of the red hexagon"], "length": 41}
+{"episode_index": 1332, "tasks": ["place the green cube on top of the white arch"], "length": 32}
+{"episode_index": 1333, "tasks": ["moved the blue block to the right edge of the table"], "length": 39}
+{"episode_index": 1334, "tasks": ["Put the yellow block to the left side of the table"], "length": 46}
+{"episode_index": 1335, "tasks": ["separating the blocks from each other"], "length": 42}
+{"episode_index": 1336, "tasks": ["put the spawn on the rectangular block"], "length": 45}
+{"episode_index": 1337, "tasks": ["took the yellow cube and placed it on the red cube"], "length": 42}
+{"episode_index": 1338, "tasks": ["put the cube on top of the arch"], "length": 48}
+{"episode_index": 1339, "tasks": ["remove the yellow cube from the tower and put it in the middle of the table"], "length": 48}
+{"episode_index": 1340, "tasks": ["put the red cube on top of the red rectangle block"], "length": 48}
+{"episode_index": 1341, "tasks": ["put the red block on the top of arc"], "length": 40}
+{"episode_index": 1342, "tasks": ["Take the rectangular block off the cube and place it on the left side of the block with a hole"], "length": 34}
+{"episode_index": 1343, "tasks": ["remove the red block from the green block and put it on the table"], "length": 42}
+{"episode_index": 1344, "tasks": ["remove the red block from the top of blue block and put it on the left side of the table."], "length": 48}
+{"episode_index": 1345, "tasks": ["move the green cube from the yellow cube to the blue cube"], "length": 48}
+{"episode_index": 1346, "tasks": ["put the circle block in the middle of table"], "length": 38}
+{"episode_index": 1347, "tasks": ["put the blue block in the orange bucket"], "length": 34}
+{"episode_index": 1348, "tasks": ["put the cone on the cube with a hole"], "length": 48}
+{"episode_index": 1349, "tasks": ["put the cube on top of the plus"], "length": 48}
+{"episode_index": 1350, "tasks": ["move the  rectangular block and put it on the table"], "length": 46}
+{"episode_index": 1351, "tasks": ["Put the blue block on top of the red block"], "length": 48}
+{"episode_index": 1352, "tasks": ["picked the yellow cube placed it on top of green rectangular shape"], "length": 48}
+{"episode_index": 1353, "tasks": ["put the yellow cube on top of the plus"], "length": 44}
+{"episode_index": 1354, "tasks": ["put the red block on top of the tower"], "length": 48}
+{"episode_index": 1355, "tasks": ["put the cube with a hole on top of the tower"], "length": 48}
+{"episode_index": 1356, "tasks": ["move the yellow block on to of the red block"], "length": 37}
+{"episode_index": 1357, "tasks": ["put the block on top of the cube"], "length": 48}
+{"episode_index": 1358, "tasks": ["take the rectangular block on top of the other rectangular block"], "length": 43}
+{"episode_index": 1359, "tasks": ["put the green block and remove of the yellow rectangular"], "length": 48}
+{"episode_index": 1360, "tasks": ["put the yellow cube on top of the yellow block"], "length": 45}
+{"episode_index": 1361, "tasks": ["put the cylinder on top of the white rectangular block"], "length": 48}
+{"episode_index": 1362, "tasks": ["put cube on the cube with a bow"], "length": 48}
+{"episode_index": 1363, "tasks": ["put the blue block on top of the green block"], "length": 48}
+{"episode_index": 1364, "tasks": ["Take the yellow cube and put in on the right side of the table"], "length": 48}
+{"episode_index": 1365, "tasks": ["put the red rectangular block on the green cube"], "length": 39}
+{"episode_index": 1366, "tasks": ["put the rectangular block on top of the arch"], "length": 48}
+{"episode_index": 1367, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 43}
+{"episode_index": 1368, "tasks": ["move the yellow cube onto the green arch"], "length": 48}
+{"episode_index": 1369, "tasks": ["take the red cube off of the blue arch and put it on top of the yellow cube"], "length": 48}
+{"episode_index": 1370, "tasks": ["put the brown  rectangular  block with a red paint  on top of the tower"], "length": 48}
+{"episode_index": 1371, "tasks": ["Remove the cube from the tower and put it in the middle of the table"], "length": 44}
+{"episode_index": 1372, "tasks": ["put the green cube on top of the rectangle"], "length": 47}
+{"episode_index": 1373, "tasks": ["pick rectangle block from top of the the table and place it on the top of cylinder"], "length": 48}
+{"episode_index": 1374, "tasks": ["put the blue cube on top of the cylinder"], "length": 43}
+{"episode_index": 1375, "tasks": ["Pick the yellow cube above the tower and put it above the left side red cube"], "length": 41}
+{"episode_index": 1376, "tasks": ["put the green cube on the blue block"], "length": 48}
+{"episode_index": 1377, "tasks": ["take the cylinder off of the rectangular block and put it on top of the other cylinder"], "length": 33}
+{"episode_index": 1378, "tasks": ["Place the red rectangular block on top of the arch"], "length": 48}
+{"episode_index": 1379, "tasks": ["put the yellow rectangular block on top of the white block"], "length": 48}
+{"episode_index": 1380, "tasks": ["put the red block on the yellow block"], "length": 29}
+{"episode_index": 1381, "tasks": ["place cube on top of another cube"], "length": 46}
+{"episode_index": 1382, "tasks": ["put the cylinder on top of the  cube"], "length": 40}
+{"episode_index": 1383, "tasks": ["put the red cube ontop of the white cube"], "length": 40}
+{"episode_index": 1384, "tasks": ["put the wood cube on top of the wood rectangle"], "length": 40}
+{"episode_index": 1385, "tasks": ["put the plus on top of the yellow cube"], "length": 46}
+{"episode_index": 1386, "tasks": ["put the stick in a cube with a hole"], "length": 47}
+{"episode_index": 1387, "tasks": ["remove the cube from the tower and put it in the middle of the table"], "length": 41}
+{"episode_index": 1388, "tasks": ["put the cylinder on top of the yellow cube"], "length": 47}
+{"episode_index": 1389, "tasks": ["takes the white block and places it on another white block on the table"], "length": 48}
+{"episode_index": 1390, "tasks": ["move the cube to the right side of the square with hole"], "length": 35}
+{"episode_index": 1391, "tasks": ["move the yellow cube to the right side of the table"], "length": 48}
+{"episode_index": 1392, "tasks": ["put the red cube on the table"], "length": 48}
+{"episode_index": 1393, "tasks": ["Remove the cylinder from the square block hole and put on the left side"], "length": 33}
+{"episode_index": 1394, "tasks": ["put the cylinder from the top of blue cube, to the top of other cylinder"], "length": 48}
+{"episode_index": 1395, "tasks": ["put the red cube on top of the blue block"], "length": 48}
+{"episode_index": 1396, "tasks": ["put the blue cube on top of the red polygon"], "length": 39}
+{"episode_index": 1397, "tasks": ["put the blue block on top of the cube"], "length": 48}
+{"episode_index": 1398, "tasks": ["put the blue block on the green arch"], "length": 47}
+{"episode_index": 1399, "tasks": ["remove the objet in the bleu cube"], "length": 44}
+{"episode_index": 1400, "tasks": ["put the green cube on top of the blue cube"], "length": 48}
+{"episode_index": 1401, "tasks": ["Move the green cube to the left"], "length": 46}
+{"episode_index": 1402, "tasks": ["put the yellow block on top of the cube with a hole"], "length": 48}
+{"episode_index": 1403, "tasks": ["put the yellow cube on top of the tower"], "length": 48}
+{"episode_index": 1404, "tasks": ["remove the cube with a hole from the tower and put it on the rectangular cube"], "length": 48}
+{"episode_index": 1405, "tasks": ["move the red cube on to the top of the green rectangle."], "length": 43}
+{"episode_index": 1406, "tasks": ["move the rectangular block on top of the tower"], "length": 40}
+{"episode_index": 1407, "tasks": ["remove the cylinder from the green cube and put it on top of the red cube"], "length": 48}
+{"episode_index": 1408, "tasks": ["put the red block on top of the white arch"], "length": 48}
+{"episode_index": 1409, "tasks": ["take the red arch off of the yellow rectangular block and put it on top of the rectangular block"], "length": 48}
+{"episode_index": 1410, "tasks": ["place yellow cube on top of hexagon"], "length": 48}
+{"episode_index": 1411, "tasks": ["put a blue block on cylinder block"], "length": 48}
+{"episode_index": 1412, "tasks": ["Place the white block on the table"], "length": 31}
+{"episode_index": 1413, "tasks": ["move cube from one tower to another"], "length": 40}
+{"episode_index": 1414, "tasks": ["put the wedge block on top of the tower"], "length": 48}
+{"episode_index": 1415, "tasks": ["put the block on top of the tower"], "length": 43}
+{"episode_index": 1416, "tasks": ["put the blue arch on top of the red and yellow cubes"], "length": 48}
+{"episode_index": 1417, "tasks": ["put the red cube on top of the green arch from the tower"], "length": 40}
+{"episode_index": 1418, "tasks": ["move the block with hole closer to the brown stuff"], "length": 48}
+{"episode_index": 1419, "tasks": ["put the block on the right side"], "length": 48}
+{"episode_index": 1420, "tasks": ["put the yellow cube on top of the green arch"], "length": 40}
+{"episode_index": 1421, "tasks": ["put the blue rectangular block on top of the red arch"], "length": 48}
+{"episode_index": 1422, "tasks": ["take the red cube from the arch and put it on top of the yellow cube"], "length": 39}
+{"episode_index": 1423, "tasks": ["put the red cube on top of the block"], "length": 48}
+{"episode_index": 1424, "tasks": ["remove the rectangular block from the tower and put it in the left side of the table"], "length": 47}
+{"episode_index": 1425, "tasks": ["put the rectangular block on top of the other block"], "length": 39}
+{"episode_index": 1426, "tasks": ["put the yellow rectangular block on the blue block"], "length": 47}
+{"episode_index": 1427, "tasks": ["put the blue block on top of the green arch"], "length": 41}
+{"episode_index": 1428, "tasks": ["put the yellow block on top of the red arch"], "length": 47}
+{"episode_index": 1429, "tasks": ["put the red block down to the desk"], "length": 42}
+{"episode_index": 1430, "tasks": ["moves cube to the middle"], "length": 39}
+{"episode_index": 1431, "tasks": ["put the red cube on top of the blue block"], "length": 48}
+{"episode_index": 1432, "tasks": ["put cube on top of tower"], "length": 45}
+{"episode_index": 1433, "tasks": ["put the cube on the top of the rectangle"], "length": 37}
+{"episode_index": 1434, "tasks": ["place the cube with hole on top of the yellow cube"], "length": 45}
+{"episode_index": 1435, "tasks": ["put the blue block on top of the cube with a hole"], "length": 43}
+{"episode_index": 1436, "tasks": ["put the white cube on top of the other white cube"], "length": 48}
+{"episode_index": 1437, "tasks": ["put the yellow triangle on top of the red cube"], "length": 37}
+{"episode_index": 1438, "tasks": ["take the rectangular and put it on the topn of the other cube"], "length": 48}
+{"episode_index": 1439, "tasks": ["placed a yellow cube on the table"], "length": 42}
+{"episode_index": 1440, "tasks": ["put the plus on top of the blue cube"], "length": 48}
+{"episode_index": 1441, "tasks": ["put the blue arch on the top of green cube"], "length": 39}
+{"episode_index": 1442, "tasks": ["move the block with a hole from the tower to the left beside the rectangular block with a red mark"], "length": 48}
+{"episode_index": 1443, "tasks": ["remove the blue block from the tower and put it in the table"], "length": 47}
+{"episode_index": 1444, "tasks": ["put the red block on the top left of the cloth"], "length": 43}
+{"episode_index": 1445, "tasks": ["put the cube with figure on top of the two other cubes"], "length": 46}
+{"episode_index": 1446, "tasks": ["pick up a white circle block with a hole  and put it on the table"], "length": 39}
+{"episode_index": 1447, "tasks": ["put the green block on top of rectangular green block"], "length": 48}
+{"episode_index": 1448, "tasks": ["put the blue block on top of the cylinder"], "length": 44}
+{"episode_index": 1449, "tasks": ["move the red block from the green block"], "length": 38}
+{"episode_index": 1450, "tasks": ["move the parallelepiped from the grren cube to the top of the red arch"], "length": 48}
+{"episode_index": 1451, "tasks": ["put the white block on the tower"], "length": 38}
+{"episode_index": 1452, "tasks": ["put the cube on the left side of the table"], "length": 47}
+{"episode_index": 1453, "tasks": ["move the red block to right side of the table"], "length": 23}
+{"episode_index": 1454, "tasks": ["move the block with a hole to the center of the table"], "length": 43}
+{"episode_index": 1455, "tasks": ["remove the green cube and put it on the top of the plus"], "length": 48}
+{"episode_index": 1456, "tasks": ["Remove the blue cube from the red rectangular block and put it on top of the red cube"], "length": 44}
+{"episode_index": 1457, "tasks": ["put the blue cube on top of the red cube"], "length": 48}
+{"episode_index": 1458, "tasks": ["put the rectangular block on top of the green block"], "length": 43}
+{"episode_index": 1459, "tasks": ["put the blue rectangular block on top of the green rectangular block"], "length": 48}
+{"episode_index": 1460, "tasks": ["Move the brown block on top of the yellow cube"], "length": 48}
+{"episode_index": 1461, "tasks": ["move the green cube on top of blue arch"], "length": 44}
+{"episode_index": 1462, "tasks": ["remove the blue cube to the left"], "length": 38}
+{"episode_index": 1463, "tasks": ["Take a red square block and put it next to the blue square block"], "length": 46}
+{"episode_index": 1464, "tasks": ["take the block and put it on top of the other block"], "length": 34}
+{"episode_index": 1465, "tasks": ["put the green rectangulat block on top of the yellow block"], "length": 37}
+{"episode_index": 1466, "tasks": ["place yellow cube on top of tower"], "length": 46}
+{"episode_index": 1467, "tasks": ["move the red cube onto the top of the yellow cube."], "length": 48}
+{"episode_index": 1468, "tasks": ["put the arch on top of the rectangular block"], "length": 48}
+{"episode_index": 1469, "tasks": ["put the zink block on the blue block"], "length": 48}
+{"episode_index": 1470, "tasks": ["put the red cube on top of the red arch"], "length": 44}
+{"episode_index": 1471, "tasks": ["put the green triangle on top of the cube with a hole"], "length": 47}
+{"episode_index": 1472, "tasks": ["move the cylinder on top of the red cube"], "length": 45}
+{"episode_index": 1473, "tasks": ["move the yellow block to the center of the table"], "length": 48}
+{"episode_index": 1474, "tasks": ["Put the grey cube on the orange rectangle."], "length": 48}
+{"episode_index": 1475, "tasks": ["put the green cube on top of the blue block"], "length": 46}
+{"episode_index": 1476, "tasks": ["move the red cube to the top of the table"], "length": 48}
+{"episode_index": 1477, "tasks": ["remove the blue rectangular block on top of the green cube and place it on top of the cream arch"], "length": 43}
+{"episode_index": 1478, "tasks": ["put a blue rectangular block on top of the white block"], "length": 45}
+{"episode_index": 1479, "tasks": ["take the red cube and put it on top of the yellow cube"], "length": 45}
+{"episode_index": 1480, "tasks": ["put the red cube on top of the cylinder"], "length": 48}
+{"episode_index": 1481, "tasks": ["put the red cube on top of the blue arch"], "length": 48}
+{"episode_index": 1482, "tasks": ["take the blue cube off of the red cube and put it on top of the green rectangular block"], "length": 46}
+{"episode_index": 1483, "tasks": ["put the blue rectangular block in the middle of the table"], "length": 44}
+{"episode_index": 1484, "tasks": ["move the cylinder to top of yellow cube on left of table"], "length": 48}
+{"episode_index": 1485, "tasks": ["move the blue square on top of the rectangle block"], "length": 48}
+{"episode_index": 1486, "tasks": ["place the block on top of the blue rectangular box"], "length": 48}
+{"episode_index": 1487, "tasks": ["put the yellow cube on top of the white cylinder"], "length": 48}
+{"episode_index": 1488, "tasks": ["move the green cube to to top of the tower"], "length": 35}
+{"episode_index": 1489, "tasks": ["put the block with hole in left side of the arch"], "length": 48}
+{"episode_index": 1490, "tasks": ["take the red cube from the table and place it on top of the green cube"], "length": 48}
+{"episode_index": 1491, "tasks": ["Take the red rectangle and put it on top of yellow and green cubes"], "length": 48}
+{"episode_index": 1492, "tasks": ["put the yellow cube on the top of the yellow cube on the right side"], "length": 46}
+{"episode_index": 1493, "tasks": ["put the blue cube on top of the yellow cube"], "length": 33}
+{"episode_index": 1494, "tasks": ["Put the small cylinder into the hole of the block"], "length": 47}
+{"episode_index": 1495, "tasks": ["pick up the green rectangle block and put it on top of the yellow rectangle block"], "length": 40}
+{"episode_index": 1496, "tasks": ["Move the green cube to the right side of the table"], "length": 48}
+{"episode_index": 1497, "tasks": ["put he red cube on top of the green cube"], "length": 48}
+{"episode_index": 1498, "tasks": ["put the blue cube on top of the cuboid"], "length": 46}
+{"episode_index": 1499, "tasks": ["Put the rectangular block next to the tower made of blocks"], "length": 46}
+{"episode_index": 1500, "tasks": ["put the cube blue on top of the plus"], "length": 43}
+{"episode_index": 1501, "tasks": ["Move the rectangle block on top of blue rectangle block on to the top of yellow block."], "length": 48}
+{"episode_index": 1502, "tasks": ["move the block from the left edge to the right"], "length": 43}
+{"episode_index": 1503, "tasks": ["remove the white cube  and put it on the  white block rectangular"], "length": 38}
+{"episode_index": 1504, "tasks": ["put the square block on top of the green cube"], "length": 47}
+{"episode_index": 1505, "tasks": ["put the yellow cube on top of the tower"], "length": 48}
+{"episode_index": 1506, "tasks": ["put the yellow rectangular block on top of the red block"], "length": 48}
+{"episode_index": 1507, "tasks": ["put the block on the tower"], "length": 46}
+{"episode_index": 1508, "tasks": ["put the yellow cube on top of the blue rectangular block"], "length": 48}
+{"episode_index": 1509, "tasks": ["pick up the block and place it on top of a white block"], "length": 48}
+{"episode_index": 1510, "tasks": ["move blue cube to right above blue spoon"], "length": 48}
+{"episode_index": 1511, "tasks": ["put redcube in pan and put pan on stove"], "length": 71}
+{"episode_index": 1512, "tasks": ["put the red block on top of the arch."], "length": 48}
+{"episode_index": 1513, "tasks": ["take and put the red object on top of the cube"], "length": 48}
+{"episode_index": 1514, "tasks": ["put cube on plate and smalltomato in pot or pan in sink"], "length": 78}
+{"episode_index": 1515, "tasks": ["put the blue cube on top of the green arch"], "length": 44}
+{"episode_index": 1516, "tasks": ["move the triangular green to the block"], "length": 36}
+{"episode_index": 1517, "tasks": ["put the cylinder on the arch block"], "length": 43}
+{"episode_index": 1518, "tasks": ["move the red block and put it down on the left side"], "length": 29}
+{"episode_index": 1519, "tasks": ["remove the green arch from the top of the blue block"], "length": 43}
+{"episode_index": 1520, "tasks": ["put the cylinder on top of the rectangle block"], "length": 48}
+{"episode_index": 1521, "tasks": ["put the green block on top of the blue block"], "length": 48}
+{"episode_index": 1522, "tasks": ["Pick up the blue brush and move it in front of the yellow block"], "length": 32}
+{"episode_index": 1523, "tasks": ["put the red cube on top of the green arch"], "length": 48}
+{"episode_index": 1524, "tasks": ["remove the yellow rectangular block off of the green rectangular block"], "length": 39}
+{"episode_index": 1525, "tasks": ["move the rectangular block put on top of the red arch"], "length": 48}
+{"episode_index": 1526, "tasks": ["put the blue rectangular block on top of the arch"], "length": 48}
+{"episode_index": 1527, "tasks": ["put the blue rectangular block on top of the tower"], "length": 48}
+{"episode_index": 1528, "tasks": ["Place the cube to the right of the spoon."], "length": 37}
+{"episode_index": 1529, "tasks": ["put the blue block on top of the yellow cube"], "length": 48}
+{"episode_index": 1530, "tasks": ["move the arc on top of the yellow block"], "length": 48}
+{"episode_index": 1531, "tasks": ["put the cube with a hole on top of the plus"], "length": 48}
+{"episode_index": 1532, "tasks": ["take the cylinder off the red cube and put it on top of the yellow cube"], "length": 48}
+{"episode_index": 1533, "tasks": ["move the cube from the tower and put it in the middle of the table"], "length": 43}
+{"episode_index": 1534, "tasks": ["put the red rectangular block on the top of the green cube"], "length": 48}
+{"episode_index": 1535, "tasks": ["take the yellow block to put it on top of the tower"], "length": 48}
+{"episode_index": 1536, "tasks": ["put the cylinder on the yellow rectangular block"], "length": 37}
+{"episode_index": 1537, "tasks": ["put the yellow triangle block on top of the green block"], "length": 48}
+{"episode_index": 1538, "tasks": ["remove the arch from the rectangle block with the red stain"], "length": 28}
+{"episode_index": 1539, "tasks": ["removed the blue block from the top of the red arc then transferred it over the wooden block"], "length": 48}
+{"episode_index": 1540, "tasks": ["Place the blue cube in the silver pot."], "length": 46}
+{"episode_index": 1541, "tasks": ["put the red cube next to the green cube"], "length": 39}
+{"episode_index": 1542, "tasks": ["put the blue cube on red cube"], "length": 48}
+{"episode_index": 1543, "tasks": ["put the white cube on top of the white rectangle"], "length": 38}
+{"episode_index": 1544, "tasks": ["put the plus on top of the green block"], "length": 48}
+{"episode_index": 1545, "tasks": ["Move cube on top of a rectangle"], "length": 48}
+{"episode_index": 1546, "tasks": ["put the yellow cube on top of the blue rectangle"], "length": 48}
+{"episode_index": 1547, "tasks": ["move the block to the table"], "length": 27}
+{"episode_index": 1548, "tasks": ["place the block on top of the plus"], "length": 48}
+{"episode_index": 1549, "tasks": ["remove the green cube from the tower and put it in the left side of the table"], "length": 39}

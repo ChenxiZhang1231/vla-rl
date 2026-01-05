@@ -6,7 +6,8 @@ import os
 
 import numpy as np
 from transforms3d.euler import quat2euler
-
+import sys
+sys.path.insert(0,"/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/SimplerEnv-OpenVLA/")
 from simpler_env.utils.env.env_builder import (
     build_maniskill2_env,
     get_robot_control_mode,

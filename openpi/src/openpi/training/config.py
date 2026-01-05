@@ -24,6 +24,7 @@ import openpi.policies.bridge_policy as bridge_policy
 import openpi.shared.download as _download
 import openpi.shared.normalize as _normalize
 import openpi.training.droid_rlds_dataset as droid_rlds_dataset
+import openpi.training.misc.polaris_config as polaris_config
 import openpi.training.misc.roboarena_config as roboarena_config
 import openpi.training.optimizer as _optimizer
 import openpi.training.weight_loaders as weight_loaders
@@ -86,6 +87,9 @@ class DataConfig:
     # sequence is defined by the `action_horizon` field in the model config. This should be adjusted if your
     # LeRobot dataset is using different keys to represent the action.
     action_sequence_keys: Sequence[str] = ("actions",)
+    # Optional per-key overrides for the sequence length used by the LeRobot data loader when building
+    # `delta_timestamps`. If a key is not present, `action_horizon` is used.
+    action_sequence_lengths: dict[str, int] = dataclasses.field(default_factory=dict)
 
     # If true, will use the LeRobot dataset task to define the prompt.
     prompt_from_task: bool = False
@@ -94,8 +98,8 @@ class DataConfig:
     rlds_data_dir: str | None = None
     # Action space for DROID dataset.
     action_space: droid_rlds_dataset.DroidActionSpace | None = None
-    # Path to the data filter file for DROID dataset
-    filter_dict_path: str | None = None
+    # List of datasets to sample from: name, version, weight, and optionally filter_dict_path
+    datasets: Sequence[droid_rlds_dataset.RLDSDataset] = ()
 
 
 class GroupFactory(Protocol):
@@ -357,24 +361,42 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
 @dataclasses.dataclass(frozen=True)
 class LeRobotBridgeDataConfig(DataConfigFactory):
     """
-    This config is used to configure transforms that are applied at various parts of the data pipeline.
-    For your own dataset, you can copy this class and modify the transforms to match your dataset based on the
-    comments below.
+    Config for training on Bridge dataset in LeRobot format (for PyTorch training).
+    This follows the third-party open-pi-zero implementation preprocessing:
+    - Quantile normalization to [-1, 1] range (not z-score)
+    - Uses image_0 (primary) and image_1 (secondary), NOT wrist camera
+    - Skips ~30% of episodes without language annotations during conversion
+    - 224x224 image resolution (PaliGemma requirement)
+    To convert the Bridge TFDS dataset to LeRobot format, use:
+        uv run --group rlds examples/bridge/convert_bridge_to_lerobot.py \
+            --tfds_data_dir /path/to/bridge_release/data/tfds
+    Bridge dataset has 7D actions: [x, y, z, roll, pitch, yaw, gripper] (EEF_POS)
+    and 7D proprioceptive state (POS_EULER: xyz + euler angles + gripper).
     """
 
-    extra_delta_transform: bool = False
-    action_sequence_keys: Sequence[str] = ("action", "observation.state")
+    # Keys used by the LeRobot data loader to fetch an *action sequence* of length `action_horizon`.
+    # Note: if you set `derive_actions_from_state=True`, you likely also want to include "observation.state"
+    # here so the loader returns a state *sequence* that can be differenced.
+    action_sequence_keys: Sequence[str] = ("action",)
+
+    # If true, `BridgeInputs` will derive the first 6 action dims from successive state differences
+    # (gripper dim is kept from the dataset actions).
+    derive_actions_from_state: bool = False
+
+    # If true, converts absolute actions to delta action space via `DeltaActions`. If your dataset actions
+    # are already deltas (e.g., derived from state diffs), set this to False to avoid double-delta.
+    use_delta_actions: bool = True
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-        # The repack transform is *only* applied to the data coming from the dataset,
-        # and *not* during inference. We can use it to make inputs from the dataset look
-        # as close as possible to those coming from the inference environment (e.g. match the keys).
-        # Below, we match the keys in the dataset (which we defined in the data conversion script) to
-        # the keys we use in our inference pipeline (defined in the inference script for bridge).
-        # For your own dataset, first figure out what keys your environment passes to the policy server
-        # and then modify the mappings below so your dataset's keys get matched to those target keys.
-        # The repack transform simply remaps key names here.
+        # Map LeRobot dataset keys to Bridge policy expected format
+        # BridgeInputs expects: observation/image, observation/wrist_image, observation/state
+        # Note: LeRobot datasets store keys at root level (e.g., "state", "image_0", "task")
+        # not nested under "observation/" prefix
+        #
+        # RepackTransform format: {target_key: source_key}
+        # - Keys: where to put the data (target structure)
+        # - Values: where to get the data from (source keys in the flat dict)
         repack_transform = _transforms.Group(
             inputs=[
                 _transforms.RepackTransform(
@@ -383,55 +405,54 @@ class LeRobotBridgeDataConfig(DataConfigFactory):
                         # "observation/wrist_image": "wrist_image",
                         "observation/state": "observation.state",
                         "actions": "action",
-                        "prompt": "prompt",
+                        "prompt": "task",
                     }
                 )
             ]
         )
 
-        # The data transforms are applied to the data coming from the dataset *and* during inference.
-        # Below, we define the transforms for data going into the model (``inputs``) and the transforms
-        # for data coming out of the model (``outputs``) (the latter is only used during inference).
-        # We defined these transforms in `bridge_policy.py`. You can check the detailed comments there for
-        # how to modify the transforms to match your dataset. Once you created your own transforms, you can
-        # replace the transforms below with your own.
+        action_sequence_keys = self.action_sequence_keys
+        if self.derive_actions_from_state and "observation.state" not in action_sequence_keys:
+            action_sequence_keys = (*tuple(action_sequence_keys), "observation.state")
+
+        # Create input/output transforms
         data_transforms = _transforms.Group(
-            inputs=[bridge_policy.BridgeInputs(model_type=model_config.model_type)],
+            inputs=[
+                bridge_policy.BridgeInputs(
+                    model_type=model_config.model_type,
+                    derive_actions_from_state=self.derive_actions_from_state,
+                )
+            ],
             outputs=[bridge_policy.BridgeOutputs()],
         )
 
-        # One additional data transform: pi0 models are trained on delta actions (relative to the first
-        # state in each action chunk). IF your data has ``absolute`` actions (e.g. target joint angles)
-        # you can uncomment the following line to convert the actions to delta actions. The only exception
-        # is for the gripper actions which are always absolute.
-        # In the example below, we would apply the delta conversion to the first 6 actions (joints) and
-        # leave the 7th action (gripper) unchanged, i.e. absolute.
-        # In Libero, the raw actions in the dataset are already delta actions, so we *do not* need to
-        # apply a separate delta conversion (that's why it's commented out). Choose whether to apply this
-        # transform based on whether your dataset uses ``absolute`` or ``delta`` actions out of the box.
-
-        # LIBERO already represents actions as deltas, but we have some old Pi0 checkpoints that are trained with this
-        # extra delta transform.
-        if self.extra_delta_transform:
-            delta_action_mask = _transforms.make_bool_mask(6, -1)
+        if self.use_delta_actions:
+            # Bridge dataset has absolute position actions, convert to delta actions
+            # Apply delta transform to all 7 dimensions (x, y, z, roll, pitch, yaw, gripper)
+            delta_action_mask = _transforms.make_bool_mask(7)
             data_transforms = data_transforms.push(
                 inputs=[_transforms.DeltaActions(delta_action_mask)],
                 outputs=[_transforms.AbsoluteActions(delta_action_mask)],
             )
 
-        # Model transforms include things like tokenizing the prompt and action targets
-        # You do not need to change anything here for your own dataset.
         model_transforms = ModelTransformFactory()(model_config)
 
-        # We return all data transforms for training and inference. No need to change anything here.
+        # IMPORTANT: Use quantile normalization to [-1, 1] range (following third-party implementation)
+        # Bridge has outliers (e.g., action values of 80) that cause training instability with z-score
+        base = self.create_base_config(assets_dirs, model_config)
+        action_sequence_lengths = dict(base.action_sequence_lengths)
+        if self.derive_actions_from_state:
+            # To produce H deltas we need H+1 states.
+            action_sequence_lengths["observation.state"] = model_config.action_horizon + 1
         return dataclasses.replace(
-            self.create_base_config(assets_dirs, model_config),
+            base,
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
-            action_sequence_keys=self.action_sequence_keys,
+            action_sequence_keys=action_sequence_keys,
+            action_sequence_lengths=action_sequence_lengths,
+            use_quantile_norm=True,  # Maps 1st-99th percentile to [-1, 1]
         )
-
 
 
 @dataclasses.dataclass(frozen=True)
@@ -446,8 +467,16 @@ class RLDSDroidDataConfig(DataConfigFactory):
     # Filtering options. Can pass a path to a dictionary that maps episodes to timestep ranges
     # to tuples denoting ranges of time steps to keep (start, end). Episodes are uniquely identified with
     # f"{recording_folderpath}--{file_path}", both of which are present in the RLDS episode metadata.
-    # Path to the filter dictionary file.
-    filter_dict_path: str | None = "gs://openpi-assets/droid/droid_sample_ranges_v1_0_1.json"
+
+    # List of datasets to sample from: name, version, weight, and optionally filter_dict_path
+    datasets: Sequence[droid_rlds_dataset.RLDSDataset] = (
+        droid_rlds_dataset.RLDSDataset(
+            name="droid",
+            version="1.0.1",
+            weight=1.0,
+            filter_dict_path="gs://openpi-assets/droid/droid_sample_ranges_v1_0_1.json",
+        ),
+    )
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -490,7 +519,7 @@ class RLDSDroidDataConfig(DataConfigFactory):
             model_transforms=model_transforms,
             rlds_data_dir=self.rlds_data_dir,
             action_space=self.action_space,
-            filter_dict_path=self.filter_dict_path,
+            datasets=self.datasets,
         )
 
 
@@ -832,34 +861,11 @@ _CONFIGS = [
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
-    TrainConfig(
-        name="pi05_bridge",
-        model=pi0_config.Pi0Config(pi05=True, action_horizon=6, discrete_state_input=False),
-        data=LeRobotBridgeDataConfig(
-            repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge_copy/bridge_orig_lerobot",
-            base_config=DataConfig(prompt_from_task=True),
-            extra_delta_transform=False,
-        ),
-        batch_size=64,
-        lr_schedule=_optimizer.CosineDecaySchedule(
-            warmup_steps=10_000,
-            peak_lr=5e-5,
-            decay_steps=1_000_000,
-            decay_lr=5e-5,
-        ),
-        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
-        ema_decay=0.999,
-        # weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/ssd/project/robotsimulation/public/huggingface_models/pi05_base"),
-        pytorch_weight_path="/inspire/ssd/project/robotsimulation/public/huggingface_models/pi05_base_torch",
-        num_train_steps=400_000,
-        num_workers=12,
-        wandb_enabled=False,
-    ),
     #
     # Fine-tuning Aloha configs.
     #
     # This is a test config that is used to illustate how train on a custom LeRobot dataset.
-    # For instuctions on how to convert and train on your own Aloha dataset see examples/aloha_real/README.md
+    # For instructions on how to convert and train on your own Aloha dataset see examples/aloha_real/README.md
     TrainConfig(
         name="pi0_aloha_pen_uncap",
         model=pi0_config.Pi0Config(),
@@ -1024,6 +1030,38 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=20_000,
     ),
+    TrainConfig(
+        name="pi05_bridge",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=5,
+            discrete_state_input=False
+        ),
+        data=LeRobotBridgeDataConfig(
+            # repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge_copy/bridge_orig_lerobot", # 
+            # repo_id = "/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/openpi/bridge_orig",
+            repo_id ="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/bridge_4tasks/PutCarrotOnPlateInScene",
+            base_config=DataConfig(
+                prompt_from_task=False,
+            ),
+            # Use state-diff actions (first 6 dims), keep gripper from dataset actions.
+            derive_actions_from_state=True,
+            # Actions are already deltas, so do not apply `DeltaActions` again.
+            use_delta_actions=False,
+            # Also fetch a state *sequence* so we can difference it to derive actions.
+            action_sequence_keys=("action", "observation.state"),
+        ),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        batch_size=64,
+        # batch_size=2,  # for debug
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        num_train_steps=400_000,
+        wandb_enabled=False,
+        num_workers=8,
+        save_interval=10000,
+        pytorch_weight_path="/inspire/hdd/project/robotsimulation/public/models/lerobot/models/pi05_base",
+    ),
     #
     # Debugging configs.
     #
@@ -1059,10 +1097,9 @@ _CONFIGS = [
         exp_name="debug_pi05",
         wandb_enabled=False,
     ),
-    #
-    # RoboArena configs.
-    #
+    # RoboArena & PolaRiS configs.
     *roboarena_config.get_roboarena_configs(),
+    *polaris_config.get_polaris_configs(),
 ]
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):

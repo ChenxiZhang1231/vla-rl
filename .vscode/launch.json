@@ -681,7 +681,39 @@
               // "--debug"
             ],
             "env": {
-                // "CUDA_VISIBLE_DEVICES": "0" 
+                // "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          {
+            "name": "Collect Bridge TrainSet RM",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/wm_data_process/",
+            "program": "utils/bridge/collect_trainset_rm.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+              "--dataset_dirs=/inspire/ssd/project/robotsimulation/public/data/bridge",
+              "--output_dir=/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/wm_data_process/WM-data-processed/bridge_for_rl_train_rm",
+              "--data_mix=bridge_orig"
+            ],
+            "env": {
+            }
+          },
+          {
+            "name": "Explore Bridge TFRecord",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/wm_data_process/",
+            "program": "utils/bridge/explore_tfrecord.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+              "--dataset_dirs=/inspire/ssd/project/robotsimulation/public/data/bridge",
+              "--data_mix=bridge_orig",
+              "--num_episodes=3"
+            ],
+            "env": {
             }
           },
     ]
