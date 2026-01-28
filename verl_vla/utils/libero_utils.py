@@ -62,37 +62,47 @@ def get_libero_dummy_action(model_family: str):
 
 def resize_image(img: np.ndarray, resize_size: tuple):
     """
-    接受一个 numpy 数组图像，并返回调整大小后的 numpy 数组。
-    这是一个简化的 PyTorch 版本，移除了 JPEG 编解码步骤以提高效率。
-    """
-    assert isinstance(resize_size, tuple), "resize_size 必须是一个元组"
+    Resize image with padding to maintain aspect ratio, matching openpi's resize_with_pad behavior.
+    Uses PIL to match openpi's implementation exactly.
 
-    # 如果输入的 numpy 数组是 (1, H, W, C) 格式，先移除批次维度
+    Args:
+        img: numpy array of shape (H, W, C) with uint8 values [0, 255]
+        resize_size: tuple (height, width) for target size
+
+    Returns:
+        Resized and padded numpy array of shape (height, width, C) with uint8 values
+    """
+    assert isinstance(resize_size, tuple), "resize_size must be a tuple"
+    target_height, target_width = resize_size
+
+    # Handle batch dimension if present
     if img.ndim == 4 and img.shape[0] == 1:
         img = img.squeeze(0)
 
-    # --- 图像尺寸调整 ---
-    # 将 (H, W, C) 的 numpy 数组转换为 (C, H, W) 的 PyTorch 张量
-    # F.resize 需要一个 float 类型的输入来进行抗锯齿处理
-    tensor_img = torch.from_numpy(img.copy()).permute(2, 0, 1).to(torch.float32)
+    cur_height, cur_width = img.shape[:2]
 
-    # 使用 "lanczos3" 插值和抗锯齿调整图像大小
-    # 此时的 tensor_img 保证是 3D 的 [C, H, W]
-    resized_tensor = F.resize(
-        tensor_img,
-        list(resize_size),
-        interpolation=InterpolationMode.BILINEAR,
-        antialias=True
-    )
+    # If already the correct size, return as-is
+    if cur_height == target_height and cur_width == target_width:
+        return img
 
-    # --- 后处理 ---
-    # 将结果四舍五入，裁剪到 [0, 255] 范围，并转换回 uint8
-    final_tensor = resized_tensor.round().clamp(0, 255).to(torch.uint8)
+    # Use PIL for resize (matching openpi's implementation)
+    pil_img = Image.fromarray(img)
 
-    # 将维度顺序从 (C, H, W) 转换回 (H, W, C) 以匹配 numpy 的格式
-    numpy_img = final_tensor.permute(1, 2, 0).numpy()
+    # Calculate resize ratio to fit within target size while maintaining aspect ratio
+    ratio = max(cur_width / target_width, cur_height / target_height)
+    resized_height = int(cur_height / ratio)
+    resized_width = int(cur_width / ratio)
 
-    return numpy_img
+    # Resize with PIL BILINEAR (same as openpi)
+    resized_img = pil_img.resize((resized_width, resized_height), resample=Image.BILINEAR)
+
+    # Create black background and paste resized image centered
+    result_img = Image.new(resized_img.mode, (target_width, target_height), 0)
+    pad_height = max(0, int((target_height - resized_height) / 2))
+    pad_width = max(0, int((target_width - resized_width) / 2))
+    result_img.paste(resized_img, (pad_width, pad_height))
+
+    return np.array(result_img)
 
 
 def get_libero_image(obs, resize_size, flip=False):
@@ -105,8 +115,9 @@ def get_libero_image(obs, resize_size, flip=False):
         img = img[::-1]
     else:
         img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
-    # img = img[::-1]
+    # breakpoint()  # BP1: 检查翻转后的图像 img.shape, img.dtype, img[100,100,:]
     img = resize_image(img, resize_size)
+    # breakpoint()  # BP2: 检查resize后的图像 img.shape, img.dtype, img[100,100,:]
     return img
 
 
@@ -199,7 +210,7 @@ def get_image_resize_size(cfg):
 
 #     return action
 
-def normalize_gripper_action(action: np.ndarray, binarize: bool = True) -> np.ndarray:
+def normalize_gripper_action(action: np.ndarray, binarize: bool = False) -> np.ndarray:
     """
     Normalize gripper action from [0,1] to [-1,+1] range.
 

@@ -176,24 +176,22 @@ class PI0Pytorch(nn.Module):
             mean=0.0,
             std=1.0,
             size=shape,
-            # dtype=torch.float32,
-            dtype=torch.bfloat16,
+            dtype=torch.float32,
             device=device,
         )
 
     def sample_time(self, bsize, device):
         time_beta = sample_beta(1.5, 1.0, bsize, device)
         time = time_beta * 0.999 + 0.001
-        # return time.to(dtype=torch.float32, device=device)
-        return time.to(dtype=torch.bfloat16, device=device)
+        return time.to(dtype=torch.float32, device=device)
         
 
     @torch.no_grad()
     def predict_action_chunk(
-        self, 
-        batch: dict[str, Tensor], 
-        noise: Tensor | None = None, 
-        use_sde: bool = False, 
+        self,
+        batch: dict[str, Tensor],
+        noise: Tensor | None = None,
+        use_sde: bool = False,
         return_logprob: bool = False,
         recompute_log_prob: bool = False
     ) -> Tensor:
@@ -201,28 +199,65 @@ class PI0Pytorch(nn.Module):
         # self.eval()
         sample_rng_or_pytorch_device = batch['observation/image_is_pad'].device
         img_np = batch['observation/image'].cpu().numpy()
+        # breakpoint()  # BP6: 检查输入图像 img_np.shape, img_np.dtype, img_np[0,100,100,:]
         batch['observation/image_is_pad'] = batch['observation/image_is_pad'].cpu().float()
-        
+
         # inputs = self._input_transform(image)
         bs = batch['observation/image'].shape[0]
         if batch.get("prompt", None) is None:
             prompt = 'pad'
         else:
             prompt = batch['prompt']
-            
+        state_np = np.zeros([bs, 8])          
         image = {'observation/image': img_np,
-                 'observation/state': np.zeros([bs, 8]),
+                 'observation/state': state_np,
                  'prompt': prompt}
+
+        # DEBUG: 打印 transform 前的数据
+        # print(f"\n===== DEBUG: _input_transform 前 =====")
+        # print(f"img_np.shape: {img_np.shape}, dtype: {img_np.dtype}")
+        # print(f"img_np min/max/mean: {img_np.min()}, {img_np.max()}, {img_np.mean():.2f}")
+        # print(f"state_np.shape: {state_np.shape}")
+        # print(f"prompt[0]: {prompt[0] if isinstance(prompt, list) else prompt}")
+
         inputs = self._input_transform(image)
-        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device, dtype=torch.bfloat16), inputs)
-        
+
+        # DEBUG: 打印 transform 后的数据
+        # print(f"\n===== DEBUG: _input_transform 后 =====")
+        # base_img = inputs['image']['base_0_rgb']
+        # print(f"base_0_rgb.shape: {base_img.shape}, dtype: {base_img.dtype}")
+        # print(f"base_0_rgb min/max/mean: {base_img.min()}, {base_img.max()}, {base_img.mean():.2f}")
+        # print(f"state.shape: {inputs['state'].shape}")
+        # # 打印第一个样本的一行数据（第100行的前10个像素的R通道）
+        # if base_img.ndim == 4:
+        #     print(f"base_0_rgb[0, 100, :10, 0]: {base_img[0, 100, :10, 0]}")
+        # else:
+        #     print(f"base_0_rgb[100, :10, 0]: {base_img[100, :10, 0]}")
+
+        # Convert numpy arrays to torch tensors
+        # Note: Image normalization ([0,255] -> [-1,1]) and HWC->CHW conversion
+        # are handled by _to_float_chw in Observation.from_dict, so we don't do it here
+        def _convert_to_tensor(x):
+            arr = np.array(x)
+            t = torch.from_numpy(arr)
+            # Keep uint8 images as-is for _to_float_chw to handle properly
+            if arr.dtype == np.uint8:
+                return t.to(sample_rng_or_pytorch_device)
+            return t.to(sample_rng_or_pytorch_device, dtype=torch.float32)
+
+        inputs = jax.tree.map(_convert_to_tensor, inputs)
+
+        # 强制将 state 设为 0（避免归一化后变成 -1）
+        if 'state' in inputs:
+            inputs['state'] = torch.zeros_like(inputs['state'])
+
         # observation = _model.Observation.from_dict(inputs)
         # self.sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
         if recompute_log_prob:
             logp_input = batch
         else:
             logp_input = None
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.cuda.amp.autocast(dtype=torch.float32):
             actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
                 inputs,
                 noise,
@@ -231,7 +266,7 @@ class PI0Pytorch(nn.Module):
                 recompute_log_prob=recompute_log_prob,
                 logp_input=logp_input,
             )
-
+        # breakpoint()
         # outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
 
         # outputs = self._output_transform(outputs)
@@ -241,12 +276,12 @@ class PI0Pytorch(nn.Module):
         else:
             actions = None
         return actions, lang_tokens, lang_masks, return_dict
-    
+
     def predict_action_chunk_update(
-        self, 
-        batch: dict[str, Tensor], 
-        noise: Tensor | None = None, 
-        use_sde: bool = False, 
+        self,
+        batch: dict[str, Tensor],
+        noise: Tensor | None = None,
+        use_sde: bool = False,
         return_logprob: bool = False,
         recompute_log_prob: bool = False
     ) -> Tensor:
@@ -256,27 +291,46 @@ class PI0Pytorch(nn.Module):
         sample_rng_or_pytorch_device = batch['observation/image_is_pad'].device
         img_np = batch['observation/image'].cpu().numpy()
         batch['observation/image_is_pad'] = batch['observation/image_is_pad'].cpu().float()
-        
+
         # inputs = self._input_transform(image)
         bs = batch['observation/image'].shape[0]
         if batch.get("prompt", None) is None:
             prompt = 'pad'
         else:
             prompt = batch['prompt']
-            
+
+        # Get state from batch if available, otherwise use zeros (for bridge mode)
+        if 'observation/state' in batch:
+            state_data = batch['observation/state']
+            state_np = state_data.cpu().float().numpy() if isinstance(state_data, torch.Tensor) else np.array(state_data)
+        else:
+            state_np = np.zeros([bs, 8])
+
         image = {'observation/image': img_np,
-                 'observation/state': np.zeros([bs, 8]),
+                 'observation/state': state_np,
                  'prompt': prompt}
         inputs = self._input_transform(image)
-        inputs = jax.tree.map(lambda x: torch.from_numpy(np.array(x)).to(sample_rng_or_pytorch_device, dtype=torch.bfloat16), inputs)
-        
+
+        # Convert numpy arrays to torch tensors
+        # Note: Image normalization ([0,255] -> [-1,1]) and HWC->CHW conversion
+        # are handled by _to_float_chw in Observation.from_dict, so we don't do it here
+        def _convert_to_tensor(x):
+            arr = np.array(x)
+            t = torch.from_numpy(arr)
+            # Keep uint8 images as-is for _to_float_chw to handle properly
+            if arr.dtype == np.uint8:
+                return t.to(sample_rng_or_pytorch_device)
+            return t.to(sample_rng_or_pytorch_device, dtype=torch.float32)
+
+        inputs = jax.tree.map(_convert_to_tensor, inputs)
+
         # observation = _model.Observation.from_dict(inputs)
         # self.sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs)
         if recompute_log_prob:
             logp_input = batch
         else:
             logp_input = None
-        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with torch.cuda.amp.autocast(dtype=torch.float32):
             actions_pred, lang_tokens, lang_masks, return_dict = self._get_action_chunk(
                 inputs,
                 noise,
@@ -328,8 +382,9 @@ class PI0Pytorch(nn.Module):
         
         observation = _model.Observation.from_dict(batch)
         images, img_masks, lang_tokens, lang_masks, state = self._preprocess_observation(observation, train=False)
-
-
+        # breakpoint()
+        # if recompute_log_prob:
+            # breakpoint()
             
             
         bsize = lang_tokens.shape[0]
@@ -343,6 +398,7 @@ class PI0Pytorch(nn.Module):
             B, S, _, H, W = images.shape
             lang_tokens, lang_masks = logp_input["lang_tokens"], logp_input["lang_masks"]
             img_masks = img_masks.unsqueeze(-1).unsqueeze(-1).repeat(1, S, 1)
+            # breakpoint()
             (logp_action,
              logp_step, 
              logp_outer, 
@@ -368,27 +424,44 @@ class PI0Pytorch(nn.Module):
                 "std": std_dev_t,
                 "out_metric": out_metric,
                 }
-            return None, lang_tokens, lang_masks, return_dict
+            return None, lang_tokens, lang_tokens, return_dict
 
         if use_sde:
-            images = [img.to(torch.bfloat16) for img in images]
+            images = [img.to(torch.float32) for img in images]
             lang_tokens = lang_tokens.to(torch.long)
             return_dict = self.sample_actions_sde(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
             if return_logprob:
                 return_dict, log_probs = return_dict
             actions = return_dict['x_next'][-1].detach().cpu().to(torch.float32).numpy()
         else:
+            images = [img.to(torch.float32) for img in images]
+            lang_tokens = lang_tokens.to(torch.long)
             return_dict = self.sample_actions(images, img_masks, lang_tokens, lang_masks, state, noise=noise)
-            actions = return_dict['x_next'][-1].detach().cpu().numpy()
+            actions = return_dict['x_next'][-1].detach().cpu().to(torch.float32).numpy()
 
         original_action_dim = 7
         actions = actions[:, :, :original_action_dim]
+
+        # DEBUG: 打印 output_transform 前的数据
+        # print(f"\n===== DEBUG: _output_transform 前 =====")
+        # print(f"actions.shape: {actions.shape}")
+        # print(f"actions min/max/mean: {actions.min():.4f}, {actions.max():.4f}, {actions.mean():.4f}")
+        # print(f"actions[0, 0, :]: {actions[0, 0, :]}")  # 第一个样本的第一个时间步
 
         outputs = {
             "state": np.zeros([bsize, 8]),
             "actions": actions,
         }
-        actions = self._output_transform(outputs)['action']
+        transformed_outputs = self._output_transform(outputs)
+        # 兼容 Bridge（返回 'action'）和 LIBERO（返回 'actions'）
+        actions = transformed_outputs.get('actions', transformed_outputs.get('action'))
+
+        # DEBUG: 打印 output_transform 后的数据
+        # print(f"\n===== DEBUG: _output_transform 后 =====")
+        # print(f"actions.shape: {actions.shape}")
+        # print(f"actions min/max/mean: {actions.min():.4f}, {actions.max():.4f}, {actions.mean():.4f}")
+        # print(f"actions[0, 0, :]: {actions[0, 0, :]}")  # 第一个样本的第一个时间步（反归一化后）
+
         actions = actions[:, :self.n_action_steps, :]
 
         return (actions, lang_tokens, lang_masks, return_dict, log_probs) if return_logprob else actions, lang_tokens, lang_masks, return_dict
@@ -668,8 +741,8 @@ class PI0Pytorch(nn.Module):
             self.paligemma_with_expert.paligemma.language_model.layers[0].self_attn.q_proj.weight.dtype
             == torch.bfloat16
         ):
-            suffix_embs = suffix_embs.to(dtype=torch.bfloat16)
-            prefix_embs = prefix_embs.to(dtype=torch.bfloat16)
+            suffix_embs = suffix_embs.to(dtype=torch.float32)
+            prefix_embs = prefix_embs.to(dtype=torch.float32)
 
         pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
         att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)

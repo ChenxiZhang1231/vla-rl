@@ -21,6 +21,7 @@ def create_trained_policy(
     default_prompt: str | None = None,
     norm_stats: dict[str, transforms.NormStats] | None = None,
     pytorch_device: str | None = None,
+    use_libero_loader: bool = False,
 ) -> _policy.Policy:
     """Create a policy from a trained checkpoint.
 
@@ -50,7 +51,10 @@ def create_trained_policy(
 
     logging.info("Loading model...")
     if is_pytorch:
-        model = train_config.model.load_pytorch(train_config, weight_path)
+        if use_libero_loader:
+            model = train_config.model.load_pytorch_libero(train_config, weight_path)
+        else:
+            model = train_config.model.load_pytorch(train_config, weight_path)
         model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
     else:
         model = train_config.model.load(_model.restore_params(checkpoint_dir / "params", dtype=jnp.bfloat16))

@@ -135,6 +135,7 @@ actor_rollout_ref:
     only_for_gen_rm_data: False
     vla: ${actor_rollout_ref.model.vla}
     action_chunks_len: ${actor_rollout_ref.model.action_chunks_len}
+    replan_steps: null  # Number of steps to execute before replanning. null = execute full chunk. Set to 5 to match openpi behavior.
     experiment_name: None
     unnorm_key: libero_10
     micro_batch_size: 1
@@ -291,7 +292,7 @@ reward_model:
 algorithm:
   gamma: 1.0
   lam: 1.0
-  adv_estimator: gae
+  adv_estimator: grpo
   whiten: False
   # now supports rloo. it treats different source of reward separately.
   # TODO: it should also support different gamma for different rewards.

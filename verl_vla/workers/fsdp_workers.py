@@ -222,7 +222,7 @@ class RobActorRolloutRefWorker(Worker):
             torch.distributed.barrier()
         elif self.config.model.vla == "pi05":
             import sys
-            sys.path.append("/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl/verl_vla/utils/vla_utils/pi05")
+            sys.path.append("/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/verl_vla/utils/vla_utils/pi05")
             from openpi.training import config as _config
             from openpi.policies import policy_config
             from openpi.shared import download
@@ -275,8 +275,14 @@ class RobActorRolloutRefWorker(Worker):
         if self.config.model.vla == "smolvla":
             actor_model_config = SmolVLAConfig()
         elif self.config.model.vla == "pi05":
-            actor_model_config = _config.get_config("pi05_bridge")
+            # Select Pi05 config based on unnorm_key (dataset type)
+            if unnorm_key in ["bridge_orig"]:
+                actor_model_config = _config.get_config("pi05_bridge")
+            else:
+                # For LIBERO datasets (libero_10, libero_90, libero_spatial, etc.)
+                actor_model_config = _config.get_config("pi05_libero")
         else:
+            breakpoint()
             actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
             
             
@@ -502,7 +508,9 @@ class RobActorRolloutRefWorker(Worker):
                 self.action_head = None
                 self.noisy_action_projector = None
             elif self.config.model.vla == "pi05":
-                actor_module = policy_config.create_trained_policy(actor_model_config, local_path)
+                # Use libero loader for LIBERO datasets (keys have 'model.' prefix)
+                use_libero_loader = unnorm_key.startswith("libero") if unnorm_key else False
+                actor_module = policy_config.create_trained_policy(actor_model_config, local_path, use_libero_loader=use_libero_loader)
                 actor_module.n_action_steps = self.config.model.action_chunks_len
                 actor_module.noisy_action_projector = None
                 actor_module.action_head = None

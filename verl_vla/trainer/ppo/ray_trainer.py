@@ -604,7 +604,7 @@ class RayTrainer(object):
                                                 train_val ="train")
             self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
                                             batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
-                                            shuffle=True,
+                                            shuffle=False,
                                             drop_last=True,
                                             collate_fn=collate_fn))
 
@@ -697,7 +697,7 @@ class RayTrainer(object):
     def init_workers(self):
         """Init resource pool and worker group"""
         self.resource_pool_manager.create_resource_pool()
-
+        # breakpoint()
         self.resource_pool_to_cls = {pool: {} for pool in self.resource_pool_manager.resource_pool_dict.values()}
 
         # create actor and rollout
@@ -768,6 +768,7 @@ class RayTrainer(object):
 
         # we should create rollout at the end so that vllm can have a better estimation of kv cache memory
         self.actor_rollout_wg = all_wg['actor_rollout']
+        # breakpoint()
         self.actor_rollout_wg.init_model()
 
     def fit(self):
@@ -817,6 +818,7 @@ class RayTrainer(object):
                 metrics['timing/compute_logp'] = 0
 
                 # breakpoint()
+                print(f"========== [ROLLOUT COLLECTING] target={batch_size * n_samples} trajectories ==========")
                 while len(valid_batch) < batch_size * n_samples:
                     try:
                         batch_dict = self.train_dataloader.get_next_batch()
@@ -824,6 +826,7 @@ class RayTrainer(object):
                         break
 
                     # generate a batch
+                    print(f"[ROLLOUT] Starting generate_sequences...")
                     with Timer(name='gen', text="{name}: {seconds:.1f} seconds") as timer:
 
                         newbatch: DataProto = DataProto.from_single_dict(batch_dict)
@@ -855,12 +858,15 @@ class RayTrainer(object):
                                 'pad_token_id': -1,
                                 'is_train': True,
                             }
+                        # breakpoint()
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(prompts=gen_batch)
+                        print(f"[ROLLOUT] generate_sequences completed, got {len(gen_batch_output)} samples")
                         roll_batch = DataProto.concat(batch_lst)
                         #roll_batch.pop(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
                         roll_batch = roll_batch.union(gen_batch_output)
                         # breakpoint()
                     metrics['timing/gen'] += timer.last
+                    print(f"[ROLLOUT] gen time: {timer.last:.1f}s")
                     
                     # do accuracy filtering and score logging
                     # breakpoint()
@@ -969,9 +975,9 @@ class RayTrainer(object):
                     
                 for k, v in reward_format_metrics.items():
                     metrics['train_verify_score_wo_format/' + k] = np.mean(metrics['train_verify_score_wo_format/' + k])
-                
+
                 batch = valid_batch
-                print(f'rollout batch size: {len(batch)}')
+                print(f"========== [ROLLOUT DONE] batch_size={len(batch)}, ready for training ==========")
                 if self.use_reference_policy:
                     # compute reference log_prob
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
@@ -1094,6 +1100,7 @@ class RayTrainer(object):
                 # implement critic warmup
                 if self.config.trainer.critic_warmup <= global_steps:
                     # update actor
+                    print(f"========== [TRAINING START] global_step={global_steps} ==========")
                     with Timer(name='update_actor', text="{name}: {seconds:.1f} seconds") as timer:
                         batch.meta_info['is_filtered'] = True
                         batch.meta_info['train_mode'] = False
@@ -1104,6 +1111,7 @@ class RayTrainer(object):
                     actor_output_metrics = reduce_metrics(actor_output.meta_info['metrics'])
                     # entropy_output_metrics = reduce_metrics(entropy_output.meta_info['metrics'])
                     metrics.update(actor_output_metrics)
+                    print(f"========== [TRAINING DONE] global_step={global_steps}, metrics={actor_output_metrics} ==========")
                     # metrics.update(entropy_output_metrics)
                 # validate
                 if self.val_reward_fn is not None and (global_steps + 1) % self.config.trainer.test_freq == 0:

@@ -323,6 +323,51 @@ class BaseModelConfig(abc.ABC):
         logger.info(f"train_config: {train_config}")
         model = pi0_pytorch.PI0Pytorch(config=train_config.model)
         safetensors.torch.load_model(model, weight_path)
+        # Load weights and handle "model." prefix if present
+        # state_dict = safetensors.torch.load_file(weight_path)
+
+        # # Check if keys have "model." prefix and remove it
+        # first_key = next(iter(state_dict.keys()))
+        # if first_key.startswith("model."):
+        #     state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
+
+        # # Use strict=False because embed_tokens is tied with lm_head
+        # model.load_state_dict(state_dict, strict=False)
+
+        # # Tie embed_tokens with lm_head (they share weights in PaliGemma)
+        # paligemma = model.paligemma_with_expert.paligemma
+        # if hasattr(paligemma, 'tie_weights'):
+        #     paligemma.tie_weights()
+        # else:
+        #     # Manually tie weights if tie_weights method not available
+        #     paligemma.model.language_model.embed_tokens.weight = paligemma.lm_head.weight
+
+        return model
+
+    def load_pytorch_libero(self, train_config, weight_path: str):
+        """Load PyTorch model with 'model.' prefix handling for LIBERO checkpoints."""
+        logger.info(f"train_config: {train_config}")
+        model = pi0_pytorch.PI0Pytorch(config=train_config.model)
+
+        # Load weights and handle "model." prefix if present
+        state_dict = safetensors.torch.load_file(weight_path)
+
+        # Check if keys have "model." prefix and remove it
+        first_key = next(iter(state_dict.keys()))
+        if first_key.startswith("model."):
+            state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
+
+        # Use strict=False because embed_tokens is tied with lm_head
+        model.load_state_dict(state_dict, strict=False)
+
+        # Tie embed_tokens with lm_head (they share weights in PaliGemma)
+        paligemma = model.paligemma_with_expert.paligemma
+        if hasattr(paligemma, 'tie_weights'):
+            paligemma.tie_weights()
+        else:
+            # Manually tie weights if tie_weights method not available
+            paligemma.model.language_model.embed_tokens.weight = paligemma.lm_head.weight
+        # breakpoint()
         return model
 
     @abc.abstractmethod

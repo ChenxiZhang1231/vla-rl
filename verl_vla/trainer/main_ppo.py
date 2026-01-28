@@ -938,9 +938,13 @@ class RobVLMRewardManager():
             self.data_key = 'action_tensor'
         else:
             self.data_key = 'responses'
+        # self.client = openai.OpenAI(
+        #     base_url="http://localhost:18901/v1",
+        #     api_key="not-needed"
+        #  )
         self.client = openai.OpenAI(
-            base_url="http://localhost:18901/v1",
-            api_key="not-needed"
+            base_url="https://khpjjp5pbqqqcgegh8doom9cho5egdpe.openapi-qb-ai.sii.edu.cn/v1",
+            api_key="PR8CIF1RtBNYD/OJVgf1++ocaPW428ddGaWdhqZ0SHk="
         )
         self.vote_n = self.config.reward_model.vote_n
         self.vote_m = self.config.reward_model.vote_m
@@ -1035,7 +1039,8 @@ class RobVLMRewardManager():
 
         try:
             completion = client.chat.completions.create(
-                model="Qwen3-VL-235B-A22B-Instruct",
+                # model="judge",
+                model="/inspire/hdd/project/robotsimulation/public/zixuan.zeng/model/qwen3_model/Qwen/Qwen3-VL-235B-A22B-Instruct",
                 messages=[
                     {"role": "user", "content": user_content},
                 ],
@@ -1695,6 +1700,7 @@ class RobVLMRewardManager():
             
         if not self.gen_data_for_wm_rm:
             step_images = data.batch["step_images"]
+            
             step_images_mask = data.batch["step_images_mask"]
             pred_success, pred_finish, pred_text = self.get_reward(data, step_images, step_images_mask)
             B, N, H, W, C = step_images.shape

@@ -298,12 +298,13 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
         # For your own dataset, first figure out what keys your environment passes to the policy server
         # and then modify the mappings below so your dataset's keys get matched to those target keys.
         # The repack transform simply remaps key names here.
+        # Note: wrist_image is removed since libero_policy.py now uses zeros for wrist images
+        # (following Bridge implementation for pure vision model)
         repack_transform = _transforms.Group(
             inputs=[
                 _transforms.RepackTransform(
                     {
                         "observation/image": "image",
-                        "observation/wrist_image": "wrist_image",
                         "observation/state": "state",
                         "actions": "actions",
                         "prompt": "prompt",
