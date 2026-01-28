@@ -91,6 +91,10 @@ class DataConfig:
     # `delta_timestamps`. If a key is not present, `action_horizon` is used.
     action_sequence_lengths: dict[str, int] = dataclasses.field(default_factory=dict)
 
+    # Image keys to load from the dataset. If specified, only these image keys will be loaded.
+    # This is useful to avoid loading unused images (e.g., wrist images) for efficiency or to skip corrupted videos.
+    image_keys: Sequence[str] | None = None
+
     # If true, will use the LeRobot dataset task to define the prompt.
     prompt_from_task: bool = False
 
@@ -306,11 +310,11 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             inputs=[
                 _transforms.RepackTransform(
                     {
-                        "observation/image": "image",
-                        "observation/wrist_image": "wrist_image",
-                        "observation/state": "state",
-                        "actions": "actions",
-                        "prompt": "prompt",
+                        "observation/image": "observation.images.image",
+                        # "observation/wrist_image": "observation.images.wrist_image",  # Skipped - not used
+                        "observation/state": "observation.state",
+                        "actions": "action",
+                        "prompt": "task",
                     }
                 )
             ]
@@ -356,6 +360,9 @@ class LeRobotLiberoDataConfig(DataConfigFactory):
             repack_transforms=repack_transform,
             data_transforms=data_transforms,
             model_transforms=model_transforms,
+            action_sequence_keys=("action",),
+            # Only load the main image, skip wrist_image to avoid corrupted video issues
+            image_keys=("observation.images.image",),
         )
 
 @dataclasses.dataclass(frozen=True)
@@ -844,7 +851,7 @@ _CONFIGS = [
         name="pi05_libero",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotLiberoDataConfig(
-            repo_id="physical-intelligence/libero",
+            repo_id="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-fly-wheel/EO1-dev/hugg_data/LIBERO-Lerobot-4tasks/libero_4tasks",
             base_config=DataConfig(prompt_from_task=True),
             extra_delta_transform=False,
         ),
@@ -858,7 +865,7 @@ _CONFIGS = [
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
         weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        pytorch_weight_path="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/openpi1/openpi/pi05_base",
         num_train_steps=30_000,
     ),
     #
@@ -1038,9 +1045,8 @@ _CONFIGS = [
             discrete_state_input=False
         ),
         data=LeRobotBridgeDataConfig(
-            # repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge_copy/bridge_orig_lerobot", # 
-            # repo_id = "/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/openpi/bridge_orig",
-            repo_id ="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/bridge_4tasks/PutCarrotOnPlateInScene",
+            # repo_id ="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prorl/vla-rl/bridge_4tasks/PutCarrotOnPlateInScene",
+            repo_id="/inspire/ssd/project/robotsimulation/public/data/bridge_copy/bridge_orig_lerobot",
             base_config=DataConfig(
                 prompt_from_task=False,
             ),
@@ -1051,8 +1057,11 @@ _CONFIGS = [
             # Also fetch a state *sequence* so we can difference it to derive actions.
             action_sequence_keys=("action", "observation.state"),
         ),
-        # weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
-        batch_size=64,
+        # Load base model weights first (including lm_head)
+        # weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robotsimulation/public/models/openpi05/pi05_bridge/pi05_bridge_1028_01/200000"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/openpi1/openpi/checkpoint_rl_sftAll/pi05_bridge/bridge_carrot_run/1/160000"),
+        batch_size=32,
+        #  batch_size=64,
         # batch_size=2,  # for debug
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
@@ -1060,7 +1069,9 @@ _CONFIGS = [
         wandb_enabled=False,
         num_workers=8,
         save_interval=10000,
-        pytorch_weight_path="/inspire/hdd/project/robotsimulation/public/models/lerobot/models/pi05_base",
+        # pytorch_weight_path="/inspire/hdd/project/robotsimulation/public/models/lerobot/models/pi05_base",
+        pytorch_weight_path="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/finetuneRL/vla-rl/work_dirs/SimpleVLA-RL/exp1-pi05_fb_wm_ffp-full-faster-bridge-carrot/stack/step69.pt"
+        #pytorch_weight_path="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/prophrl/openpi/checkpoint2/pi05_bridge/bridge_carrot_run/290000",
     ),
     #
     # Debugging configs.

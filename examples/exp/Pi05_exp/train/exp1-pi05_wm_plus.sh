@@ -15,12 +15,10 @@ export MUJOCO_GL="egl"
 # export MUJOCO_GL=egl
 
 PROJECT_NAME='SimpleVLA-RL'
-EXPERIMENT_NAME='exp1-pi05_wm_ffp-full-faster-bridge-carrot-qwen3-235b-local'
-# EXPERIMENT_NAME='debug'
-
+# EXPERIMENT_NAME='exp1-pi05_wm_fs-bridge-carrot-fly-wheel'
+EXPERIMENT_NAME='debug'
 # For openvla-oft Libero-Long traj1 SFT or traj all SFT models can be find in https://huggingface.co/collections/Haozhan72/simplevla-rl-6833311430cd9df52aeb1f86
-SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/openpi1/openpi/checkpoint_rl_sftAll/pi05_bridge/bridge_carrot_run/160000"
-# SFT_MODEL_PATH="/inspire/ssd/project/robotsimulation/zhangchenxi-253108310322/code/openpi1/openpi/checkpoint_rl_sftAll/pi05_bridge/bridge_carrot_run/70000"
+SFT_MODEL_PATH="/inspire/hdd/project/robotsimulation/public/models/openpi05/pi05_bridge/pi05_bridge_1028_01/200000"
 CKPT_PATH="work_dirs/$PROJECT_NAME/$EXPERIMENT_NAME"
 # DATASET_NAME can be libero_10 (libero_Long), libero_90, libero_spatial, libero_object, libero_goal
 DATASET_NAME="bridge_orig"
@@ -37,8 +35,11 @@ ALIGN_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000118000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000196000.pt"
 # DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/predict2_video2world_2b_action_conditioned_finetuning_2025-09-14_03-49-19/checkpoints/model/iter_000292000.pt"
-DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/predict2_video2world_2b_action_conditioned_finetuning_bridge_2025-10-19_17-40-10/checkpoints/model/iter_000034000.pt"
-# DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/2b_720p_10fps_3views_21frames_self_forcing_bridge_2026-01-16_13-40-38/checkpoints/model/iter_000016000.pt"
+# DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/predict2_video2world_2b_action_conditioned_finetuning_bridge_2025-10-19_17-40-10/checkpoints/model/iter_000034000.pt"
+
+# DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/2b_720p_10fps_3views_21frames_self_forcing_bridge_2026-01-14_11-19-34/checkpoints/model/iter_000006000.pt"
+DIT_PATH="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel/checkpoints/bridge/2b_720p_10fps_3views_21frames_self_forcing_bridge_2026-01-15_09-01-08/checkpoints/model/iter_000010000.pt"
+
 VAE_FOLDER="/inspire/ssd/project/robotsimulation/public/users/zhangjiahui/vla-rl-dev/world_model/ActionWorldModel"
 
 HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
@@ -58,7 +59,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.model.path=$SFT_MODEL_PATH \
     actor_rollout_ref.model.vla=$VLA_NAME \
     actor_rollout_ref.model.action_token_len=7 \
-    actor_rollout_ref.model.action_chunks_len=10 \
+    actor_rollout_ref.model.action_chunks_len=5 \
     actor_rollout_ref.actor.optim.lr=5e-6 \
     actor_rollout_ref.actor.optim.warmup_style=constant \
     actor_rollout_ref.actor.optim.params=full \
@@ -73,7 +74,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
     actor_rollout_ref.actor.num_images_in_input=1 \
-    actor_rollout_ref.actor.traj_mini_batch_size=6 \
+    actor_rollout_ref.actor.traj_mini_batch_size=8 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.dlogp_clamp=True \
     actor_rollout_ref.actor.dlogp_clamp_max=4.0 \
@@ -125,7 +126,7 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     actor_rollout_ref.world_model.use_cuda_graphs=True \
     actor_rollout_ref.world_model.fsdp_config.model_dtype=bfloat16 \
     actor_rollout_ref.world_model.use_history=True \
-    actor_rollout_ref.world_model.history_video_length=60 \
+    actor_rollout_ref.world_model.history_video_length=20 \
     actor_rollout_ref.world_model.unnorm_key=$DATASET_NAME \
     trainer.logger=['console','tensorboard'] \
     trainer.project_name=$PROJECT_NAME \
@@ -146,20 +147,3 @@ HYDRA_FULL_ERROR=1 python -m verl_vla.trainer.main_ppo \
     trainer.val_before_train=False \
     2>&1 | tee -a "${EXPERIMENT_NAME}.log"
 
-# export  INF_API_KEY="gbIpP7AbE2SaWgtJ/1/bHCveIoL6IY8NqIvFoqLaBgs="
-# curl https://zzx-qwen3-vl-235b-a22b-instruct.openapi-qb-ai.sii.edu.cn/v1/chat/completions \
-#  -H "Content-Type: application/json" \
-#  -H "Authorization: Bearer $INF_API_KEY" \
-# --data '{
-#     "messages": [
-#         {
-#             "role": "user",
-#             "content": [
-#                 {
-#                     "type": "text",
-#                     "text": "你是谁"
-#                 }
-#             ]
-#         }
-#     ]
-# }'

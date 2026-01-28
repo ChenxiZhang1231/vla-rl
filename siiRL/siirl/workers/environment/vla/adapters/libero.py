@@ -188,8 +188,16 @@ class LIBEROAdapter(BaseVLAEnvironment):
         """Asynchronously resets all parallel environments."""
         return await asyncio.to_thread(self._blocking_reset, task_ids=task_ids, trial_ids=trial_ids)
 
-    def _blocking_step(self, action: Dict[str, Any], use_vlm_rm=False) -> List[Dict[str, Any]]:
-        """Synchronous implementation of the step logic for an action chunk."""
+    def _blocking_step(self, action: Dict[str, Any], use_vlm_rm=False, replan_steps: int = None) -> List[Dict[str, Any]]:
+        """Synchronous implementation of the step logic for an action chunk.
+
+        Args:
+            action: Dict containing "actions" (batch_size, chunk_len, action_dim) and "indices" (active env indices)
+            use_vlm_rm: Whether to use VLM reward model
+            replan_steps: Number of steps to execute before returning for replanning.
+                         If None, executes the full action chunk.
+                         Set to e.g. 5 to match openpi's replan strategy.
+        """
 
         actions = action["actions"]
         active_indices_set = set(action["indices"])
@@ -198,12 +206,16 @@ class LIBEROAdapter(BaseVLAEnvironment):
         results = [None] * batch_size
         step_images = [None] * batch_size
         done_raw = [False] * batch_size
-        
+
         active_indices_list = sorted(list(active_indices_set))
         active_indices_list_step = sorted(list(active_indices_set_step))
-        chunk_buf = [None] * batch_size 
+        chunk_buf = [None] * batch_size
 
-        for j in range(actions.shape[1]):
+        # Determine how many steps to execute: replan_steps if set, otherwise full chunk
+        max_chunk_steps = replan_steps if replan_steps is not None else actions.shape[1]
+        max_chunk_steps = min(max_chunk_steps, actions.shape[1])  # Don't exceed chunk length
+
+        for j in range(max_chunk_steps):
             normalized_actions = []
             active_indices_list = sorted(list(active_indices_set))
             if len(active_indices_list) == 0:
