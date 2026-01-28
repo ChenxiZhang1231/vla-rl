@@ -1035,7 +1035,7 @@ class RobVLMRewardManager():
 
         try:
             completion = client.chat.completions.create(
-                model="judge",
+                model="Qwen3-VL-235B-A22B-Instruct",
                 messages=[
                     {"role": "user", "content": user_content},
                 ],
